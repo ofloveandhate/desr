@@ -1,9 +1,9 @@
 
 import sympy
 
-from matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
-from ode_system import ODESystem
-from tex_tools import matrix_to_tex
+from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
+from desr.ode_system import ODESystem
+from desr.tex_tools import matrix_to_tex
 
 def _int_inv(matrix_):
     ''' Given an integer matrix, return the inverse, ensuring we do it right in the integers
@@ -583,7 +583,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in xrange(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -592,7 +592,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in xrange(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -645,7 +645,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in xrange(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -654,7 +654,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = self.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in xrange(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -680,7 +680,7 @@ class ODETranslation(object):
         if system.indep_var_index != 0:
             return False
         # Constant variables at the end
-        for i in xrange(system.num_constants):
+        for i in range(system.num_constants):
             if system.derivatives[-i - 1] != sympy.sympify(0):
                 return False
 
@@ -735,7 +735,7 @@ class ODETranslation(object):
         W_c = inv_herm_mult_d[:, m:]
 
         # Form new constants
-        new_const = ['c{}'.format(i) for i in xrange(system.num_constants - self.r)]
+        new_const = ['c{}'.format(i) for i in range(system.num_constants - self.r)]
         new_const = map(sympy.sympify, new_const)
         to_sub = {}
 
@@ -761,7 +761,7 @@ class ODETranslation(object):
         to_sub = self.translate_parameter_substitutions(system=system)
 
         new_deriv_dict = {}
-        for key, val in system.derivative_dict.iteritems():
+        for key, val in system.derivative_dict.items():
             if key in system.constant_variables:
                 continue
             derivative_factor = (to_sub[key] / key) * (system.indep_var / to_sub[system.indep_var])
@@ -1018,7 +1018,7 @@ class ODETranslation(object):
             if use_domain_var and (self.variables_domain is not None):
                 variables = self.variables_domain
             else:
-                variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in xrange(num_var)))
+                variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in range(num_var)))
 
         if len(variables) != num_var:
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
@@ -1192,7 +1192,7 @@ class ODETranslation(object):
         vin = vin.applyfunc(lambda x: x if x < 0 else 0)
 
         rational_section = scale_action(variables, vip) - scale_action(variables, vin)
-        print rational_section
+        print(rational_section)
 
     ## Choosing invariants
     def extend_from_invariants(self, invariant_choice):
@@ -1214,7 +1214,7 @@ class ODETranslation(object):
             An ODETranslation representing the rewrite rules in terms of the given invariants.
 
 
-        >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in xrange(6)]))
+        >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in range(6)]))
         >>> ode_translation = ODETranslation(sympy.Matrix([[1, 0, 3, 0, 2, 2],
         ...                                                [0, 2, 0, 1, 0, 1],
         ...                                                [2, 0, 0, 3, 0, 0]]))

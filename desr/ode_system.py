@@ -4,9 +4,9 @@ import re
 import sympy
 from sympy.abc import _clash1
 
-from matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
-from sympy_helper import expressions_to_variables, unique_array_stable, monomial_to_powers
-from tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
+from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
+from desr.sympy_helper import expressions_to_variables, unique_array_stable, monomial_to_powers
+from desr.tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
 
 class ODESystem(object):
     '''
@@ -129,7 +129,7 @@ class ODESystem(object):
             tuple: The constant variables.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
         >>> system.non_constant_variables
         (x, y)
@@ -195,7 +195,7 @@ class ODESystem(object):
             initial_conditions (dict): non-constant variable: initial value constant.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
         >>> system.update_initial_conditions({'x': 'x_0'})
         >>> system.initial_conditions
@@ -410,7 +410,7 @@ class ODESystem(object):
             ODESystem: System of ODEs.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> ODESystem.from_dict(_input)
         dt/dt = 1
         dx/dt = c_0*x*y
@@ -419,7 +419,7 @@ class ODESystem(object):
         dc_1/dt = 0
 
         >>> _input = {'y':  'c_0*x*y', 'z': 'c_1*(1-y)*z**2'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> ODESystem.from_dict(_input, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
@@ -600,7 +600,7 @@ class ODESystem(object):
         [0, 0, 1,  0, 0, 0,  1,  0],
         [0, 0, 0,  0, 0, 0,  0, -1]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.iteritems() if expr != 1]
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
         matrices = [rational_expr_to_power_matrix(expr, self.variables) for expr in exprs]
@@ -624,7 +624,7 @@ class ODESystem(object):
         [1, 0, 0, 0, -1, -1, -1],
         [0, 1, 1, 1, -1,  0,  0]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.iteritems() if expr != 1]
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
         return maximal_scaling_matrix(exprs, variables=self.variables)
@@ -650,7 +650,7 @@ class ODESystem(object):
         >>> system.derivatives
         [z_1*z_2/z_3**2, 0, 1, z_1*z_3]
         '''
-        if isinstance(variables, basestring):
+        if isinstance(variables, str):
             if ' ' in variables:
                 variables = variables.split(' ')
             else:

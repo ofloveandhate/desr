@@ -9,7 +9,6 @@ Author: Richard Tanburn (richard.tanburn@gmail.com)
 import fractions
 import re
 import sympy
-from __builtin__ import isinstance
 
 def is_monomial(expr):
    ''' Determine whether expr is a monomial
@@ -216,7 +215,7 @@ def dict_as_eqns(dict_):
         >>> dict_as_eqns({x: 1, y: z, x*y: 1 - z})
         [Eq(x*y, -z + 1), Eq(x, 1), Eq(y, z)]
     '''
-    return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.iteritems()]
+    return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.items()]
 
 def str_eqns_to_sympy_eqns(str_eqns):
     ''' Take string equations and sympify

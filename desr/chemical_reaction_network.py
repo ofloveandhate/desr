@@ -3,8 +3,8 @@ from collections import MutableMapping
 
 import sympy
 
-from ode_system import ODESystem
-from sympy_helper import unique_array_stable
+from desr.ode_system import ODESystem
+from desr.sympy_helper import unique_array_stable
 
 class ChemicalSpecies(object):
     ''' Chemical species, A_i from Harrington paper. Typically represents a single chemical element. '''
@@ -51,7 +51,7 @@ class Complex(MutableMapping):
         self._species_dict[key] = value
 
     def __repr__(self):
-        return ' + '.join(['{}.{}'.format(val, key) for key, val in self.iteritems()])
+        return ' + '.join(['{}.{}'.format(val, key) for key, val in self.items()])
 
     def __delitem__(self, key):
         self._species_dict.__delitem__(key)
@@ -213,7 +213,7 @@ class ChemicalReactionNetwork(object):
             complex_left = _complexes[0].strip()
             if complex_left:
                 complex_left = sympy.sympify(complex_left)
-                complex_left = {ChemicalSpecies(k): v for k, v in complex_left.as_coefficients_dict().iteritems()}
+                complex_left = {ChemicalSpecies(k): v for k, v in complex_left.as_coefficients_dict().items()}
                 species.extend(complex_left.keys())
                 complex_left = Complex(complex_left)
             else:
@@ -222,7 +222,7 @@ class ChemicalReactionNetwork(object):
             complex_right = _complexes[1].strip()
             if complex_right:
                 complex_right = sympy.sympify(complex_right)
-                complex_right = {ChemicalSpecies(k): v for k, v in complex_right.as_coefficients_dict().iteritems()}
+                complex_right = {ChemicalSpecies(k): v for k, v in complex_right.as_coefficients_dict().items()}
                 species.extend(complex_right.keys())
                 complex_right = Complex(complex_right)
             else:
