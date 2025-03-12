@@ -714,7 +714,7 @@ class ODETranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translation = ODETranslation.from_ode_system(system)
         >>> translation.translate_parameter_substitutions(system=system)
-        {k: 1, n: n, r: c2, d: 1, K: c0, h: c1, s: 1, p: p, t: t}
+        {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
         '''
         num_variables = len(system.variables) - system.num_constants - 1  # Excluding indep
         m = num_variables + 1  # Include indep

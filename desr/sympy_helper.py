@@ -214,7 +214,7 @@ def dict_as_eqns(dict_):
 
         >>> x, y, z = sympy.symbols('x y z')
         >>> dict_as_eqns({x: 1, y: z, x*y: 1 - z})
-        [Eq(x, 1), Eq(y, z), Eq(x*y, -z + 1)]
+        [Eq(x, 1), Eq(y, z), Eq(x*y, 1 - z)]
     '''
     return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.items()]
 
