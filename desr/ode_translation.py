@@ -736,7 +736,7 @@ class ODETranslation(object):
 
         # Form new constants
         new_const = ['c{}'.format(i) for i in range(system.num_constants - self.r)]
-        new_const = map(sympy.sympify, new_const)
+        new_const = list(map(sympy.sympify, new_const))
         to_sub = {}
 
         # Scale t
