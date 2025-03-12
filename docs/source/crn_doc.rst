@@ -13,7 +13,7 @@ While this is the most precise, the easiest way to create a network is using :re
 First we must define some chemical species:
 
     >>> species = sympy.var('x1 x2')
-    >>> species = map(ChemicalSpecies, species)
+    >>> species = list(map(ChemicalSpecies, species))
     >>> x1, x2 = species
 
 Then we must make complexes, which are representations of one side of a chemical reaction diagram.
@@ -61,7 +61,7 @@ This can be done like so:
     ...              'x2 -> x1']
     >>> reaction_network = ChemicalReactionNetwork.from_diagram('\n'.join(reactions))
     >>> reaction_network
-    1.x2 + 1.x1 -> 2.x2
+    1.x1 + 1.x2 -> 2.x2
     1.x2 -> 1.x1
     >>> system = reaction_network.to_ode_system()
     >>> system

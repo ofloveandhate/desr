@@ -209,7 +209,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*t*(-x + 1)*(-y + 1)
+        dy/dt = c_1*t*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         dx_0/dt = 0
@@ -248,7 +248,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
 
@@ -256,7 +256,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         dc_2/dt = 0
@@ -305,7 +305,7 @@ class ODESystem(object):
         >>> system.diff_subs({'1-x': 'z'}, expand_before=False, expand_after=False, factor_after=False)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*z*(-y + 1)
+        dy/dt = c_1*z*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         >>> system.diff_subs({'1-x': 'z'}, expand_before=True, expand_after=False, factor_after=False)
@@ -376,14 +376,14 @@ class ODESystem(object):
         >>> ODESystem.from_equations(eqns)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         >>> eqns = '\\n'.join(['dy/dx = c_0*x*y', 'dz/dx = c_1*(1-y)*z**2'])
         >>> ODESystem.from_equations(eqns, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
-        dz/dx = c_1*z**2*(-y + 1)
+        dz/dx = c_1*z**2*(1 - y)
         dc_0/dx = 0
         dc_1/dx = 0
         '''
@@ -414,7 +414,7 @@ class ODESystem(object):
         >>> ODESystem.from_dict(_input)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
 
@@ -423,7 +423,7 @@ class ODESystem(object):
         >>> ODESystem.from_dict(_input, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
-        dz/dx = c_1*z**2*(-y + 1)
+        dz/dx = c_1*z**2*(1 - y)
         dc_0/dx = 0
         dc_1/dx = 0
         '''

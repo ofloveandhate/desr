@@ -908,7 +908,7 @@ class ODETranslation(object):
         >>> original_soln == (reduced_soln[0], reduced_soln[1] / reduced_soln[0])
         True
         >>> original_soln
-        (c2*exp(c1*(-t + 1)*exp(t) + t), c1*t*exp(t)*exp(-c1*(-t + 1)*exp(t) - t)/c2)
+        (c2*exp(c1*(1 - t)*exp(t) + t), c1*t*exp(t)*exp(-c1*(1 - t)*exp(t) - t)/c2)
         '''
         if len(variables) == self.scaling_matrix.shape[1]:
             return type(variables)(scale_action(variables, self.inv_herm_mult(indep_var_index=indep_var_index)))

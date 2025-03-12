@@ -173,8 +173,9 @@ def expressions_to_variables(exprs):
         >>> eqn = sympy.Eq(sympy.sympify('x*a + 1'))
         >>> expr = sympy.sympify('x + y*z + 2*a^b')
         >>> to_test = [expr, eqn]
-        >>> expressions_to_variables(to_test)
-        set([x, z, a, b, y])
+        >>> vars = expressions_to_variables(to_test)
+        >>> print(sorted(list(map(str,vars))))
+        ['a', 'b', 'x', 'y', 'z']
     '''
     if len(exprs) == 0:
         return set()
@@ -213,7 +214,7 @@ def dict_as_eqns(dict_):
 
         >>> x, y, z = sympy.symbols('x y z')
         >>> dict_as_eqns({x: 1, y: z, x*y: 1 - z})
-        [Eq(x*y, -z + 1), Eq(x, 1), Eq(y, z)]
+        [Eq(x, 1), Eq(y, z), Eq(x*y, -z + 1)]
     '''
     return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.items()]
 

@@ -191,14 +191,14 @@ class ChemicalReactionNetwork(object):
 
 
         >>> ChemicalReactionNetwork.from_diagram('x + y -> z \\n y + z -> 2*z')
-        1.y + 1.x -> 1.z
+        1.x + 1.y -> 1.z
         1.y + 1.z -> 2.z
 
         We can add reversible reactions like so:
 
         >>> ChemicalReactionNetwork.from_diagram('x + y -> z \\n z -> x + y')
-        1.y + 1.x -> 1.z
-        1.z -> 1.y + 1.x
+        1.x + 1.y -> 1.z
+        1.z -> 1.x + 1.y
         '''
         species = []
         complexes = []
