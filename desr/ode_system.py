@@ -500,7 +500,7 @@ class ODESystem(object):
         \\frac{dC_{0}}{dt} &= 0 \\\\
         \\frac{dK_{m}}{dt} &= 0 \\\\
         C\\left(0\\right) &= C_{0} \\\\
-        K_{m} &= \\frac{1}{k_{1}} \\left(k_{2} + k_{-1}\\right)
+        K_{m} &= \\frac{k_{2} + k_{-1}}{k_{1}}
 
         '''
         line_template = '\\frac{{d{}}}{{d{}}} &= {}'
