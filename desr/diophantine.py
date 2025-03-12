@@ -158,7 +158,7 @@ def first_nonzero_is_negative(A):
     if the first nonzero column j of A contains only one nonzero entry, which
     is negative+ This assumes A is a nonzero matrix with at least two rows+
     """
-    nonzero_columns = zip(*nonzero(A))[1]  # Should always be nonzero
+    nonzero_columns = list(zip(*nonzero(A)))[1]  # Should always be nonzero
     # Get the first nonzero column
     nonzero_col = A[:, min(nonzero_columns)]
     # Get the nonzero elements
@@ -168,7 +168,7 @@ def first_nonzero_is_negative(A):
 
 
 def reduce_matrix(A, B, L, k, i, D):
-    nonzero_i_elems = zip(*nonzero(A[i, :]))
+    nonzero_i_elems = list(zip(*nonzero(A[i, :])))
     if len(nonzero_i_elems):
         col1 = nonzero_i_elems[1][0]
         if A[i, col1] < 0:
@@ -177,7 +177,7 @@ def reduce_matrix(A, B, L, k, i, D):
             B[i, :] *= -1
     else:
         col1 = A.shape[1]
-    nonzero_k_elems = zip(*nonzero(A[k, :]))
+    nonzero_k_elems = list(zip(*nonzero(A[k, :])))
     if len(nonzero_k_elems):
         col2 = nonzero_k_elems[1][0]
     else:

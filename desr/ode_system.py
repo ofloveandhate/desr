@@ -808,7 +808,7 @@ def maximal_scaling_matrix(exprs, variables=None):
     num_nonzero = sum(map(int, row_is_zero))
     if num_nonzero == 0:
         return sympy.zeros(1, len(variables))
-    assert hermite_rform[-num_nonzero:, :].is_zero
+    assert hermite_rform[-num_nonzero:, :].is_zero_matrix
 
     # Make sure we have the right number of columns
     assert multiplier_rform.shape[1] == len(variables)
