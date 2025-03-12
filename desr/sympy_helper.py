@@ -243,7 +243,7 @@ def str_exprs_to_sympy_eqns(str_exprs):
         Eq(2*a - 4*b, 0)
     '''
     exprs = map(sympy.sympify, str_exprs)
-    exprs = map(sympy.Eq, exprs)
+    exprs = list(map(lambda e: sympy.Eq(e,0), exprs))
     return exprs
 
 
