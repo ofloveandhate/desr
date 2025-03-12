@@ -139,7 +139,7 @@ class ChemicalReactionNetwork(object):
             tuple:
                 A differential equation, represented by a sympy.Expression, for the dynamics of each species.
         '''
-        sympy_chem_spec = map(lambda x: sympy.var(str(x)), self.chemical_species)
+        sympy_chem_spec = list(map(lambda x: sympy.var(str(x)), self.chemical_species))
 
         rate_reaction_function = []
         stochiometric_matrix = []
@@ -176,7 +176,7 @@ class ChemicalReactionNetwork(object):
         Returns:
             ODESystem: A system describing the current network.
         '''
-        sympy_chem_spec = map(lambda x: sympy.var(str(x)), self.chemical_species)
+        sympy_chem_spec = list(map(lambda x: sympy.var(str(x)), self.chemical_species))
         equations = self.ode_equations()
         deriv_dict = dict(zip(sympy_chem_spec, equations))
         return ODESystem.from_dict(deriv_dict=deriv_dict)
