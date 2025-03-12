@@ -20,7 +20,7 @@ def matrix_to_tex(matrix_):
         str
 
     Printing is the correct way to use this function, but the docstring looks a bit odd.
-    >>> print matrix_to_tex(sympy.eye(2))
+    >>> print(matrix_to_tex(sympy.eye(2)))
     1 & 0 \\\\
     0 & 1 \\\\
     '''
@@ -49,7 +49,7 @@ def var_to_tex(var):
     Returns:
         str
 
-    >>> print map(var_to_tex, sympy.symbols('x y_1 Kw_3 z_{3} k_m1'))
+    >>> print(list(map(var_to_tex, sympy.symbols('x y_1 Kw_3 z_{3} k_m1'))))
     ['x', 'y_{1}', 'Kw_{3}', 'z_{3}', 'k_{-1}']
     """
     return expr_to_tex(var)
@@ -63,8 +63,8 @@ def expr_to_tex(expr):
     Returns:
         str
 
-    >>> print map(expr_to_tex, map(sympy.sympify, ['(x + y - 1.5)**2', '(x + y_m1)**1', 'k_m1*t']))
     ['\\\\left(x + y - 1.5\\\\right)^{2}', 'x + y_{-1}', 'k_{-1} t']
+    >>> print(list(map(expr_to_tex, map(lambda x: sympy.sympify(x,rational=True), ['(x + y - 1.5)**2', '(x + y_m1)**1', 'k_m1*t']))))
     """
     tex = sympy.latex(expr)
     # Substitute _{m...} for _{-...}
@@ -102,14 +102,14 @@ def tex_to_sympy(tex):
     ... r'\\frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\',
     ... r'\\frac{dP}{dt} &= k_2 C']
     >>> sym = tex_to_sympy('\\n'.join(lines))
-    >>> for s in sym: print s
+    >>> for s in sym: print(s)
     Eq(Derivative(E, t), C*k_2 + C*k_m1 - E*S*k_1)
     Eq(Derivative(S, t), C*k_m1 - E*S*k_1)
     Eq(Derivative(C, t), -C*k_2 - C*k_m1 + E*S*k_1)
     Eq(Derivative(P, t), C*k_2)
 
 
-    >>> print tex_to_sympy('k_2 &= V_2d ( APCT - APCs ) + V_2dd APCs')
+    >>> print(tex_to_sympy('k_2 &= V_2d ( APCT - APCs ) + V_2dd APCs'))
     Eq(k_2, APCs*V_2dd + V_2d*(APCT - APCs))
     """
     # Parse each line individually

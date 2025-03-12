@@ -464,7 +464,7 @@ class ODESystem(object):
         ... 'dP/dt = C*k_2',
         ... 'dS/dt = C*k_m1 - E*S*k_1']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
@@ -475,7 +475,7 @@ class ODESystem(object):
         \\frac{dk_{-1}}{dt} &= 0
 
         >>> system.update_initial_conditions({'C': 'C_0'})
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
@@ -488,7 +488,7 @@ class ODESystem(object):
         C\\left(0\\right) &= C_{0}
 
         >>> system.add_constraints('K_m', '(k_m1 + k_2) / k_1')
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\

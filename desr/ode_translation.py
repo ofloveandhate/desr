@@ -67,7 +67,7 @@ class ODETranslation(object):
         Returns:
             str: The scaling matrix :math:`A`, the Hermite multiplier :math:`V` and :math:`W = V^{-1}`, in beautiful LaTeX.
 
-        >>> print ODETranslation(sympy.Matrix(range(12)).reshape(3, 4)).to_tex()
+        >>> print(ODETranslation(sympy.Matrix(range(12)).reshape(3, 4)).to_tex())
         A=
         0 & 1 & 2 & 3 \\\\
         4 & 5 & 6 & 7 \\\\

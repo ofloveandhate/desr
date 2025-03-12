@@ -63,7 +63,7 @@ def unique_array_stable(array):
     ''' Given a list of things, return a new list with unique elements with
         original order preserved (by first occurence)
 
-        >>> print unique_array_stable([1, 3, 5, 4, 7, 4, 2, 1, 9])
+        >>> print(unique_array_stable([1, 3, 5, 4, 7, 4, 2, 1, 9]))
         [1, 3, 5, 4, 7, 2, 9]
     '''
     seen = set()
@@ -84,7 +84,7 @@ def degree(expr):
         ...             'x',
         ...             'x*y',]
         >>> eqns = str_exprs_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print degree(e.lhs - e.rhs)
+        >>> for e in eqns: print(degree(e.lhs - e.rhs))
         1
         3
         3
@@ -223,7 +223,7 @@ def str_eqns_to_sympy_eqns(str_eqns):
 
         >>> str_eqns = ['x + y == 1', 'x*y*z - 3*a == -3']
         >>> eqns = str_eqns_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print e
+        >>> for e in eqns: print(e)
         Eq(x + y - 1, 0)
         Eq(-3*a + x*y*z + 3, 0)
     '''
@@ -237,7 +237,7 @@ def str_exprs_to_sympy_eqns(str_exprs):
 
         >>> str_eqns = ['x + y - 1', 'x*y*z - 3*a + 3', '2*a - 4*b']
         >>> eqns = str_exprs_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print e
+        >>> for e in eqns: print(e)
         Eq(x + y - 1, 0)
         Eq(-3*a + x*y*z + 3, 0)
         Eq(2*a - 4*b, 0)
