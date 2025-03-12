@@ -655,8 +655,8 @@ class ODESystem(object):
                 variables = variables.split(' ')
             else:
                 variables = tuple(variables)
-        if not sorted(map(str, variables)) == sorted(map(str, self.variables)):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(map(str, self.variables)), sorted(map(str, variables))))
+        if not sorted(list(map(str, variables))) == sorted(list(map(str, self.variables))):
+            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(list(map(str, self.variables))), sorted(list(map(str, variables)))))
         column_shuffle = []
         for new_var in variables:
             for i, var in enumerate(self.variables):
@@ -718,7 +718,7 @@ def rational_expr_to_power_matrix(expr, variables):
     Take a rational expression and determine the power matrix wrt an ordering on the variables, as on page 497 of
     Hubert-Labahn.
 
-    >>> exprs = map(sympy.sympify, "n*( r*(1 - n/K) - k*p/(n+d) );s*p*(1 - h*p / n)".split(';'))
+    >>> exprs = list(map(sympy.sympify, "n*( r*(1 - n/K) - k*p/(n+d) );s*p*(1 - h*p / n)".split(';')))
     >>> variables = sorted(expressions_to_variables(exprs), key=str)
     >>> variables
     [K, d, h, k, n, p, r, s]
@@ -764,7 +764,7 @@ def rational_expr_to_power_matrix(expr, variables):
             denom_terms = list(denom_terms)
 
             # Find the lowest power
-            ref_power = min(denom_terms, key=lambda x: map(abs, monomial_to_powers(x, variables)))
+            ref_power = min(denom_terms, key=lambda x: list(map(abs, monomial_to_powers(x, variables))))
 
             denom_terms.remove(ref_power)  # Use the last term of the denominator as our reference power
 
@@ -785,12 +785,12 @@ def maximal_scaling_matrix(exprs, variables=None):
         sympy.Matrix
 
     >>> exprs = ['z_1*z_3', 'z_1*z_2 / (z_3 ** 2)']
-    >>> exprs = map(sympy.sympify, exprs)
+    >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
     Matrix([[1, -3, -1]])
 
     >>> exprs = ['(z_1 + z_2**2) / z_3']
-    >>> exprs = map(sympy.sympify, exprs)
+    >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
     Matrix([[2, 1, 2]])
     '''
