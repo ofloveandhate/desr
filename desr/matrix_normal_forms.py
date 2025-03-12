@@ -143,7 +143,7 @@ def hnf_row_lll(matrix_):
     if matrix_.shape[0] == 1:
         hnf = matrix_.copy()
         unimodular_matrix = sympy.Matrix([[1]])
-        rank = 1 - int(hnf.is_zero)
+        rank = 1 - int(hnf.is_zero_matrix)
     else:
         hnf, unimodular_matrix, rank = diophantine.lllhermite(matrix_, m1=1, n1=1)
 
@@ -225,7 +225,7 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     prod = matrix_ * hermite_multiplier
     hermite_form, residue = prod[:, :r], prod[:, r:]
     # Condition a)
-    if not residue.is_zero:
+    if not residue.is_zero_matrix:
         return False
     if not is_hnf_col(hermite_form):
         return False
@@ -659,8 +659,8 @@ def smf(matrix_):
             transformed, col_actions = _swap_ij_cols([transformed, col_actions], i, i+1)
 
     assert row_actions * matrix_ *  col_actions == transformed
-    assert transformed[1:, 0].is_zero
-    assert transformed[0, 1:].is_zero
+    assert transformed[1:, 0].is_zero_matrix
+    assert transformed[0, 1:].is_zero_matrix
 
     # Enforce diagonal entries to divide the next diagonal entry
     for i in range(min(*transformed.shape) - 1):

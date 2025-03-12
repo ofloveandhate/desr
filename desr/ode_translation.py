@@ -340,9 +340,9 @@ class ODETranslation(object):
         if j < 0: j += self.herm_mult.cols
         if i == j:
             return
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(i))
-        if not self.herm_form.col(j).is_zero:
+        if not self.herm_form.col(j).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(j))
         self._herm_mult.col_swap(i, j)
         # Blow the cache of the inverse
@@ -430,9 +430,9 @@ class ODETranslation(object):
         if j < 0: j += self.herm_mult.cols
         if i == j:
             raise ValueError('Cannot add column {} to itself'.format(i))
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(i))
-        if not self.herm_form.col(j).is_zero:
+        if not self.herm_form.col(j).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(j))
         self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
         # Blow the cache of the inverse
@@ -508,7 +508,7 @@ class ODETranslation(object):
         [1, 0,  1]])
         '''
         if i < 0: i += self.herm_mult.cols
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot negate non-zero column {}'.format(i))
         self._herm_mult.col_op(i, lambda v, index: -v)
         # Blow the cache of the inverse
@@ -528,7 +528,7 @@ class ODETranslation(object):
         if self._is_translate_parameter_compatible(system=system):
             return self.translate_parameter(system=system)
         elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or
-            (self.scaling_matrix[:, system.indep_var_index].is_zero)):
+            (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
             return self.translate_dep_var(system=system)
         elif (len(system.variables) == self.scaling_matrix.shape[1]):
             return self.translate_general(system=system)
@@ -557,7 +557,7 @@ class ODETranslation(object):
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
         if self.n == len(system.variables):
-            if not self.scaling_matrix[:, system.indep_var_index].is_zero:
+            if not self.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
                 raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
             scaling_matrix = self.scaling_matrix.copy()
             scaling_matrix.col_del(system.indep_var_index)
@@ -566,7 +566,7 @@ class ODETranslation(object):
             assert self.scaling_matrix.shape[1] == len(system.variables) - 1
             scaling_matrix = self.scaling_matrix.copy()
             new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.indep_var_index)
-            assert new_herm_mult[-1, :].is_zero
+            assert new_herm_mult[-1, :].is_zero_matrix
             new_herm_mult.col_del(system.indep_var_index)
             new_herm_mult.row_del(system.indep_var_index)
 
@@ -687,11 +687,11 @@ class ODETranslation(object):
         # Now check our transformation is valid: that V and W have the required forms
         # m is number of non-constant variables (including independent variable)
         m = len(system.variables) - system.num_constants
-        if not self.herm_mult_i[:m, :].is_zero:
+        if not self.herm_mult_i[:m, :].is_zero_matrix:
             return False
         if not self.herm_mult_n[:m, :m] == sympy.eye(m):
             return False
-        if not self.herm_mult_n[:m, m:].is_zero:
+        if not self.herm_mult_n[:m, m:].is_zero_matrix:
             return False
 
         if not (self.inv_herm_mult[self.r:self.r + m, :] ==
@@ -1234,7 +1234,7 @@ class ODETranslation(object):
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
-        if not choice_actions.is_zero:
+        if not choice_actions.is_zero_matrix:
             raise ValueError('The desired combinations {} are not invariants of the scaling action.'.format(invariant_choice))
 
         ## Step 2: Try and extend the choices by a basis of invariants
