@@ -63,8 +63,8 @@ def expr_to_tex(expr):
     Returns:
         str
 
-    ['\\\\left(x + y - 1.5\\\\right)^{2}', 'x + y_{-1}', 'k_{-1} t']
     >>> print(list(map(expr_to_tex, map(lambda x: sympy.sympify(x,rational=True), ['(x + y - 1.5)**2', '(x + y_m1)**1', 'k_m1*t']))))
+    ['\\\\left(x + y - \\\\frac{3}{2}\\\\right)^{2}', 'x + y_{-1}', 'k_{-1} t']
     """
     tex = sympy.latex(expr)
     # Substitute _{m...} for _{-...}
