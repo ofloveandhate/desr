@@ -854,7 +854,7 @@ class ODETranslation(object):
         dc1/dt = 0
         dc2/dt = 0
         >>> translation.translate_parameter_substitutions(system)
-        {k: c1, n: n, r: 1, d: c0, K: 1, h: 1, s: c2, p: p, t: t}
+        {t: t, n: n, p: p, K: 1, d: c0, h: 1, k: c1, r: 1, s: c2}
         >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
         >>> translation.reverse_translate_parameter(soln_reduced)
         Matrix([[t*x1, n*x2, p*x3, x2, c0*x2, x2/x3, c1*x2/(x1*x3), 1/x1, c2/x1]])
@@ -1077,7 +1077,7 @@ class ODETranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translation = ODETranslation.from_ode_system(system)
         >>> translation.rewrite_rules()
-        {k: 1, n: n/d, r: r/s, d: 1, K: K/d, h: h*s/k, s: 1, p: k*p/(d*s), t: s*t}
+        {t: s*t, n: n/d, p: k*p/(d*s), K: K/d, d: 1, h: h*s/k, k: 1, r: r/s, s: 1}
 
         For example, :math:`r t` is an invariant.
         Substituting in the above mapping gives us a way to write it in terms of our generating set of invariants:
