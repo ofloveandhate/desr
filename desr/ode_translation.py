@@ -1,9 +1,9 @@
 
 import sympy
 
-from matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
-from ode_system import ODESystem
-from tex_tools import matrix_to_tex
+from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
+from desr.ode_system import ODESystem
+from desr.tex_tools import matrix_to_tex
 
 def _int_inv(matrix_):
     ''' Given an integer matrix, return the inverse, ensuring we do it right in the integers
@@ -67,7 +67,7 @@ class ODETranslation(object):
         Returns:
             str: The scaling matrix :math:`A`, the Hermite multiplier :math:`V` and :math:`W = V^{-1}`, in beautiful LaTeX.
 
-        >>> print ODETranslation(sympy.Matrix(range(12)).reshape(3, 4)).to_tex()
+        >>> print(ODETranslation(sympy.Matrix(range(12)).reshape(3, 4)).to_tex())
         A=
         0 & 1 & 2 & 3 \\\\
         4 & 5 & 6 & 7 \\\\
@@ -99,9 +99,7 @@ class ODETranslation(object):
     @property
     def r(self):
         '''
-        Returns:
-            int: The dimension of the scaling action: :math:`r`.
-                In particular it is the number of rows of :attr:`~scaling_matrix`.
+        Returns: int: The dimension of the scaling action: :math:`r`.  In particular it is the number of rows of :attr:`~scaling_matrix`.
         '''
         return self._scaling_matrix.shape[0]
 
@@ -109,8 +107,7 @@ class ODETranslation(object):
     def n(self):
         '''
         Returns:
-            int: The number of original variables that the scaling action is acting on: :math:`n`.
-                In particular, it is the number of columns of :attr:`~scaling_matrix`.
+            int: The number of original variables that the scaling action is acting on: :math:`n`.  In particular, it is the number of columns of :attr:`~scaling_matrix`.
         '''
         return self._scaling_matrix.shape[1]
 
@@ -118,9 +115,7 @@ class ODETranslation(object):
     def herm_mult(self):
         '''
         Returns:
-            sympy.Matrix:
-                A column Hermite multiplier :math:`V` that puts the :attr:`~scaling_matrix` in column Hermite normal form.
-                That is: :math:`AV = H` is in column Hermite normal form.
+            sympy.Matrix: A column Hermite multiplier :math:`V` that puts the :attr:`~scaling_matrix` in column Hermite normal form.  That is: :math:`AV = H` is in column Hermite normal form.
         '''
         return self._herm_mult.copy()
 
@@ -136,9 +131,7 @@ class ODETranslation(object):
     def herm_mult_i(self):
         '''
         Returns:
-            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`.
-
-                The columns represent the auxiliary variables of the reduction.
+            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`. The columns represent the auxiliary variables of the reduction.
         '''
         return self.herm_mult[:, :self.r]
 
@@ -146,9 +139,7 @@ class ODETranslation(object):
     def herm_mult_n(self):
         '''
         Returns:
-            sympy.Matrix:
-                :math:`V_{\\mathfrak{n}}`: the last :math:`n-r` columns of the Hermite multiplier :math:`V``.
-                The columns represent the invariants of the scaling action.
+            sympy.Matrix: :math:`V_{\\mathfrak{n}}`: the last :math:`n-r` columns of the Hermite multiplier :math:`V``.  The columns represent the invariants of the scaling action.
         '''
         return self.herm_mult[:, self.r:]
 
@@ -157,8 +148,7 @@ class ODETranslation(object):
     def inv_herm_mult(self):
         '''
         Returns:
-            sympy.Matrix:
-                The inverse of the Hermite multiplier :math:`W=V^{-1}`.
+            sympy.Matrix: The inverse of the Hermite multiplier :math:`W=V^{-1}`.
         '''
         if self._inv_herm_mult is None:
             self._inv_herm_mult = _int_inv(self._herm_mult)
@@ -168,8 +158,7 @@ class ODETranslation(object):
     def inv_herm_mult_u(self):
         '''
         Returns:
-            sympy.Matrix:
-                :math:`W_{\\mathfrak{u}}`: the first :math:`r` rows of :math:`W`.
+            sympy.Matrix: :math:`W_{\\mathfrak{u}}`: the first :math:`r` rows of :math:`W`.
         '''
         return self.inv_herm_mult[:self.r, :]
 
@@ -177,8 +166,7 @@ class ODETranslation(object):
     def inv_herm_mult_d(self):
         """
         Returns:
-            sympy.Matrix:
-                :math:`W_{\\mathfrak{d}}`: the last :math:`n-r` rows of :math:`W`.
+            sympy.Matrix: :math:`W_{\\mathfrak{d}}`: the last :math:`n-r` rows of :math:`W`.
         """
         return self.inv_herm_mult[self.r:, :]
 
@@ -189,8 +177,7 @@ class ODETranslation(object):
             indep_var_index (int): The index of the independent variable.
 
         Returns:
-            sympy.Matrix:
-                The Hermite multiplier :math:`V`, ignoring the independent variable.
+            sympy.Matrix: The Hermite multiplier :math:`V`, ignoring the independent variable.
 
 
         >>> translation = ODETranslation(sympy.Matrix(range(12)).reshape(3, 4))
@@ -242,8 +229,7 @@ class ODETranslation(object):
     def variables_domain(self):
         '''
         Returns:
-            tuple, None:
-                The variables that the scaling action acts on.
+            tuple, None: The variables that the scaling action acts on.
         '''
         return self._variables_domain
 
@@ -340,9 +326,9 @@ class ODETranslation(object):
         if j < 0: j += self.herm_mult.cols
         if i == j:
             return
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(i))
-        if not self.herm_form.col(j).is_zero:
+        if not self.herm_form.col(j).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(j))
         self._herm_mult.col_swap(i, j)
         # Blow the cache of the inverse
@@ -430,9 +416,9 @@ class ODETranslation(object):
         if j < 0: j += self.herm_mult.cols
         if i == j:
             raise ValueError('Cannot add column {} to itself'.format(i))
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(i))
-        if not self.herm_form.col(j).is_zero:
+        if not self.herm_form.col(j).is_zero_matrix:
             raise ValueError('Cannot swap non-zero column {}'.format(j))
         self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
         # Blow the cache of the inverse
@@ -508,7 +494,7 @@ class ODETranslation(object):
         [1, 0,  1]])
         '''
         if i < 0: i += self.herm_mult.cols
-        if not self.herm_form.col(i).is_zero:
+        if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot negate non-zero column {}'.format(i))
         self._herm_mult.col_op(i, lambda v, index: -v)
         # Blow the cache of the inverse
@@ -528,7 +514,7 @@ class ODETranslation(object):
         if self._is_translate_parameter_compatible(system=system):
             return self.translate_parameter(system=system)
         elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or
-            (self.scaling_matrix[:, system.indep_var_index].is_zero)):
+            (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
             return self.translate_dep_var(system=system)
         elif (len(system.variables) == self.scaling_matrix.shape[1]):
             return self.translate_general(system=system)
@@ -557,7 +543,7 @@ class ODETranslation(object):
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
         if self.n == len(system.variables):
-            if not self.scaling_matrix[:, system.indep_var_index].is_zero:
+            if not self.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
                 raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
             scaling_matrix = self.scaling_matrix.copy()
             scaling_matrix.col_del(system.indep_var_index)
@@ -566,7 +552,7 @@ class ODETranslation(object):
             assert self.scaling_matrix.shape[1] == len(system.variables) - 1
             scaling_matrix = self.scaling_matrix.copy()
             new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.indep_var_index)
-            assert new_herm_mult[-1, :].is_zero
+            assert new_herm_mult[-1, :].is_zero_matrix
             new_herm_mult.col_del(system.indep_var_index)
             new_herm_mult.row_del(system.indep_var_index)
 
@@ -583,7 +569,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in xrange(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -592,7 +578,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in xrange(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -645,7 +631,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in xrange(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -654,7 +640,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = self.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in xrange(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -680,18 +666,18 @@ class ODETranslation(object):
         if system.indep_var_index != 0:
             return False
         # Constant variables at the end
-        for i in xrange(system.num_constants):
+        for i in range(system.num_constants):
             if system.derivatives[-i - 1] != sympy.sympify(0):
                 return False
 
         # Now check our transformation is valid: that V and W have the required forms
         # m is number of non-constant variables (including independent variable)
         m = len(system.variables) - system.num_constants
-        if not self.herm_mult_i[:m, :].is_zero:
+        if not self.herm_mult_i[:m, :].is_zero_matrix:
             return False
         if not self.herm_mult_n[:m, :m] == sympy.eye(m):
             return False
-        if not self.herm_mult_n[:m, m:].is_zero:
+        if not self.herm_mult_n[:m, m:].is_zero_matrix:
             return False
 
         if not (self.inv_herm_mult[self.r:self.r + m, :] ==
@@ -714,7 +700,7 @@ class ODETranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translation = ODETranslation.from_ode_system(system)
         >>> translation.translate_parameter_substitutions(system=system)
-        {k: 1, n: n, r: c2, d: 1, K: c0, h: c1, s: 1, p: p, t: t}
+        {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
         '''
         num_variables = len(system.variables) - system.num_constants - 1  # Excluding indep
         m = num_variables + 1  # Include indep
@@ -735,8 +721,8 @@ class ODETranslation(object):
         W_c = inv_herm_mult_d[:, m:]
 
         # Form new constants
-        new_const = ['c{}'.format(i) for i in xrange(system.num_constants - self.r)]
-        new_const = map(sympy.sympify, new_const)
+        new_const = ['c{}'.format(i) for i in range(system.num_constants - self.r)]
+        new_const = list(map(sympy.sympify, new_const))
         to_sub = {}
 
         # Scale t
@@ -761,7 +747,7 @@ class ODETranslation(object):
         to_sub = self.translate_parameter_substitutions(system=system)
 
         new_deriv_dict = {}
-        for key, val in system.derivative_dict.iteritems():
+        for key, val in system.derivative_dict.items():
             if key in system.constant_variables:
                 continue
             derivative_factor = (to_sub[key] / key) * (system.indep_var / to_sub[system.indep_var])
@@ -854,7 +840,7 @@ class ODETranslation(object):
         dc1/dt = 0
         dc2/dt = 0
         >>> translation.translate_parameter_substitutions(system)
-        {k: c1, n: n, r: 1, d: c0, K: 1, h: 1, s: c2, p: p, t: t}
+        {t: t, n: n, p: p, K: 1, d: c0, h: 1, k: c1, r: 1, s: c2}
         >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
         >>> translation.reverse_translate_parameter(soln_reduced)
         Matrix([[t*x1, n*x2, p*x3, x2, c0*x2, x2/x3, c1*x2/(x1*x3), 1/x1, c2/x1]])
@@ -908,7 +894,7 @@ class ODETranslation(object):
         >>> original_soln == (reduced_soln[0], reduced_soln[1] / reduced_soln[0])
         True
         >>> original_soln
-        (c2*exp(c1*(-t + 1)*exp(t) + t), c1*t*exp(t)*exp(-c1*(-t + 1)*exp(t) - t)/c2)
+        (c2*exp(c1*(1 - t)*exp(t) + t), c1*t*exp(t)*exp(-c1*(1 - t)*exp(t) - t)/c2)
         '''
         if len(variables) == self.scaling_matrix.shape[1]:
             return type(variables)(scale_action(variables, self.inv_herm_mult(indep_var_index=indep_var_index)))
@@ -1018,7 +1004,7 @@ class ODETranslation(object):
             if use_domain_var and (self.variables_domain is not None):
                 variables = self.variables_domain
             else:
-                variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in xrange(num_var)))
+                variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in range(num_var)))
 
         if len(variables) != num_var:
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
@@ -1077,7 +1063,7 @@ class ODETranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translation = ODETranslation.from_ode_system(system)
         >>> translation.rewrite_rules()
-        {k: 1, n: n/d, r: r/s, d: 1, K: K/d, h: h*s/k, s: 1, p: k*p/(d*s), t: s*t}
+        {t: s*t, n: n/d, p: k*p/(d*s), K: K/d, d: 1, h: h*s/k, k: 1, r: r/s, s: 1}
 
         For example, :math:`r t` is an invariant.
         Substituting in the above mapping gives us a way to write it in terms of our generating set of invariants:
@@ -1192,7 +1178,7 @@ class ODETranslation(object):
         vin = vin.applyfunc(lambda x: x if x < 0 else 0)
 
         rational_section = scale_action(variables, vip) - scale_action(variables, vin)
-        print rational_section
+        print(rational_section)
 
     ## Choosing invariants
     def extend_from_invariants(self, invariant_choice):
@@ -1214,7 +1200,7 @@ class ODETranslation(object):
             An ODETranslation representing the rewrite rules in terms of the given invariants.
 
 
-        >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in xrange(6)]))
+        >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in range(6)]))
         >>> ode_translation = ODETranslation(sympy.Matrix([[1, 0, 3, 0, 2, 2],
         ...                                                [0, 2, 0, 1, 0, 1],
         ...                                                [2, 0, 0, 3, 0, 0]]))
@@ -1234,7 +1220,7 @@ class ODETranslation(object):
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
-        if not choice_actions.is_zero:
+        if not choice_actions.is_zero_matrix:
             raise ValueError('The desired combinations {} are not invariants of the scaling action.'.format(invariant_choice))
 
         ## Step 2: Try and extend the choices by a basis of invariants

@@ -27,47 +27,47 @@ def example_michael_mentis():
 
     max_scal1 = ODETranslation.from_ode_system(original_system)
     # Print variable order
-    print 'Variable order: ', max_scal1.variables_domain
+    print('Variable order: ', max_scal1.variables_domain)
 
     # Print scaling matrices
-    print 'Scaling matrix:'
-    print max_scal1.scaling_matrix.__repr__()
+    print('Scaling matrix:')
+    print(max_scal1.scaling_matrix.__repr__())
 
     # Print invariants
-    print 'Invariants: ', max_scal1.invariants()
+    print('Invariants: ', max_scal1.invariants())
 
     # Print translated system
-    print 'Reduced system:'
-    print max_scal1.translate(original_system)
+    print('Reduced system:')
+    print(max_scal1.translate(original_system))
     print
 
-    print 'Changing the order of the variables'
-    print '-----------------------------------'
+    print('Changing the order of the variables')
+    print('-----------------------------------')
     # Show what happens when we put k_2 at the end instead
     original_system_reorder = original_system.copy()
     variable_order = list(original_system.variables)
     variable_order[-1], variable_order[-2] = variable_order[-2], variable_order[-1]
-    print 'Variable order:'
-    print variable_order
+    print('Variable order:')
+    print(variable_order)
     original_system_reorder.reorder_variables(variable_order)
     max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder)
-    print 'Invariants:'
-    print ', '.join(map(str, max_scal1_reorder.invariants()))
+    print('Invariants:')
+    print(', '.join(map(str, max_scal1_reorder.invariants())))
     # Now do the reduction
     reduced_system = max_scal1_reorder.translate(original_system_reorder)
-    print 'Reduced system:'
-    print reduced_system
-    print
+    print('Reduced system:')
+    print(reduced_system)
+    print()
 
-    print 'Extending a choice of invariants'
-    print '--------------------------------'
+    print('Extending a choice of invariants')
+    print('--------------------------------')
     # Extend a choice of invariants   t  C  E  P  S k_1 k_2 k_{-1}
     invariant_choice = sympy.Matrix([[0, 1, 0, 0, 0, 1, -1, 0],
                                      [0, 0, 0, 1, 0, 1, 0, -1]]).T
-    print 'P ='
-    print invariant_choice.__repr__()
-    print 'Chosen invariants:'
-    print scale_action(max_scal1.variables_domain, invariant_choice)
+    print('P =')
+    print(invariant_choice.__repr__())
+    print('Chosen invariants:')
+    print(scale_action(max_scal1.variables_domain, invariant_choice))
 
     ## Method that does the extension automatically.
     max_scal2 = max_scal1.extend_from_invariants(invariant_choice=invariant_choice)
@@ -82,26 +82,27 @@ def example_michael_mentis():
     WdP = max_scal1.inv_herm_mult_d * invariant_choice
     smith_normal_form, row_ops, col_ops = smf(WdP)
 
-    print 'Smith normal form decomposition:'
-    print '{}\n{}\n{}\n{}\n=\n{}'.format(*map(lambda x: x.__repr__(), (row_ops,
+    print('Smith normal form decomposition:')
+    print('{}\n{}\n{}\n{}\n=\n{}'.format(*map(lambda x: x.__repr__(), (row_ops,
                                                                        max_scal1.inv_herm_mult_d,
                                                                        invariant_choice,
                                                                        col_ops,
                                                                        smith_normal_form)))
-    print 'U^{-1}:'
-    print row_ops.inv()
-    print 'Wd P:'
-    print WdP
+         )
+    print('U^{-1}:')
+    print(row_ops.inv())
+    print('Wd P:')
+    print(WdP)
 
     C = sympy.Matrix.hstack(WdP, row_ops.inv()[:, 2:])  # C is the column operations we're going to apply to Vn
-    print 'C:'
-    print C
+    print('C:')
+    print(C)
 
-    print 'New Vn:'
-    print max_scal1.herm_mult_n * C
+    print('New Vn:')
+    print(max_scal1.herm_mult_n * C)
 
-    print 'New invariants:'
-    print ', '.join(map(str, scale_action(max_scal1.variables_domain, max_scal1.herm_mult_n * C)))
+    print('New invariants:')
+    print(', '.join(map(str, scale_action(max_scal1.variables_domain, max_scal1.herm_mult_n * C))))
     max_scal3 = max_scal1.herm_mult_n * C
     # The permutation is (0 1 3 4 2 5)
     max_scal3.col_swap(0, 1)
@@ -109,14 +110,14 @@ def example_michael_mentis():
     max_scal3.col_swap(0, 4)
     max_scal3.col_swap(0, 2)
     max_scal3.col_swap(0, 5)
-    print 'Permuted Vn:'
-    print max_scal3
+    print('Permuted Vn:')
+    print(max_scal3)
 
-    print 'Reduced system:'
+    print('Reduced system:')
     # We need to add on Vi - the original will do.
     max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
     max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3)
-    print max_scal3.translate(original_system)
+    print(max_scal3.translate(original_system))
 
 def example_michael_mentis_simplified(verbose=True):
     """ Example """
@@ -189,15 +190,15 @@ def example_michael_mentis_simplified(verbose=True):
 
 
 
-    print 'Michaelis-Menten Reparametrisation 2'
-    print 'What if epsilon = e_0 / s_0 is not small?'
-    print 'In order '
+    print('Michaelis-Menten Reparametrisation 2')
+    print('What if epsilon = e_0 / s_0 is not small?')
+    print('In order ')
     # Substitute K_m into the equations
     system_tex_reduced_l = system_tex.replace('k_{-1}', '(K - k_2)').replace('K', 'K_m k_1')
     # Now set L = K_m + s_0
     # system_tex_reduced_l = system_tex_reduced_km.replace('K_m', '(L - s_0)')
 
-    print system_tex_reduced_l
+    print(system_tex_reduced_l)
 
     # return
     # print system_tex_reduced_km
@@ -224,15 +225,15 @@ def example_michael_mentis_simplified(verbose=True):
     max_scal3.multiplier_add_columns(6, -1, -1)
     # Find sigma = s_0 / K_m
 
-    print max_scal3.invariants()
+    print(max_scal3.invariants())
 
-    print 'We now have:'
-    print 'c_0 = kappa + 1'
-    print 'c_1 = epsilon'
-    print 'c_2 = sigma'
-    print 'c_3 = L / K_m'
+    print('We now have:')
+    print('c_0 = kappa + 1')
+    print('c_1 = epsilon')
+    print('c_2 = sigma')
+    print('c_3 = L / K_m')
     # print reduced_system_l
-    print max_scal3.translate(reduced_system_l)
+    print(max_scal3.translate(reduced_system_l))
 
     return
 

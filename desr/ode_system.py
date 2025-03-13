@@ -4,9 +4,9 @@ import re
 import sympy
 from sympy.abc import _clash1
 
-from matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
-from sympy_helper import expressions_to_variables, unique_array_stable, monomial_to_powers
-from tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
+from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
+from desr.sympy_helper import expressions_to_variables, unique_array_stable, monomial_to_powers
+from desr.tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
 
 class ODESystem(object):
     '''
@@ -129,7 +129,7 @@ class ODESystem(object):
             tuple: The constant variables.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
         >>> system.non_constant_variables
         (x, y)
@@ -195,7 +195,7 @@ class ODESystem(object):
             initial_conditions (dict): non-constant variable: initial value constant.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
         >>> system.update_initial_conditions({'x': 'x_0'})
         >>> system.initial_conditions
@@ -209,7 +209,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*t*(-x + 1)*(-y + 1)
+        dy/dt = c_1*t*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         dx_0/dt = 0
@@ -248,7 +248,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
 
@@ -256,7 +256,7 @@ class ODESystem(object):
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         dc_2/dt = 0
@@ -305,7 +305,7 @@ class ODESystem(object):
         >>> system.diff_subs({'1-x': 'z'}, expand_before=False, expand_after=False, factor_after=False)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*z*(-y + 1)
+        dy/dt = c_1*z*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         >>> system.diff_subs({'1-x': 'z'}, expand_before=True, expand_after=False, factor_after=False)
@@ -376,14 +376,14 @@ class ODESystem(object):
         >>> ODESystem.from_equations(eqns)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
         >>> eqns = '\\n'.join(['dy/dx = c_0*x*y', 'dz/dx = c_1*(1-y)*z**2'])
         >>> ODESystem.from_equations(eqns, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
-        dz/dx = c_1*z**2*(-y + 1)
+        dz/dx = c_1*z**2*(1 - y)
         dc_0/dx = 0
         dc_1/dx = 0
         '''
@@ -410,20 +410,20 @@ class ODESystem(object):
             ODESystem: System of ODEs.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> ODESystem.from_dict(_input)
         dt/dt = 1
         dx/dt = c_0*x*y
-        dy/dt = c_1*(-x + 1)*(-y + 1)
+        dy/dt = c_1*(1 - x)*(1 - y)
         dc_0/dt = 0
         dc_1/dt = 0
 
         >>> _input = {'y':  'c_0*x*y', 'z': 'c_1*(1-y)*z**2'}
-        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.iteritems()}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> ODESystem.from_dict(_input, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
-        dz/dx = c_1*z**2*(-y + 1)
+        dz/dx = c_1*z**2*(1 - y)
         dc_0/dx = 0
         dc_1/dx = 0
         '''
@@ -464,7 +464,7 @@ class ODESystem(object):
         ... 'dP/dt = C*k_2',
         ... 'dS/dt = C*k_m1 - E*S*k_1']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
@@ -475,7 +475,7 @@ class ODESystem(object):
         \\frac{dk_{-1}}{dt} &= 0
 
         >>> system.update_initial_conditions({'C': 'C_0'})
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
@@ -488,7 +488,7 @@ class ODESystem(object):
         C\\left(0\\right) &= C_{0}
 
         >>> system.add_constraints('K_m', '(k_m1 + k_2) / k_1')
-        >>> print system.to_tex()
+        >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
@@ -500,7 +500,7 @@ class ODESystem(object):
         \\frac{dC_{0}}{dt} &= 0 \\\\
         \\frac{dK_{m}}{dt} &= 0 \\\\
         C\\left(0\\right) &= C_{0} \\\\
-        K_{m} &= \\frac{1}{k_{1}} \\left(k_{2} + k_{-1}\\right)
+        K_{m} &= \\frac{k_{2} + k_{-1}}{k_{1}}
 
         '''
         line_template = '\\frac{{d{}}}{{d{}}} &= {}'
@@ -600,7 +600,7 @@ class ODESystem(object):
         [0, 0, 1,  0, 0, 0,  1,  0],
         [0, 0, 0,  0, 0, 0,  0, -1]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.iteritems() if expr != 1]
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
         matrices = [rational_expr_to_power_matrix(expr, self.variables) for expr in exprs]
@@ -624,7 +624,7 @@ class ODESystem(object):
         [1, 0, 0, 0, -1, -1, -1],
         [0, 1, 1, 1, -1,  0,  0]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.iteritems() if expr != 1]
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
         return maximal_scaling_matrix(exprs, variables=self.variables)
@@ -650,13 +650,13 @@ class ODESystem(object):
         >>> system.derivatives
         [z_1*z_2/z_3**2, 0, 1, z_1*z_3]
         '''
-        if isinstance(variables, basestring):
+        if isinstance(variables, str):
             if ' ' in variables:
                 variables = variables.split(' ')
             else:
                 variables = tuple(variables)
-        if not sorted(map(str, variables)) == sorted(map(str, self.variables)):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(map(str, self.variables)), sorted(map(str, variables))))
+        if not sorted(list(map(str, variables))) == sorted(list(map(str, self.variables))):
+            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(list(map(str, self.variables))), sorted(list(map(str, variables)))))
         column_shuffle = []
         for new_var in variables:
             for i, var in enumerate(self.variables):
@@ -718,7 +718,7 @@ def rational_expr_to_power_matrix(expr, variables):
     Take a rational expression and determine the power matrix wrt an ordering on the variables, as on page 497 of
     Hubert-Labahn.
 
-    >>> exprs = map(sympy.sympify, "n*( r*(1 - n/K) - k*p/(n+d) );s*p*(1 - h*p / n)".split(';'))
+    >>> exprs = list(map(sympy.sympify, "n*( r*(1 - n/K) - k*p/(n+d) );s*p*(1 - h*p / n)".split(';')))
     >>> variables = sorted(expressions_to_variables(exprs), key=str)
     >>> variables
     [K, d, h, k, n, p, r, s]
@@ -764,7 +764,7 @@ def rational_expr_to_power_matrix(expr, variables):
             denom_terms = list(denom_terms)
 
             # Find the lowest power
-            ref_power = min(denom_terms, key=lambda x: map(abs, monomial_to_powers(x, variables)))
+            ref_power = min(denom_terms, key=lambda x: list(map(abs, monomial_to_powers(x, variables))))
 
             denom_terms.remove(ref_power)  # Use the last term of the denominator as our reference power
 
@@ -785,12 +785,12 @@ def maximal_scaling_matrix(exprs, variables=None):
         sympy.Matrix
 
     >>> exprs = ['z_1*z_3', 'z_1*z_2 / (z_3 ** 2)']
-    >>> exprs = map(sympy.sympify, exprs)
+    >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
     Matrix([[1, -3, -1]])
 
     >>> exprs = ['(z_1 + z_2**2) / z_3']
-    >>> exprs = map(sympy.sympify, exprs)
+    >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
     Matrix([[2, 1, 2]])
     '''
@@ -808,7 +808,7 @@ def maximal_scaling_matrix(exprs, variables=None):
     num_nonzero = sum(map(int, row_is_zero))
     if num_nonzero == 0:
         return sympy.zeros(1, len(variables))
-    assert hermite_rform[-num_nonzero:, :].is_zero
+    assert hermite_rform[-num_nonzero:, :].is_zero_matrix
 
     # Make sure we have the right number of columns
     assert multiplier_rform.shape[1] == len(variables)

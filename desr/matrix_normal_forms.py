@@ -3,7 +3,7 @@
 import sympy
 import itertools
 
-import diophantine
+import desr.diophantine as diophantine
 
 def get_pivot_row_indices(matrix_):
     ''' Return the pivot indices of the matrix
@@ -23,7 +23,7 @@ def get_pivot_row_indices(matrix_):
         [0, 2]
     '''
     indices = []
-    for row_ind in xrange(matrix_.shape[0]):
+    for row_ind in range(matrix_.shape[0]):
         row = matrix_[row_ind, :]
         for ind, col in enumerate(row):
             if col != 0:
@@ -72,24 +72,24 @@ def is_hnf_row(matrix_):
     # The first r rows are non-zero. Determine r and check rows r through m are 0.
     row_is_zero = [all([i == 0 for i in row]) for row in matrix_.tolist()]
     r = m - sum(map(int, row_is_zero))
-    for i in xrange(r, m):
+    for i in range(r, m):
         if not row_is_zero[i]:
             return False
 
     # If b_{i,j_i} are the indices of the first non-zero entry of row i then j_i are strictly ascending
     indices = get_pivot_row_indices(matrix_[:r, :])
-    for i in xrange(len(indices) - 1):
+    for i in range(len(indices) - 1):
         if indices[i] >= indices[i + 1]:
             return False
 
     # Check each of the pivots are positive
-    for i in xrange(r):
+    for i in range(r):
         if matrix_[i, indices[i]] <= 0:
             return False
 
     # Check we are 0 to the right of the pivot
-    for i in xrange(r):
-        for k in xrange(i):
+    for i in range(r):
+        for k in range(i):
             if not (0 <= matrix_[k, indices[i]] < matrix_[i, indices[i]]):
                 return False
     return True
@@ -143,7 +143,7 @@ def hnf_row_lll(matrix_):
     if matrix_.shape[0] == 1:
         hnf = matrix_.copy()
         unimodular_matrix = sympy.Matrix([[1]])
-        rank = 1 - int(hnf.is_zero)
+        rank = 1 - int(hnf.is_zero_matrix)
     else:
         hnf, unimodular_matrix, rank = diophantine.lllhermite(matrix_, m1=1, n1=1)
 
@@ -225,7 +225,7 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     prod = matrix_ * hermite_multiplier
     hermite_form, residue = prod[:, :r], prod[:, r:]
     # Condition a)
-    if not residue.is_zero:
+    if not residue.is_zero_matrix:
         return False
     if not is_hnf_col(hermite_form):
         return False
@@ -234,7 +234,7 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     if not is_hnf_col(herm_mul_n):
         return False
     # Condition c)
-    for i in xrange(r):
+    for i in range(r):
         pivot_val = max(herm_mul_n[i, :])
         if any(herm_mul_i.row(i).applyfunc(lambda x: abs(x) >= pivot_val)):
             return False
@@ -409,7 +409,7 @@ def _swap_ij_rows(matrices, i, j):
         matrices: tuple
             The resulting matrices.
 
-    >>> matrices = [sympy.eye(3) for _ in xrange(2)]
+    >>> matrices = [sympy.eye(3) for _ in range(2)]
     >>> matrices = _swap_ij_rows(matrices, 0, 1)
     >>> matrices[0]
     Matrix([
@@ -445,7 +445,7 @@ def _swap_ij_cols(matrices, i, j):
         matrices : tuple
             The resulting matrices.
 
-    >>> matrices = [sympy.eye(3) for _ in xrange(2)]
+    >>> matrices = [sympy.eye(3) for _ in range(2)]
     >>> matrices = _swap_ij_cols(matrices, 0, 1)
     >>> matrices[0]
     Matrix([
@@ -569,7 +569,7 @@ def is_smf(matrix_):
         return False
 
     current_int = matrix_[0, 0]
-    for i in xrange(1, min(matrix_.shape)):
+    for i in range(1, min(matrix_.shape)):
         next_int = matrix_[i, i]
         # All zeros go at the end
         if (current_int == 0):
@@ -650,7 +650,7 @@ def smf(matrix_):
     assert row_actions * matrix_ * col_actions == transformed
 
     # Now make sure the pivot is in the right place
-    for i in xrange(min(*transformed.shape) - 1):
+    for i in range(min(*transformed.shape) - 1):
         if transformed[i+1,i+1] == 0:
             break
         # Move the pivot entry down if it's 0
@@ -659,11 +659,11 @@ def smf(matrix_):
             transformed, col_actions = _swap_ij_cols([transformed, col_actions], i, i+1)
 
     assert row_actions * matrix_ *  col_actions == transformed
-    assert transformed[1:, 0].is_zero
-    assert transformed[0, 1:].is_zero
+    assert transformed[1:, 0].is_zero_matrix
+    assert transformed[0, 1:].is_zero_matrix
 
     # Enforce diagonal entries to divide the next diagonal entry
-    for i in xrange(min(*transformed.shape) - 1):
+    for i in range(min(*transformed.shape) - 1):
         assert row_actions * matrix_ * col_actions == transformed
         if transformed[i+1,i+1] == 0:
             break

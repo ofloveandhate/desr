@@ -9,7 +9,6 @@ Author: Richard Tanburn (richard.tanburn@gmail.com)
 import fractions
 import re
 import sympy
-from __builtin__ import isinstance
 
 def is_monomial(expr):
    ''' Determine whether expr is a monomial
@@ -64,7 +63,7 @@ def unique_array_stable(array):
     ''' Given a list of things, return a new list with unique elements with
         original order preserved (by first occurence)
 
-        >>> print unique_array_stable([1, 3, 5, 4, 7, 4, 2, 1, 9])
+        >>> print(unique_array_stable([1, 3, 5, 4, 7, 4, 2, 1, 9]))
         [1, 3, 5, 4, 7, 2, 9]
     '''
     seen = set()
@@ -85,7 +84,7 @@ def degree(expr):
         ...             'x',
         ...             'x*y',]
         >>> eqns = str_exprs_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print degree(e.lhs - e.rhs)
+        >>> for e in eqns: print(degree(e.lhs - e.rhs))
         1
         3
         3
@@ -154,7 +153,7 @@ def is_equation(eqn, check_true=True):
     '''
     if sympy.__version__ == '0.7.5':
         return isinstance(eqn, sympy.Equality)
-    elif re.match('1\..*', sympy.__version__):
+    elif re.match(r'1\..*', sympy.__version__):
         return isinstance(eqn, sympy.Equality)
     else:
         return eqn is True
@@ -171,11 +170,12 @@ def standardise_equation(eqn):
 def expressions_to_variables(exprs):
     ''' Take a list of equations or expressions and return a set of variables
 
-        >>> eqn = sympy.Eq(sympy.sympify('x*a + 1'))
+        >>> eqn = sympy.Eq(sympy.sympify('x*a + 1'),0)
         >>> expr = sympy.sympify('x + y*z + 2*a^b')
         >>> to_test = [expr, eqn]
-        >>> expressions_to_variables(to_test)
-        set([x, z, a, b, y])
+        >>> vars = expressions_to_variables(to_test)
+        >>> print(sorted(list(map(str,vars))))
+        ['a', 'b', 'x', 'y', 'z']
     '''
     if len(exprs) == 0:
         return set()
@@ -214,16 +214,16 @@ def dict_as_eqns(dict_):
 
         >>> x, y, z = sympy.symbols('x y z')
         >>> dict_as_eqns({x: 1, y: z, x*y: 1 - z})
-        [Eq(x*y, -z + 1), Eq(x, 1), Eq(y, z)]
+        [Eq(x, 1), Eq(y, z), Eq(x*y, 1 - z)]
     '''
-    return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.iteritems()]
+    return [sympy.Eq(lhs, rhs) for lhs, rhs in dict_.items()]
 
 def str_eqns_to_sympy_eqns(str_eqns):
     ''' Take string equations and sympify
 
         >>> str_eqns = ['x + y == 1', 'x*y*z - 3*a == -3']
         >>> eqns = str_eqns_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print e
+        >>> for e in eqns: print(e)
         Eq(x + y - 1, 0)
         Eq(-3*a + x*y*z + 3, 0)
     '''
@@ -237,13 +237,13 @@ def str_exprs_to_sympy_eqns(str_exprs):
 
         >>> str_eqns = ['x + y - 1', 'x*y*z - 3*a + 3', '2*a - 4*b']
         >>> eqns = str_exprs_to_sympy_eqns(str_eqns)
-        >>> for e in eqns: print e
+        >>> for e in eqns: print(e)
         Eq(x + y - 1, 0)
         Eq(-3*a + x*y*z + 3, 0)
         Eq(2*a - 4*b, 0)
     '''
     exprs = map(sympy.sympify, str_exprs)
-    exprs = map(sympy.Eq, exprs)
+    exprs = list(map(lambda e: sympy.Eq(e,0), exprs))
     return exprs
 
 

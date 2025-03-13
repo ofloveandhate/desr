@@ -2,11 +2,11 @@ from unittest import TestCase, main
 
 import sympy
 
-from chemical_reaction_network import ChemicalReactionNetwork, ChemicalSpecies, Complex, Reaction
-from matrix_normal_forms import (is_hnf_row, hnf_row_lll, is_hnf_col, is_normal_hermite_multiplier, normal_hnf_col,
+from desr.chemical_reaction_network import ChemicalReactionNetwork, ChemicalSpecies, Complex, Reaction
+from desr.matrix_normal_forms import (is_hnf_row, hnf_row_lll, is_hnf_col, is_normal_hermite_multiplier, normal_hnf_col,
     hnf_row, normal_hnf_row)
-from ode_system import ODESystem
-from ode_translation import ODETranslation
+from desr.ode_system import ODESystem
+from desr.ode_translation import ODETranslation
 
 
 class TestHermiteMethods(TestCase):
@@ -420,7 +420,7 @@ class TestInitialConditions(TestCase):
 
     def test_reduced_michaelis_menten(self):
         '''
-        Michaelis Menten equations from :cite:`MM`
+        Michaelis Menten reaction scheme as written in equation (1) in :cite:`Gunawardena2014`, originally from from :cite:`michaelis1913kinetik`
 
         '''
 

@@ -184,18 +184,18 @@ def main():
                 )
 
     for name, example in examples:
-        print name
+        print(name)
         system = example()
         max_scal = system.maximal_scaling_matrix()
-        print 'Original system:\n{}\n'.format(system)
-        print 'Scaling action:\n{}\n{}\n'.format(system.variables, max_scal)
+        print('Original system:\n{}\n'.format(system))
+        print('Scaling action:\n{}\n{}\n'.format(system.variables, max_scal))
         translation = ODETranslation(max_scal)
-        print 'Hermite multiplier:\n{}\n'.format(translation.herm_mult)
+        print('Hermite multiplier:\n{}\n'.format(translation.herm_mult))
 
-        print 'Invariants of the system:\n{}\n'.format(translation.invariants(system.variables))
+        print('Invariants of the system:\n{}\n'.format(translation.invariants(system.variables)))
         reduced = translation.translate_general(system)
-        print 'Reduced system:\n{}\n'.format(reduced)
-        print '\n\n' + '*' * 10 + '\n\n'
+        print('Reduced system:\n{}\n'.format(reduced))
+        print('\n\n' + '*' * 10 + '\n\n')
 
 
 if __name__ == '__main__':

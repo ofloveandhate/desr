@@ -252,9 +252,9 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     ...                 \frac{dP}{dt} &= k_2 C'''
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> max_scal1 = ODETranslation.from_ode_system(original_system)
-    >>> print 'Variable order: ', max_scal1.variables_domain
+    >>> print('Variable order: ', max_scal1.variables_domain)
     Variable order:  (t, C, E, P, S, k_1, k_2, k_m1)
-    >>> print 'Scaling Matrix:\n', max_scal1.scaling_matrix.__repr__()
+    >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
     Scaling Matrix:
     Matrix([
     [1, 0, 0, 0, 0, -1, -1, -1],
@@ -262,14 +262,14 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
 
 Now we can inspect the invariants easily:
 
-    >>> print 'Invariants: ', max_scal1.invariants()
+    >>> print('Invariants: ', max_scal1.invariants())
     Invariants:  Matrix([[k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1, k_2/k_m1]])
 
 Finding the reduced system is also easy.
 Since the Hermite multiplier and inverse are compatible with the simplest parameter reduction scheme,
 :meth:`~desr.ode_translation.ODETranslation.translate` will automatically perform this reduction.
 
-    >>> print 'Reduced system:\n', max_scal1.translate(original_system)
+    >>> print(f'Reduced system:\n{max_scal1.translate(original_system)}')
     Reduced system:
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S
@@ -294,7 +294,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslatio
     >>> original_system_reorder.variables
     (t, C, E, P, S, k_1, k_m1, k_2)
     >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder)
-    >>> print 'Invariants:', ', '.join(map(str, max_scal1_reorder.invariants()))
+    >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
     Invariants: k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2, k_m1/k_2
 
 Now we can reduce to find another, equivalent system.
@@ -388,7 +388,7 @@ to the last :math:`n-r` columns.
     >>> max_scal3.col_swap(0, 1)
     >>> max_scal3.col_swap(0, 3)
     >>> max_scal3.col_swap(0, 2)
-    >>> print 'Permuted Vn:\n', max_scal3.__repr__()
+    >>> print(f'Permuted Vn:\n{repr(max_scal3)}')
     Permuted Vn:
     Matrix([
     [1,  0,  0,  0,  0,  0],
@@ -401,7 +401,7 @@ to the last :math:`n-r` columns.
     [1,  0, -1, -1, -1, -1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
     >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3)
-    >>> print max_scal3.translate(original_system)
+    >>> print(max_scal3.translate(original_system))
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S/c0
     dE/dt = C*c0**2 + C*c0 - E*S
