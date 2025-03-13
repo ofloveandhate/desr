@@ -420,7 +420,7 @@ class TestInitialConditions(TestCase):
 
     def test_reduced_michaelis_menten(self):
         '''
-        Michaelis Menten equations from :cite:`MM`
+        Michaelis Menten reaction scheme as written in equation (1) in :cite:`Gunawardena2014`, originally from from :cite:`michaelis1913kinetik`
 
         '''
 
