@@ -99,9 +99,7 @@ class ODETranslation(object):
     @property
     def r(self):
         '''
-        Returns:
-            int: The dimension of the scaling action: :math:`r`.
-                In particular it is the number of rows of :attr:`~scaling_matrix`.
+        Returns: int: The dimension of the scaling action: :math:`r`.  In particular it is the number of rows of :attr:`~scaling_matrix`.
         '''
         return self._scaling_matrix.shape[0]
 
@@ -109,8 +107,7 @@ class ODETranslation(object):
     def n(self):
         '''
         Returns:
-            int: The number of original variables that the scaling action is acting on: :math:`n`.
-                In particular, it is the number of columns of :attr:`~scaling_matrix`.
+            int: The number of original variables that the scaling action is acting on: :math:`n`.  In particular, it is the number of columns of :attr:`~scaling_matrix`.
         '''
         return self._scaling_matrix.shape[1]
 
@@ -118,9 +115,7 @@ class ODETranslation(object):
     def herm_mult(self):
         '''
         Returns:
-            sympy.Matrix:
-                A column Hermite multiplier :math:`V` that puts the :attr:`~scaling_matrix` in column Hermite normal form.
-                That is: :math:`AV = H` is in column Hermite normal form.
+            sympy.Matrix: A column Hermite multiplier :math:`V` that puts the :attr:`~scaling_matrix` in column Hermite normal form.  That is: :math:`AV = H` is in column Hermite normal form.
         '''
         return self._herm_mult.copy()
 
@@ -136,9 +131,7 @@ class ODETranslation(object):
     def herm_mult_i(self):
         '''
         Returns:
-            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`.
-
-                The columns represent the auxiliary variables of the reduction.
+            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`. The columns represent the auxiliary variables of the reduction.
         '''
         return self.herm_mult[:, :self.r]
 
@@ -146,9 +139,7 @@ class ODETranslation(object):
     def herm_mult_n(self):
         '''
         Returns:
-            sympy.Matrix:
-                :math:`V_{\\mathfrak{n}}`: the last :math:`n-r` columns of the Hermite multiplier :math:`V``.
-                The columns represent the invariants of the scaling action.
+            sympy.Matrix: :math:`V_{\\mathfrak{n}}`: the last :math:`n-r` columns of the Hermite multiplier :math:`V``.  The columns represent the invariants of the scaling action.
         '''
         return self.herm_mult[:, self.r:]
 
@@ -157,8 +148,7 @@ class ODETranslation(object):
     def inv_herm_mult(self):
         '''
         Returns:
-            sympy.Matrix:
-                The inverse of the Hermite multiplier :math:`W=V^{-1}`.
+            sympy.Matrix: The inverse of the Hermite multiplier :math:`W=V^{-1}`.
         '''
         if self._inv_herm_mult is None:
             self._inv_herm_mult = _int_inv(self._herm_mult)
@@ -168,8 +158,7 @@ class ODETranslation(object):
     def inv_herm_mult_u(self):
         '''
         Returns:
-            sympy.Matrix:
-                :math:`W_{\\mathfrak{u}}`: the first :math:`r` rows of :math:`W`.
+            sympy.Matrix: :math:`W_{\\mathfrak{u}}`: the first :math:`r` rows of :math:`W`.
         '''
         return self.inv_herm_mult[:self.r, :]
 
@@ -177,8 +166,7 @@ class ODETranslation(object):
     def inv_herm_mult_d(self):
         """
         Returns:
-            sympy.Matrix:
-                :math:`W_{\\mathfrak{d}}`: the last :math:`n-r` rows of :math:`W`.
+            sympy.Matrix: :math:`W_{\\mathfrak{d}}`: the last :math:`n-r` rows of :math:`W`.
         """
         return self.inv_herm_mult[self.r:, :]
 
@@ -189,8 +177,7 @@ class ODETranslation(object):
             indep_var_index (int): The index of the independent variable.
 
         Returns:
-            sympy.Matrix:
-                The Hermite multiplier :math:`V`, ignoring the independent variable.
+            sympy.Matrix: The Hermite multiplier :math:`V`, ignoring the independent variable.
 
 
         >>> translation = ODETranslation(sympy.Matrix(range(12)).reshape(3, 4))
@@ -242,8 +229,7 @@ class ODETranslation(object):
     def variables_domain(self):
         '''
         Returns:
-            tuple, None:
-                The variables that the scaling action acts on.
+            tuple, None: The variables that the scaling action acts on.
         '''
         return self._variables_domain
 
