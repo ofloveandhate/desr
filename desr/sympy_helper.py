@@ -153,7 +153,7 @@ def is_equation(eqn, check_true=True):
     '''
     if sympy.__version__ == '0.7.5':
         return isinstance(eqn, sympy.Equality)
-    elif re.match('1\..*', sympy.__version__):
+    elif re.match(r'1\..*', sympy.__version__):
         return isinstance(eqn, sympy.Equality)
     else:
         return eqn is True

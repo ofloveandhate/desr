@@ -8,7 +8,7 @@ import re
 import sympy
 from sympy.abc import _clash1
 
-VAR_RE = '[A-Za-z*][\d_]*'
+VAR_RE = r'[A-Za-z*][\d_]*'
 
 def matrix_to_tex(matrix_):
     '''
@@ -128,18 +128,18 @@ def tex_to_sympy(tex):
         raise ValueError('Too many = in {}.'.format(tex))
 
     # Turn \frac{d }{d } into sympy.Derivatives
-    diff_match = re.match('\s*[\\f\ff]?rac\{d(.+)\}\{d(.+)\}', tex)
+    diff_match = re.match(r'\s*[\\f\ff]?rac\{d(.+)\}\{d(.+)\}', tex)
     if diff_match:
         return sympy.Derivative(*sympy.symbols(' '.join(diff_match.groups())))
 
     # Turn \frac into ratios. Consume the shortest amount possible
-    tex = re.sub('[\\f\ff]?rac{(.*?)}{(.*?)}', '((\\1) / (\\2))', tex)
+    tex = re.sub(r'[\\f\ff]?rac{(.*?)}{(.*?)}', '((\\1) / (\\2))', tex)
     # Turn spaces between variables into *. Do this by matching anything that isn't an operation
     # Use a lookahead assertion to get overlapping instances.
-    tex = re.sub('([^+\-*\s/(]+)\s+(?=[^+\-*\s/)]+)', '\\1 * ', tex)
+    tex = re.sub(r'([^+\-*\s/(]+)\s+(?=[^+\-*\s/)]+)', '\\1 * ', tex)
 
     # Change minuses in the subscripts to m's
-    tex = re.sub('([a-zA-Z]+)_{(.*)\-(.+)}', '\\1_\\2m\\3 ', tex)
+    tex = re.sub(r'([a-zA-Z]+)_{(.*)\-(.+)}', '\\1_\\2m\\3 ', tex)
 
     # We want to use all available variables, so sympify with the _clash local dictionary
     return sympy.sympify(tex, _clash1)
