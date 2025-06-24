@@ -74,7 +74,7 @@ def example_michael_mentis():
     ## Stepping through the above function for the sake of the paper.
     ## Step 1: Check we have invariants
     choice_actions = max_scal1.scaling_matrix * invariant_choice
-    assert choice_actions.is_zero  # Else we have to stop.
+    assert choice_actions.is_zero_matrix  # Else we have to stop.
 
     ## Step 2: Try and extend the choices by a basis of invariants
     ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
