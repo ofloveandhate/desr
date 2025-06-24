@@ -234,6 +234,7 @@ class ODESystem(object):
     def add_constraints(self, lhs, rhs):
         '''
         Add constraints that must be obeyed by the system.
+
         Args:
             lhs (sympy.Expr): The left hand side of the constraint.
             rhs (sympy.Expr): The right hand side of the constraint.
@@ -291,12 +292,14 @@ class ODESystem(object):
     def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=False):
         '''
         Make substitutions into the derivatives, returning a new system.
+
         Args:
             to_sub (dict): Dictionary of substitutions to make.
             expand_before (bool): Expand the sympy expression for each derivative before substitution.
             expand_after (bool): Expand the sympy expression for each derivative after substitution.
             factor_after (bool): Factorise the sympy expression for each derivative after substitution.
             subs_constraints (bool): Perform the substitutions into the initial constraints.
+        
         Returns:
             ODESystem: System with substitutions carried out.
 
