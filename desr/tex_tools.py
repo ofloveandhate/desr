@@ -88,7 +88,7 @@ def eqns_to_tex(eqns):
 
 def tex_to_sympy(tex):
     """
-    Given some TeX, turn it into sympy expressions and equations.
+    Given some possibly multi-line TeX, turn it into sympy expressions and equations.
     Each line is parsed seperately.
 
     Args:
@@ -113,9 +113,22 @@ def tex_to_sympy(tex):
     Eq(k_2, APCs*V_2dd + V_2d*(APCT - APCs))
     """
     # Parse each line individually
-    split_tex = tex.split('\n')
-    if len(split_tex) > 1:
-        return map(tex_to_sympy, split_tex)
+
+    return list(map(_tex_to_sympy_one_line, tex.split('\n')))
+
+
+def _tex_to_sympy_one_line(tex):
+    """
+    Process just one line of tex.  
+    This is a helper function so that the main `tex_to_sympy` function
+    and the rest of the code will always return an iterable.
+
+    Args:
+        tex (str): LaTeX, just ONE line of it
+
+    Returns:
+        sympyfication of that line of code
+    """
 
     # Remove alignment characters
     tex = tex.strip().replace('&', '').replace('\\', '')
@@ -123,7 +136,7 @@ def tex_to_sympy(tex):
     # If equality, return a sympy.Eq
     sides = tex.split('=')
     if len(sides) == 2:
-        return sympy.Eq(*map(tex_to_sympy, sides))
+        return sympy.Eq(*map(_tex_to_sympy_one_line, sides))
     elif len(sides) != 1:
         raise ValueError('Too many = in {}.'.format(tex))
 
@@ -143,7 +156,6 @@ def tex_to_sympy(tex):
 
     # We want to use all available variables, so sympify with the _clash local dictionary
     return sympy.sympify(tex, _clash1)
-
 
 if __name__ == '__main__':
     import doctest
