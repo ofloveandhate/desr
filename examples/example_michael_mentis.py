@@ -39,7 +39,6 @@ def example_michael_mentis():
     # Print translated system
     print('Reduced system:')
     print(max_scal1.translate(original_system))
-    print
 
     print('Changing the order of the variables')
     print('-----------------------------------')
