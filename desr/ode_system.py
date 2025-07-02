@@ -21,23 +21,31 @@ class ODESystem(object):
         derivatives (tuple of sympy.Expression): Ordered tuple of derivatives.
         indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
         initial_conditions (tuple of sympy.Symbol): The initial values of non-constant variables
+        same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
         self._indep_var = sympy.var('t') if indep_var is None else indep_var
 
+        # initialize some class member storage
         self._initial_conditions = {}
+        self._constraints = []
+        self._requires_same_unit = {} # a dict of {Symbol : Expression}
 
+        # sanity checks
         assert len(self._variables) == len(self._derivatives)
         assert self.derivatives[self.indep_var_index] == sympy.sympify(1)
 
+        # carry over additional arguments
         if initial_conditions is not None:
             self.update_initial_conditions(initial_conditions=initial_conditions)
 
-        self._constraints = []
+        if same_units is not None:
+            self.require_same_unit(requirements=same_units)
+
 
 
     def __eq__(self, other):
@@ -186,6 +194,13 @@ class ODESystem(object):
 
         '''
         return self._constraints[:]
+    
+    @property
+    def dimension_requirements(self):
+        """
+        Return: the list of lists of sympy.Expression that must have the same units.  Only the user knows these, these are NOT computed
+        """
+        return self._requires_same_unit
 
     def update_initial_conditions(self, initial_conditions):
         '''
@@ -230,6 +245,46 @@ class ODESystem(object):
                 self._variables = tuple(list(self._variables) + [init_cond])
                 self._derivatives = tuple(list(self._derivatives) + [None])
             self._initial_conditions[variable] = init_cond
+    
+
+    def require_same_unit(self,requirements):
+        """
+        Add requirements to the system that some variables have the same units as some corresponding expressions
+
+        Args:
+            requirements (dict of sympy.Symbol:sympy.Expression): 
+
+        Keys: var (sympy.Symbol): a variable to require to have the same unit as the expression expr
+        Values: expr (sympy.Expression): an expression that must have the same net unit as the variable var 
+
+        This has the effect of adding columns to the Power Matrix / Exponent Matrix.
+        """
+
+
+        result = {}
+
+        for var, expr in requirements.items():
+
+            # convert to symbols and expressions
+            if not isinstance(var, sympy.Symbol):
+                var = sympy.Symbol(var)
+
+            if isinstance(expr, str):
+                expr = sympy.sympify(expr)
+
+            expr_vars = expressions_to_variables([expr])
+
+            if var not in self._variables:
+                raise ValueError(f'The variable {var} for a same-dimension requirement is not already a variable in this system.')
+
+            for e in expr_vars:
+                if e not in self._variables:
+                    raise ValueError(f'The symbol {e} used in expression {expr} for a same-dimension requirement is not already a variable in this system.')
+
+            result[var] = expr
+
+        self._requires_same_unit = result
+
 
     def add_constraints(self, lhs, rhs):
         '''
@@ -563,6 +618,24 @@ class ODESystem(object):
         return cls.from_dict(deriv_dict=derivative_dict)
 
 
+    def _expressions(self):
+        """
+        A helper function that produces a list of expressions combining all of the expression types
+
+        Args:
+
+        Returns:
+            List of sympy expressions
+        """
+
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
+        exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
+        exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
+        exprs.extend([expr/var for var,expr in self._requires_same_unit.items()])
+        
+
+        return exprs
+
     def power_matrix(self):
         '''
         Determine the 'exponent' or 'power' matrix of the system, denoted by :math:`K` in the literature,
@@ -603,9 +676,9 @@ class ODESystem(object):
         [0, 0, 1,  0, 0, 0,  1,  0],
         [0, 0, 0,  0, 0, 0,  0, -1]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
-        exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
-        exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
+
+        exprs = self._expressions()
+
         matrices = [rational_expr_to_power_matrix(expr, self.variables) for expr in exprs]
         out = sympy.Matrix.hstack(*matrices)
         assert out.shape[0] == len(self.variables)
@@ -627,9 +700,8 @@ class ODESystem(object):
         [1, 0, 0, 0, -1, -1, -1],
         [0, 1, 1, 1, -1,  0,  0]])
         '''
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
-        exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
-        exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
+        exprs = self._expressions()
+
         return maximal_scaling_matrix(exprs, variables=self.variables)
 
     def reorder_variables(self, variables):
@@ -658,8 +730,12 @@ class ODESystem(object):
                 variables = variables.split(' ')
             else:
                 variables = tuple(variables)
+
+        # test that the set of variables is the same in the new order.
+        # silvaina suspects the code would be clearer if we just set-ified them.
         if not sorted(list(map(str, variables))) == sorted(list(map(str, self.variables))):
             raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(list(map(str, self.variables))), sorted(list(map(str, variables)))))
+        
         column_shuffle = []
         for new_var in variables:
             for i, var in enumerate(self.variables):
