@@ -496,18 +496,18 @@ Inner equations (21)
     ...                         expand_after=True,
     ...                         factor_after=True)
     dt/dt = 1
-    dc/dt = -(sigma*u*v - sigma*u - u + v)/(sigma + 1)
-    ds/dt = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
+    dv/dt = -(sigma*u*v - sigma*u - u + v)/(sigma + 1)
+    du/dt = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
     dc4/dt = 0
     d1/dt = 0
     dc3/dt = 0
+    depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0
-    depsilon/dt = 0
-    s(0) = 1
+    u(0) = 1
     1/sigma == c2*kappa + c2
     epsilon == c4/(1 + 1/sigma)
 
@@ -532,17 +532,17 @@ Outer equations (24)
     ...                         expand_after=True,
     ...                         factor_after=True)
     dt/dt = 1
-    dc/dt = -(kappa + 1)*(sigma*u*v - sigma*u - u + v)/epsilon
-    ds/dt = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
+    dv/dt = -(kappa + 1)*(sigma*u*v - sigma*u - u + v)/epsilon
+    du/dt = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
     dc4/dt = 0
     d1/dt = 0
     dc3/dt = 0
+    depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0
-    depsilon/dt = 0
-    s(0) = 1
+    u(0) = 1
     1/sigma == c2*kappa + c2
     epsilon == c4/(1 + 1/sigma)
