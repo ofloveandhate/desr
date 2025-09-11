@@ -207,8 +207,7 @@ class ODESystem(object):
     @property
     def constraints(self):
         '''
-        Todo:
-            * Finish docstring
+        Returns the constraints imposed on the system.
 
         Returns:
 
@@ -217,9 +216,9 @@ class ODESystem(object):
     
     @property
     def dimension_requirements(self):
-        """
-        Return: the list of lists of sympy.Expression that must have the same units.  Only the user knows these, these are NOT computed
-        """
+        '''
+        Returns: the list of lists of sympy.Expression that must have the same units.  Only the user knows these, these are NOT computed
+        '''
         return self._requires_same_unit
 
     def update_initial_conditions(self, initial_conditions):
@@ -354,17 +353,38 @@ class ODESystem(object):
             rhs = sympy.sympify(rhs)
         if (lhs == 0) or (rhs == 0):
             raise ValueError('Cannot express equality with 0.')
-        variables = expressions_to_variables([lhs, rhs])
-        nonconst_var = variables.intersection(self.non_constant_variables)
-        if nonconst_var:
-            raise ValueError('Cannot add constraints on non-constant parameters {}. '.format(nonconst_var) +
-                             'This would make an interesting project though...')
-        variables = sorted(variables.difference(set(self.variables)), key=str)
-        self._variables = tuple(list(self._variables) + variables)
-        self._derivatives = tuple(list(self._derivatives) + [None for _ in variables])
+
+        # get the variables from the constraint
+        all_constraint_vars, nonconst_vars, new_vars = self.equation_variables(lhs, rhs)
+
+        # check if have non-constant variables present.  if so, raise with a helpful error message
+        if nonconst_vars:
+            raise ValueError('Cannot add constraints on non-constant parameters {}. '.format(nonconst_vars) +
+                             '.  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...')
+
+        # no non-constants, no problem.  update the recorded symbols
+        self._variables = tuple(list(self._variables) + new_vars)
+        self._derivatives = tuple(list(self._derivatives) + [None for _ in new_vars])
         self._constraints.append(sympy.Eq(lhs, rhs))
 
-    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=False):
+    def equation_variables(self, lhs, rhs):
+        """
+        compute the variables in the left and right hand side of a constraint:
+        all, the non-constant ones that exist in the system, and the new ones.
+
+        Args:
+            lhs (sympy.Expr): The left hand side of the constraint.
+            rhs (sympy.Expr): The right hand side of the constraint.
+
+        Returns: length-three tuple of containers of variables: all, non-constant existing, new
+        """
+        all_vars = expressions_to_variables([lhs, rhs])
+        nonconst_vars = all_vars.intersection(self.non_constant_variables)
+        new_vars = sorted(all_vars.difference(set(self.variables)), key=str)
+
+        return all_vars, nonconst_vars, new_vars
+
+    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=False, new_symbols_are_constants=True):
         '''
         Make substitutions into the derivatives, returning a new system.
 
@@ -416,25 +436,91 @@ class ODESystem(object):
         dc_1/dt = 0
         1 == c_1**2
         '''
-        to_sub = {sympy.sympify(k): sympy.sympify(v) for k, v in to_sub.items()}
-        new_derivs = self._derivatives
-        if expand_before:
-            new_derivs = (d.expand() if d is not None else None for d in new_derivs)
-        new_derivs = (d.subs(to_sub) if d is not None else None for d in new_derivs)
-        if expand_after:
-            new_derivs = (d.expand() if d is not None else None for d in new_derivs)
-        if factor_after:
-            new_derivs = (sympy.factor(d) if d is not None else None for d in new_derivs)
 
-        subs_system = ODESystem(self.variables, new_derivs,
+        # sympify the dict of things to substitute
+        to_sub = {sympy.sympify(lhs): sympy.sympify(rhs) for lhs, rhs in to_sub.items()}
+
+        # make sure we can actually do the substitution
+        for lhs,rhs in to_sub.items():
+            source_vars = set(expressions_to_variables([lhs]))
+
+            source_vars_isect_sys_vars = source_vars.intersection(set(self.non_constant_variables))
+            if source_vars_isect_sys_vars:
+                # we're trying to substitute away a non-constant variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
+                dest_vars = set(expressions_to_variables([rhs]))
+
+                # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
+                if rhs!=list(dest_vars)[0]:
+                    raise ValueError(f'unable to run substitution {lhs} -> {rhs}, because {source_vars_isect_sys_vars} is non-constant')
+
+                #ok, so this is a simple renaming.  we need to not only do the substitution in the rhs of the derivative, but also in the lhs.
+                # silviana, TODO DODODODO
+
+        # copy (really, make a reference, but don't worry)
+        new_derivs = self._derivatives
+
+        # print("derivs before",new_derivs)
+
+        # expand, if desired by caller
+        if expand_before:
+            new_derivs = [d.expand() if d is not None else None for d in new_derivs]
+
+        # do the substitutions
+        new_derivs = [d.subs(to_sub) if d is not None else None for d in new_derivs]
+
+        # expand, if desired by caller
+        if expand_after:
+            new_derivs = [d.expand() if d is not None else None for d in new_derivs]
+
+        # factor, if desired by caller
+        if factor_after:
+            new_derivs = [sympy.factor(d) if d is not None else None for d in new_derivs]
+
+
+
+        # next, we add the new variables from the substitution
+        all_vars = set(expressions_to_variables(new_derivs))
+        missing_vars = tuple(sorted(tuple(set(all_vars) - set(self.variables)),key=str))
+        
+        # print(f'Info: after doing substitutions, there are {len(missing_vars)} new variables')
+
+        # record that we have them, for the new post-substitution system
+        new_vars = self.variables + missing_vars
+
+        if new_symbols_are_constants:
+            for x in missing_vars:
+                new_derivs.append(None)
+        else:
+            raise NotImplementedError(f"don't want new symbols from substitution to be constant, but don't know what else to do.  the new symbols: {missing_vars}")
+
+
+        # TODO SILVIANA HERE!!=
+        # a substitution might re-introduce a symbol, we don't know.  so we have to be careful about deleting variables.
+        # we should remove only variables that don't appear on the right hand side of anything
+
+
+        # TODO SILVIANA HERE!!=  t
+        #delete this once done with rewriting
+        for lhs, rhs in to_sub.items():
+            if lhs in self.variables:
+                var_loc = new_vars.index(lhs)
+                # print('ARST', var_loc)
+                new_vars = new_vars[:var_loc] + new_vars[var_loc+1:]
+                new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
+
+        subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=self.initial_conditions,
                                 indep_var=self.indep_var)
 
+        # silviana says: i don't understand why we need to call this.  why can't re just directly construct the constraints?   
+        # this makes it really hard to delete variables that don't appear
         for eqn in self.constraints:
             if subs_constraints:
-                eqn = sympy.Eq(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
+                eqn = eqn.subs(to_sub)
+                # eqn = sympy.Eq(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
             subs_system.add_constraints(eqn.lhs, eqn.rhs)
 
+        subs_system._variable_sanity_check()
         return subs_system
 
     @classmethod
@@ -471,6 +557,9 @@ class ODESystem(object):
         deriv_dict = dict(map(lambda x: parse_de(x, indep_var=str(indep_var)), equations))
         system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions)
         system.default_order_variables()
+
+        system._variable_sanity_check()
+
         return system
 
     @classmethod
@@ -519,6 +608,9 @@ class ODESystem(object):
                      indep_var=indep_var,
                      initial_conditions=initial_conditions)
         system.default_order_variables()
+
+        system._variable_sanity_check()
+
         return system
 
     def __repr__(self):
@@ -618,25 +710,49 @@ class ODESystem(object):
         dk_m1/dt = 0
 
         Todo:
+            * Deal with constraints from tex
             * Allow initial conditions to be set from tex.
         """
         sympification = tex_to_sympy(tex)
         derivative_dict = {}
         indep_var = None
-        for sympy_eq in sympification:
-            if not isinstance(sympy_eq.lhs, sympy.Derivative):
-                raise ValueError('Invalid sympy equation: {}'.format(sympy_eq))
-            derivative_dict[sympy_eq.lhs.args[0]] = sympy_eq.rhs
 
-            # Check we always have the same independent variable.
-            if indep_var is None:
-                indep_var = sympy_eq.lhs.args[1]
+        constraints = {}
+
+        for eqn in sympification:
+            if not isinstance(eqn.lhs, sympy.Derivative):
+                # since it's not a derivative, it must be a constraint.
+                constraints[eqn.lhs] = eqn.rhs
+
             else:
-                if indep_var != sympy_eq.lhs.args[1]:
-                    raise ValueError('Must be ordinary differential equation. Two indep variables {} and {} found.'.format(indep_var, sympy_eq.lhs.args[1]))
+                # add to the dict from which we will construct the system
+                derivative_dict[eqn.lhs.args[0]] = eqn.rhs
 
-        return cls.from_dict(deriv_dict=derivative_dict)
+                # Check we always have the same independent variable.
+                if indep_var is None:
+                    indep_var = eqn.lhs.args[1]
+                else:
+                    if indep_var != eqn.lhs.args[1]:
+                        raise ValueError('Must be ordinary differential equation, but found two independent variables {} and {}.'.format(indep_var, eq.lhs.args[1]))
 
+        # make the system which we will eventually return.
+        system = cls.from_dict(deriv_dict=derivative_dict)
+
+        # Add the constraints
+        # todo: this isn't quite right, because the constraints might use non-constant variables, and then `add_constraints` will raise
+        # so we should really check each constraint, and then do this only for those constraints
+        # that involve only constant variables.
+        for lhs, rhs in constraints.items():
+            system.add_constraints(lhs,rhs)
+
+        # Add the initial conditions
+        # todo: code here
+
+
+        # cuz i'd prefer to NOT be insane.
+        system._variable_sanity_check()
+
+        return system
 
     def _expressions(self):
         """
@@ -648,13 +764,35 @@ class ODESystem(object):
             List of sympy expressions
         """
 
+        # first, the derivatives
         exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
+
+        # next, initial conditions
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
+
+        # then, the constraints on constant variables
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
+
+        # finally, the things that are required to have the same unit
         exprs.extend([expr/var for var,expr in self._requires_same_unit.items()])
         
-
         return exprs
+
+    def _variable_sanity_check(self):
+        """
+        Makes sure that all the variables in the system are accounted for
+        """
+
+        exprs = self._expressions()
+
+        expr_vars = expressions_to_variables(exprs)
+        
+        unlisted_vars = expr_vars - set(self.variables)
+        
+
+        if unlisted_vars:
+            raise RuntimeError(f"there are variables in the expressions that are not in the list of variables: {unlisted_vars}")
+
 
     def power_matrix(self):
         '''
@@ -791,7 +929,7 @@ class ODESystem(object):
 
         # Order variables as independent, dependent, parameters
         variables = [self.indep_var] + dep_var + const_var
-        assert len(variables) == len(set(variables))
+        assert len(variables) == len(set(variables)) # assures no duplicates
         self.reorder_variables(variables=variables)
 
 def parse_de(diff_eq, indep_var='t'):

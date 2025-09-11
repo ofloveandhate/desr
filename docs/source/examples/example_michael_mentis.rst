@@ -1,11 +1,23 @@
-
+    
 
 Example Michaelis-Menten
 ========================
 
 We derive the analysis of the Michaelis-Menten equations found in :cite:`Segel1989`: in a systematic manner.
 
-After using the law of mass action, we are able to reduce the initial set of equations to
+The model
+----------
+
+There are two chemical species E and S, which reversibly combine to form ES, which decomposes into E and P.
+
+.. math::
+    :nowrap:
+
+    \[
+    E+S\leftrightarrow ES \rightarrow E+P
+    \]
+
+After using the law of mass action, we are able to translate to the ODE system
 
 .. math::
     :nowrap:
@@ -13,12 +25,15 @@ After using the law of mass action, we are able to reduce the initial set of equ
     \begin{align}
     \frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\
     \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c \\
-    s(0) &= s_0
+    s(0) &= s_0.
     \end{align}
 
-First we must create the system.
-Before we perform any analysis, we set :math:`K = k_2 + k_{-1}` and eliminate :math:`k_{-1}`.
-Why can/do we do this??
+
+
+Using `desr` to reduce the scaling symmetries
+-----------------------------------------------
+
+First we must create the system.  We set :math:`K = k_2 + k_{-1}` and eliminate :math:`k_{-1}`.
 
     >>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
