@@ -864,7 +864,7 @@ class ODESystem(object):
 
     def reorder_variables(self, variables):
         '''
-        Reorder the equation according to the new order of variables.
+        Store the new variable order, and reorder the equations according to the new order of variables.
 
         Args:
             variables (str, iter):
