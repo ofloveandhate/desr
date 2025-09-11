@@ -748,8 +748,11 @@ class ODETranslation(object):
 
         new_deriv_dict = {}
         for key, val in system.derivative_dict.items():
+            
+            # skip the derivatives of constants, since they are `None`.
             if key in system.constant_variables:
                 continue
+
             derivative_factor = (to_sub[key] / key) * (system.indep_var / to_sub[system.indep_var])
             new_deriv_dict[key] = (val.subs(to_sub) / derivative_factor).expand()
 
