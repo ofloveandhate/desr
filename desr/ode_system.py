@@ -155,6 +155,26 @@ class ODESystem(object):
         '''
         return len(self.constant_variables)
 
+    def simplify_derivatives(self):
+        '''
+        use sympy to factor the derivatives, in an effort to make them simpler to print to screen / into tex for a paper, etc
+
+        Returns:
+            None
+        '''
+
+        new_derivs = []
+
+        for d in self._derivatives:
+            if d is not None:
+                for v in self.variables:
+                    d = sympy.collect(d,v)
+            new_derivs.append(d)
+
+        self._derivatives = new_derivs
+        
+
+
     @property
     def derivatives(self):
         ''' Getter for an ordered tuple of expressions representing the derivatives of self.variables.
