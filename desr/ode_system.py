@@ -24,7 +24,7 @@ class ODESystem(object):
         same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -34,6 +34,7 @@ class ODESystem(object):
         self._initial_conditions = {}
         self._constraints = []
         self._requires_same_unit = {} # a dict of {Symbol : Expression}
+        self._is_reduced = is_reduced
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
@@ -55,6 +56,7 @@ class ODESystem(object):
                     raise TypeError(f'{c} is not a sympy equality.  Constraints must be sympy equalities.')
             self._constraints = constraints
 
+        self._variable_sanity_check()
 
 
     def __eq__(self, other):
@@ -91,10 +93,12 @@ class ODESystem(object):
         Returns:
             ODESystem: A copy of the system.
         '''
-        system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var)
+        system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var, is_reduced = self.is_reduced, same_units=self._requires_same_unit)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
+
+        
         return system
 
     @property
@@ -106,6 +110,10 @@ class ODESystem(object):
             sympy.Symbol: The independent variable, which we are differentiating with respect to.
         """
         return self._indep_var
+
+    @property
+    def is_reduced(self):
+        return self._is_reduced
 
     @property
     def indep_var_index(self):
@@ -246,11 +254,38 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'x': 'x_0'})
         >>> system.initial_conditions
         {x: x_0}
+    
+        >>> system
+        dt/dt = 1
+        dx/dt = c_0*x*y
+        dy/dt = c_1*t*(1 - x)*(1 - y)
+        dc_0/dt = 0
+        dc_1/dt = 0
+        dx_0/dt = 0
+        x(0) = x_0
 
         >>> system.update_initial_conditions({'c_0': 'k'})
         Traceback (most recent call last):
             ...
         ValueError: Cannot set initial condition k for variable c_0 with derivative None.
+        
+        >>> system
+        dt/dt = 1
+        dx/dt = c_0*x*y
+        dy/dt = c_1*t*(1 - x)*(1 - y)
+        dc_0/dt = 0
+        dc_1/dt = 0
+        dx_0/dt = 0
+        x(0) = x_0
+        
+        >>> system.is_reduced
+        False
+
+        >>> system.update_initial_conditions({'x': '1'})
+        Traceback (most recent call last):
+            ...
+        ValueError: initial condition `1` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
+
 
         >>> system
         dt/dt = 1
@@ -261,20 +296,42 @@ class ODESystem(object):
         dx_0/dt = 0
         x(0) = x_0
         '''
-        non_const_var = self.non_constant_variables
         for variable, init_cond in initial_conditions.items():
+
+            # convert through sympy
             if not isinstance(variable, sympy.Symbol):
                 variable = sympy.Symbol(variable)
+                
             if isinstance(init_cond, str):
-                init_cond = sympy.Symbol(init_cond)
-            # We can only set initial conditions of non-constant variables we already know about.
-            if variable not in non_const_var:
-                raise ValueError('Cannot set initial condition {} for variable {} with derivative {}.'.format(init_cond,
+                init_cond = sympy.sympify(init_cond)
+
+            # We can only set initial conditions for non-constant variables we already know about.
+            if variable not in self.non_constant_variables:
+                raise ValueError('Cannot set initial condition {} for constant variable {} with derivative {}.'.format(init_cond,
                                                                                                               variable,
                                                                                                               self.derivative_dict.get(variable)))
-            if init_cond not in self.variables:
+
+
+
+            ics_vars = expressions_to_variables([init_cond]) # convert. 
+
+
+
+            # reduced systems are allowed to have 1's (and potentially 0's) as initial conditions
+            # but non-reduced systems are NOT.  Otherwise, there might be 1's with different units, and this is nonsense.
+            if not self.is_reduced:
+
+                if len(ics_vars) != 1:
+                    raise ValueError(f'an initial condition should just be a single variable.  you have {ics_vars}')
+
+                if init_cond.is_constant():
+                    raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.  If you want {variable}(0) to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)")
+
+            # silviana: i think we should guard against having 1 be a variable...
+            if (init_cond not in self.variables) and not init_cond.is_constant(): # checking emptiness on ics_vars
                 self._variables = tuple(list(self._variables) + [init_cond])
                 self._derivatives = tuple(list(self._derivatives) + [None])
+
             self._initial_conditions[variable] = init_cond
     
 
@@ -544,19 +601,18 @@ class ODESystem(object):
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
 
         
-
+        # we're finally ready to construct the new post-substitution System. Huzzah.
         subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
                                 indep_var=self.indep_var,
-                                constraints=constraints)
-
-
+                                constraints=constraints,
+                                is_reduced = self.is_reduced)
 
         subs_system._variable_sanity_check()
         return subs_system
 
     @classmethod
-    def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None):
+    def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False):
         '''
         Instantiate from multiple equations.
 
@@ -587,7 +643,7 @@ class ODESystem(object):
             equations = equations.strip().split('\n')
 
         deriv_dict = dict(map(lambda x: parse_de(x, indep_var=str(indep_var)), equations))
-        system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions)
+        system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions, is_reduced=is_reduced)
         system.default_order_variables()
 
         system._variable_sanity_check()
@@ -595,7 +651,7 @@ class ODESystem(object):
         return system
 
     @classmethod
-    def from_dict(cls, deriv_dict, indep_var=sympy.var('t'), initial_conditions=None):
+    def from_dict(cls, deriv_dict, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False):
         '''
         Instantiate from a text of equations.
 
@@ -638,7 +694,9 @@ class ODESystem(object):
         system = cls(variables,
                      tuple([deriv_dict.get(var) for var in variables]),
                      indep_var=indep_var,
-                     initial_conditions=initial_conditions)
+                     initial_conditions=initial_conditions,
+                     is_reduced=is_reduced)
+
         system.default_order_variables()
 
         system._variable_sanity_check()
@@ -717,7 +775,7 @@ class ODESystem(object):
         return ' \\\\\n'.join(lines)
 
     @classmethod
-    def from_tex(cls, tex):
+    def from_tex(cls, tex, is_reduced=False):
         """
         Given the LaTeX of a system of differential equations, return a ODESystem of it.
 
@@ -768,12 +826,9 @@ class ODESystem(object):
                         raise ValueError('Must be ordinary differential equation, but found two independent variables {} and {}.'.format(indep_var, eq.lhs.args[1]))
 
         # make the system which we will eventually return.
-        system = cls.from_dict(deriv_dict=derivative_dict)
+        system = cls.from_dict(deriv_dict=derivative_dict, is_reduced=is_reduced)
 
-        # Add the constraints
-        # todo: this isn't quite right, because the constraints might use non-constant variables, and then `add_constraint` will raise
-        # so we should really check each constraint, and then do this only for those constraints
-        # that involve only constant variables.
+        # Add the constraints.  This might `raise` if the constraints involve non-constant variables
         for lhs, rhs in constraints.items():
             system.add_constraint(lhs,rhs)
 
@@ -825,11 +880,20 @@ class ODESystem(object):
         if unlisted_vars:
             raise RuntimeError(f"there are variables in the expressions that are not in the list of variables: {unlisted_vars}")
 
+        for v in self.variables:
+            found_vars = expressions_to_variables([v]) # convert.  constants don't make it through.
+
+            if not found_vars:
+                raise RuntimeError(f"variable `{v}` doesn't appear to be a variable")
+
+            if list(found_vars)[0] != sympy.sympify(v):
+                raise RuntimeError(f'variable `{v}` appears to not actually be a single variable.  have {found_vars}')
+
 
     def power_matrix(self):
         '''
         Determine the 'exponent' or 'power' matrix of the system, denoted by :math:`K` in the literature,
-        by gluing together the power matrices of each derivative.
+        by gluing together the power matrices of each derivative, initial condition, constraint, and require-same-variable.
 
         In particular, it concatenates :math:`K_{\\left(\\frac{t}{x} \\cdot \\frac{dx}{dt}\\right)}` for :math:`x` in :attr:`~variables`,
         where :math:`t` is the independent variable.

@@ -598,7 +598,7 @@ class ODETranslation(object):
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var)
+        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
 
     def translate_general(self, system):
         '''
@@ -657,7 +657,7 @@ class ODETranslation(object):
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
         assert len(new_variables) == len(new_derivatives) == len(system.variables) + 1
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var)
+        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
 
     def _is_translate_parameter_compatible(self, system):
         ''' Check whether a system satisfies the conditions of the parameter scheme of translation '''
@@ -756,7 +756,7 @@ class ODETranslation(object):
             derivative_factor = (to_sub[key] / key) * (system.indep_var / to_sub[system.indep_var])
             new_deriv_dict[key] = (val.subs(to_sub) / derivative_factor).expand()
 
-        reduced_system = ODESystem.from_dict(new_deriv_dict)
+        reduced_system = ODESystem.from_dict(new_deriv_dict,is_reduced=True)
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
         if system.initial_conditions:

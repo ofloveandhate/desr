@@ -93,7 +93,6 @@ However, we need to add in our initial condition for :math:`s`.
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
-    d1/dt = 0
     s(0) = 1
 
 Some elementary column operations give us equations 8
@@ -109,7 +108,6 @@ Some elementary column operations give us equations 8
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
-    d1/dt = 0
     s(0) = 1
 
 
@@ -125,7 +123,6 @@ We can also scale time by :math:`\epsilon` to get the "inner" equation 11:
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
-    d1/dt = 0
     s(0) = 1
 
 What is epsilon is not small?
@@ -163,7 +160,6 @@ Check that if we keep L at the end, we have the same reduced system as before
     dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
-    d1/dt = 0
     dc3/dt = 0
     s(0) = 1
     c3 == c0 + 1
@@ -211,7 +207,6 @@ Which gives us exactly equations 24 from Segel, after some trivial rearrangement
     dc1/dt = 0
     dc2/dt = 0
     dc3/dt = 0
-    d1/dt = 0
     s(0) = 1
     c3 == c2 + 1
 
@@ -231,7 +226,6 @@ To get the equations on the other timescale, we need to multiply :math:`Lk_1t` b
     dc1/dt = 0
     dc2/dt = 0
     dc3/dt = 0
-    d1/dt = 0
     s(0) = 1
     c3 == c2 + 1
 
@@ -457,7 +451,6 @@ Matching Segel and Slemrod's analysis.
     dc1/dt = 0
     dc2/dt = 0
     dc4/dt = 0
-    d1/dt = 0
     dc3/dt = 0
     dc0/dt = 0
     s(0) = 1
@@ -500,7 +493,6 @@ Inner equations (21)
     du/dt = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
     dc2/dt = 0
     dc4/dt = 0
-    d1/dt = 0
     depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0
@@ -533,7 +525,6 @@ Outer equations (24)
     du/dt = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
     dc2/dt = 0
     dc4/dt = 0
-    d1/dt = 0
     depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0
