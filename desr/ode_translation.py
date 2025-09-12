@@ -767,7 +767,7 @@ class ODETranslation(object):
 
         if system.constraints:
             for eqn in system.constraints:
-                reduced_system.add_constraints(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
+                reduced_system.add_constraint(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
 
         return reduced_system
 

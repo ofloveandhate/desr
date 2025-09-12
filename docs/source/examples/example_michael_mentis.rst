@@ -144,7 +144,7 @@ So we add a variable $L = s_0 + K_m$.
     dk_1/dt = 0
     dk_2/dt = 0
     >>> reduced_system_l.update_initial_conditions({'s': 's_0'})
-    >>> reduced_system_l.add_constraints('L', 's_0 + K_m')
+    >>> reduced_system_l.add_constraint('L', 's_0 + K_m')
 
 Check that if we keep L at the end, we have the same reduced system as before
 
@@ -440,8 +440,8 @@ Matching Segel and Slemrod's analysis.
     ... \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c \\\\'''
     >>> system_mm = ODESystem.from_tex(system_tex)
     >>> system_mm.update_initial_conditions({'s': 's_0'})
-    >>> system_mm.add_constraints('K_m', '(k_2 + k_m1) / k_1')
-    >>> system_mm.add_constraints('epsilon', 'e_0 / (s_0 + K_m)')
+    >>> system_mm.add_constraint('K_m', '(k_2 + k_m1) / k_1')
+    >>> system_mm.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
     >>> system_mm.reorder_variables(['t', 's', 'c', 'epsilon', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
     >>> system_mm.variables
     (t, s, c, epsilon, k_m1, k_2, k_1, K_m, e_0, s_0)
@@ -498,12 +498,9 @@ Inner equations (21)
     dt/dt = 1
     dv/dt = -(sigma*u*v - sigma*u - u + v)/(sigma + 1)
     du/dt = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
-    dc0/dt = 0
-    dc1/dt = 0
     dc2/dt = 0
     dc4/dt = 0
     d1/dt = 0
-    dc3/dt = 0
     depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0
@@ -534,12 +531,9 @@ Outer equations (24)
     dt/dt = 1
     dv/dt = -(kappa + 1)*(sigma*u*v - sigma*u - u + v)/epsilon
     du/dt = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
-    dc0/dt = 0
-    dc1/dt = 0
     dc2/dt = 0
     dc4/dt = 0
     d1/dt = 0
-    dc3/dt = 0
     depsilon/dt = 0
     dkappa/dt = 0
     dsigma/dt = 0

@@ -59,7 +59,7 @@ translation_c = run_symmetry_reduction(system_c)
 # let the software do the substitution,
 print("\n\n\nsystem d")
 system_d = ODESystem.from_tex('\frac{dx}{dt} &= (a + b) x + b')
-system_d.add_constraints('c', 'a+b')
+system_d.add_constraint('c', 'a+b')
 
 translation_d = run_symmetry_reduction(system_d)
 

@@ -24,7 +24,7 @@ class ODESystem(object):
         same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -45,6 +45,15 @@ class ODESystem(object):
 
         if same_units is not None:
             self.require_same_unit(requirements=same_units)
+
+        if constraints is not None:
+            if type(constraints) is not list:
+                raise TypeError(f'constraints must be a list of sympy equalities')
+
+            for c in constraints: 
+                if not isinstance(c,sympy.core.relational.Equality):
+                    raise TypeError(f'{c} is not a sympy equality.  Constraints must be sympy equalities.')
+            self._constraints = constraints
 
 
 
@@ -85,7 +94,7 @@ class ODESystem(object):
         system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
-            system.add_constraints(eqn.lhs, eqn.rhs)
+            system.add_constraint(eqn.lhs, eqn.rhs)
         return system
 
     @property
@@ -111,7 +120,7 @@ class ODESystem(object):
     @property
     def variables(self):
         '''
-        Return the variables appearing in the system.
+        Return ALL the variables appearing in the system.
 
         Returns:
             tuple: Ordered tuple of variables appearing in the system.
@@ -154,24 +163,6 @@ class ODESystem(object):
             int: Number of non-constant variables.
         '''
         return len(self.constant_variables)
-
-    def simplify_derivatives(self):
-        '''
-        use sympy to factor the derivatives, in an effort to make them simpler to print to screen / into tex for a paper, etc
-
-        Returns:
-            None
-        '''
-
-        new_derivs = []
-
-        for d in self._derivatives:
-            if d is not None:
-                for v in self.variables:
-                    d = sympy.collect(d,v)
-            new_derivs.append(d)
-
-        self._derivatives = new_derivs
         
 
 
@@ -220,6 +211,27 @@ class ODESystem(object):
         Returns: the list of lists of sympy.Expression that must have the same units.  Only the user knows these, these are NOT computed
         '''
         return self._requires_same_unit
+
+
+    def simplify_derivatives(self):
+        '''
+        use sympy to collect the derivatives, in an effort to make them 
+        simpler to print to screen / into tex for a paper, etc
+
+        Returns:
+            None
+        '''
+
+        new_derivs = []
+
+        for d in self._derivatives:
+            if d is not None:
+                for v in self.variables:
+                    d = sympy.collect(d,v)
+            new_derivs.append(d)
+
+        self._derivatives = new_derivs
+
 
     def update_initial_conditions(self, initial_conditions):
         '''
@@ -305,9 +317,9 @@ class ODESystem(object):
         self._requires_same_unit = result
 
 
-    def add_constraints(self, lhs, rhs):
+    def add_constraint(self, lhs, rhs):
         '''
-        Add constraints that must be obeyed by the system.
+        Add constraint that must be obeyed by the system.
 
         Args:
             lhs (sympy.Expr): The left hand side of the constraint.
@@ -327,7 +339,7 @@ class ODESystem(object):
         dc_0/dt = 0
         dc_1/dt = 0
 
-        >>> system.add_constraints('c_2', 'c_0 + c_1')
+        >>> system.add_constraint('c_2', 'c_0 + c_1')
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
@@ -337,12 +349,12 @@ class ODESystem(object):
         dc_2/dt = 0
         c_2 == c_0 + c_1
 
-        >>> system.add_constraints('c_2', 'c_0 + x')
+        >>> system.add_constraint('c_2', 'c_0 + x')
         Traceback (most recent call last):
             ...
         ValueError: Cannot add constraints on non-constant parameters set([x]). This would make an interesting project though...
 
-        >>> system.add_constraints('c_0', 0)
+        >>> system.add_constraint('c_0', 0)
         Traceback (most recent call last):
             ...
         ValueError: Cannot express equality with 0.
@@ -352,7 +364,7 @@ class ODESystem(object):
         if isinstance(rhs, str):
             rhs = sympy.sympify(rhs)
         if (lhs == 0) or (rhs == 0):
-            raise ValueError('Cannot express equality with 0.')
+            raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
         # get the variables from the constraint
         all_constraint_vars, nonconst_vars, new_vars = self.equation_variables(lhs, rhs)
@@ -394,6 +406,7 @@ class ODESystem(object):
             expand_after (bool): Expand the sympy expression for each derivative after substitution.
             factor_after (bool): Factorise the sympy expression for each derivative after substitution.
             subs_constraints (bool): Perform the substitutions into the initial constraints.
+            new_symbols_are_constants (bool): Treat newly encountered symbols as constants. If a substitution is a variable renaming, this does not apply.  I have no idea what to do if this is false, so it will generate exceptions..
         
         Returns:
             ODESystem: System with substitutions carried out.
@@ -401,26 +414,20 @@ class ODESystem(object):
         >>> eqns = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
         >>> system = ODESystem.from_equations(eqns)
         >>> system.diff_subs({'1-x': 'z'}, expand_before=False, expand_after=False, factor_after=False)
-        dt/dt = 1
-        dx/dt = c_0*x*y
-        dy/dt = c_1*z*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
+        Traceback (most recent call last):
+        ...
+        ValueError: unable to make substitution 1 - x -> z.
         >>> system.diff_subs({'1-x': 'z'}, expand_before=True, expand_after=False, factor_after=False)
-        dt/dt = 1
-        dx/dt = c_0*x*y
-        dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
-        dc_0/dt = 0
-        dc_1/dt = 0
+        Traceback (most recent call last):
+        ...
+        ValueError: unable to make substitution 1 - x -> z.
 
         >>> system.diff_subs({'x': '1-z'}, expand_before=True, expand_after=True, factor_after=False)
-        dt/dt = 1
-        dx/dt = -c_0*y*z + c_0*y
-        dy/dt = -c_1*y*z + c_1*z
-        dc_0/dt = 0
-        dc_1/dt = 0
+        Traceback (most recent call last):
+        ...
+        ValueError: unable to make substitution x -> 1 - z.
 
-        >>> system.add_constraints('c_0', 'c_1**2')
+        >>> system.add_constraint('c_0', 'c_1**2')
         >>> system.diff_subs({'c_0': '1'}, subs_constraints=False)
         dt/dt = 1
         dx/dt = x*y
@@ -432,7 +439,6 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = x*y
         dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
-        dc_0/dt = 0
         dc_1/dt = 0
         1 == c_1**2
         '''
@@ -440,33 +446,64 @@ class ODESystem(object):
         # sympify the dict of things to substitute
         to_sub = {sympy.sympify(lhs): sympy.sympify(rhs) for lhs, rhs in to_sub.items()}
 
-        # make sure we can actually do the substitution
+        variable_renamings = []
+        
         for lhs,rhs in to_sub.items():
-            source_vars = set(expressions_to_variables([lhs]))
+            lhs_vars = set(expressions_to_variables([lhs]))
+            rhs_vars = set(expressions_to_variables([rhs]))
 
-            source_vars_isect_sys_vars = source_vars.intersection(set(self.non_constant_variables))
-            if source_vars_isect_sys_vars:
-                # we're trying to substitute away a non-constant variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
-                dest_vars = set(expressions_to_variables([rhs]))
+            
+            lhs_nonconst_vars = lhs_vars.intersection(set(self.non_constant_variables))
+
+            # make sure we can actually do the substitution
+            if lhs_nonconst_vars:
+                # in this conditional, we're trying to substitute away a non-constant variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
 
                 # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
-                if rhs!=list(dest_vars)[0]:
-                    raise ValueError(f'unable to run substitution {lhs} -> {rhs}, because {source_vars_isect_sys_vars} is non-constant')
+                if rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]:
+                    # this is not a parameter substitution, nor is it a simple variable renaming.  
+                    raise ValueError(f'unable to make substitution {lhs} -> {rhs}.')
 
-                #ok, so this is a simple renaming.  we need to not only do the substitution in the rhs of the derivative, but also in the lhs.
-                # silviana, TODO DODODODO
+                # ok, we made it here so this substitution is a simple renaming.  
+                # we will need to not only do the substitution in the rhs of the derivative, but also in the lhs.
+                variable_renamings.append(  (lhs, rhs) ) 
 
-        # copy (really, make a reference, but don't worry)
+
+        # copy so can do work on the derivatives, variables, initial conditions
         new_derivs = self._derivatives
-
-        # print("derivs before",new_derivs)
+        variables = list(self.variables)
+        initial_conditions = self.initial_conditions
+        constraints = self.constraints
 
         # expand, if desired by caller
         if expand_before:
             new_derivs = [d.expand() if d is not None else None for d in new_derivs]
 
-        # do the substitutions
+
+
+        # this is the main action of this function, really.
+        # do the substitutions!
         new_derivs = [d.subs(to_sub) if d is not None else None for d in new_derivs]
+
+        # Now need to substitute in the variable order and initial conditions
+
+        
+        for renaming in variable_renamings: # i am sure there is a more elegant way of doing this
+            lhs, rhs = renaming # unpack
+
+            # replace in variables.  the derivatives are implicitly stored in this order, so this also renames the derivative
+            variables = [v if v!=lhs else rhs for v in variables]
+            
+            # replace in initial conditions.  the key in the dict is the name of the variable that has an ICS
+            initial_conditions = { (v if v!=lhs else rhs) : ics for v,ics in initial_conditions.items()}
+
+
+        # silviana says: why would we ever not want to do this?  if you make a sub, shouldn't it affect the entire system?!
+        if subs_constraints: 
+            constraints = [eqn.subs(to_sub) for eqn in constraints]
+
+
+        # post-substitution actions
 
         # expand, if desired by caller
         if expand_after:
@@ -479,13 +516,11 @@ class ODESystem(object):
 
 
         # next, we add the new variables from the substitution
-        all_vars = set(expressions_to_variables(new_derivs))
-        missing_vars = tuple(sorted(tuple(set(all_vars) - set(self.variables)),key=str))
+        known_vars = set(expressions_to_variables(variables + new_derivs + constraints + list(initial_conditions.values())))
+        missing_vars = sorted(list(set(known_vars) - set(variables)),key=str)
         
-        # print(f'Info: after doing substitutions, there are {len(missing_vars)} new variables')
-
         # record that we have them, for the new post-substitution system
-        new_vars = self.variables + missing_vars
+        new_vars = variables + missing_vars # this is a list extension operation
 
         if new_symbols_are_constants:
             for x in missing_vars:
@@ -494,31 +529,28 @@ class ODESystem(object):
             raise NotImplementedError(f"don't want new symbols from substitution to be constant, but don't know what else to do.  the new symbols: {missing_vars}")
 
 
-        # TODO SILVIANA HERE!!=
-        # a substitution might re-introduce a symbol, we don't know.  so we have to be careful about deleting variables.
-        # we should remove only variables that don't appear on the right hand side of anything
+        # remove variables that don't appear in any expressions
 
+        variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
+        extant_vars = set(expressions_to_variables( new_derivs + constraints + list(initial_conditions.values()) + [self.indep_var] ))
 
-        # TODO SILVIANA HERE!!=  t
-        #delete this once done with rewriting
-        for lhs, rhs in to_sub.items():
-            if lhs in self.variables:
-                var_loc = new_vars.index(lhs)
-                # print('ARST', var_loc)
+        for v in variables_to_inspect:
+
+            if v not in extant_vars:
+                var_loc = new_vars.index(v)
+                
+                # omit using list slicing.  must omit from both the variable ordering and from the derivatives (which are stored impilictly in the order of the variables)
                 new_vars = new_vars[:var_loc] + new_vars[var_loc+1:]
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
 
-        subs_system = ODESystem(new_vars, new_derivs,
-                                initial_conditions=self.initial_conditions,
-                                indep_var=self.indep_var)
+        
 
-        # silviana says: i don't understand why we need to call this.  why can't re just directly construct the constraints?   
-        # this makes it really hard to delete variables that don't appear
-        for eqn in self.constraints:
-            if subs_constraints:
-                eqn = eqn.subs(to_sub)
-                # eqn = sympy.Eq(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
-            subs_system.add_constraints(eqn.lhs, eqn.rhs)
+        subs_system = ODESystem(new_vars, new_derivs,
+                                initial_conditions=initial_conditions,
+                                indep_var=self.indep_var,
+                                constraints=constraints)
+
+
 
         subs_system._variable_sanity_check()
         return subs_system
@@ -657,7 +689,7 @@ class ODESystem(object):
         \\frac{dC_{0}}{dt} &= 0 \\\\
         C\\left(0\\right) &= C_{0}
 
-        >>> system.add_constraints('K_m', '(k_m1 + k_2) / k_1')
+        >>> system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
         >>> print(system.to_tex())
         \\frac{dt}{dt} &= 1 \\\\
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
@@ -739,11 +771,11 @@ class ODESystem(object):
         system = cls.from_dict(deriv_dict=derivative_dict)
 
         # Add the constraints
-        # todo: this isn't quite right, because the constraints might use non-constant variables, and then `add_constraints` will raise
+        # todo: this isn't quite right, because the constraints might use non-constant variables, and then `add_constraint` will raise
         # so we should really check each constraint, and then do this only for those constraints
         # that involve only constant variables.
         for lhs, rhs in constraints.items():
-            system.add_constraints(lhs,rhs)
+            system.add_constraint(lhs,rhs)
 
         # Add the initial conditions
         # todo: code here
