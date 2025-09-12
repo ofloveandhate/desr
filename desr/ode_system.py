@@ -285,7 +285,11 @@ class ODESystem(object):
         Traceback (most recent call last):
             ...
         ValueError: initial condition `1` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
-
+        
+        >>> system.update_initial_conditions({'x': '0'})
+        Traceback (most recent call last):
+            ...
+        ValueError: initial condition `0` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
 
         >>> system
         dt/dt = 1
@@ -301,7 +305,7 @@ class ODESystem(object):
             # convert through sympy
             if not isinstance(variable, sympy.Symbol):
                 variable = sympy.Symbol(variable)
-                
+
             if isinstance(init_cond, str):
                 init_cond = sympy.sympify(init_cond)
 
@@ -322,7 +326,7 @@ class ODESystem(object):
             if not self.is_reduced:
 
                 if len(ics_vars) != 1:
-                    raise ValueError(f'an initial condition should just be a single variable.  you have {ics_vars}')
+                    raise ValueError(f'an initial condition for a non-reduced system should just be a single variable.  you have {ics_vars}')
 
                 if init_cond.is_constant():
                     raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.  If you want {variable}(0) to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)")
@@ -995,8 +999,9 @@ class ODESystem(object):
             for i, var in enumerate(self.variables):
                 if str(var) == str(new_var):
                     column_shuffle.append(i)
-        self._variables = tuple(sympy.Matrix(self._variables).extract(column_shuffle, [0]))
-        self._derivatives = tuple(sympy.Matrix(self._derivatives).extract(column_shuffle, [0]))
+
+        self._variables = tuple( [self._variables[i] for i in column_shuffle])
+        self._derivatives = tuple( [self._derivatives[i] for i in column_shuffle])
 
     def default_order_variables(self):
         '''
