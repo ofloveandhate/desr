@@ -102,6 +102,48 @@ class ODESystem(object):
         return system
 
     @property
+    def is_reduced(self):
+        return self._is_reduced
+
+
+    def rename_indep_var(self, new_indep):
+        """
+        >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
+        >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
+        >>> system = ODESystem.from_dict(_input)
+        >>> system.update_initial_conditions({'x': 'x_0'})
+        >>> system.initial_conditions
+        {x: x_0}
+
+        >>> system.rename_indep_var('tau')
+        >>> system
+        dtau/dtau = 1
+        dx/dtau = c_0*x*y
+        dy/dtau = c_1*tau*(1 - x)*(1 - y)
+        dc_0/dtau = 0
+        dc_1/dtau = 0
+        dx_0/dtau = 0
+        x(0) = x_0
+
+        >>> system.variables
+        (tau, x, y, c_0, c_1, x_0)
+        """
+        if not isinstance(new_indep, sympy.Symbol):
+            new_indep = sympy.sympify(new_indep)
+
+            expressions_to_variables
+
+        to_sub = {self._indep_var:new_indep}
+        
+        self._derivatives = [d.subs(to_sub) if d else d for d in self._derivatives]
+        self._constraints = [c.subs(to_sub) for c in self.constraints]
+        self._initial_conditions = {k:v.subs(to_sub) for k,v in self._initial_conditions.items()}
+
+        ind = self.indep_var_index
+        self._variables = self._variables[:ind] + (new_indep,) + self._variables[ind+1:]
+        self._indep_var = new_indep
+
+    @property
     def indep_var(self):
         """
         Return the independent variable.
@@ -111,9 +153,6 @@ class ODESystem(object):
         """
         return self._indep_var
 
-    @property
-    def is_reduced(self):
-        return self._is_reduced
 
     @property
     def indep_var_index(self):
@@ -148,10 +187,10 @@ class ODESystem(object):
     @property
     def non_constant_variables(self):
         '''
-        Return the non-constant variables - specifically those which have a derivative that isn't None or 1.
+        Return the non-constant non-independent variables - specifically those which have a derivative that isn't None or 1.
 
         Returns:
-            tuple: The constant variables.
+            tuple: The non-constant non-independent variables.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
         >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
@@ -161,6 +200,10 @@ class ODESystem(object):
         '''
         return tuple(var for var, deriv in zip(self.variables, self._derivatives) if
                      ((deriv is not None) and (deriv != 1)))
+
+    @property
+    def num_nonconstants(self):
+        return len(self.non_constant_variables)
 
     @property
     def num_constants(self):
@@ -521,13 +564,14 @@ class ODESystem(object):
                 # in this conditional, we're trying to substitute away a non-constant variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
 
                 # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
-                if rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]:
+                if (rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]) and not self.is_reduced:
                     # this is not a parameter substitution, nor is it a simple variable renaming.  
                     raise ValueError(f'unable to make substitution {lhs} -> {rhs}.')
 
                 # ok, we made it here so this substitution is a simple renaming.  
                 # we will need to not only do the substitution in the rhs of the derivative, but also in the lhs.
-                variable_renamings.append(  (lhs, rhs) ) 
+                if (rhs==list(rhs_vars)[0] and lhs == list(lhs_vars)[0]):
+                    variable_renamings.append(  (lhs, rhs) ) 
 
 
         # copy so can do work on the derivatives, variables, initial conditions
@@ -556,7 +600,7 @@ class ODESystem(object):
             variables = [v if v!=lhs else rhs for v in variables]
             
             # replace in initial conditions.  the key in the dict is the name of the variable that has an ICS
-            initial_conditions = { (v if v!=lhs else rhs) : ics for v,ics in initial_conditions.items()}
+            initial_conditions = { (v if v!=lhs else rhs) : ics.subs(to_sub) for v,ics in initial_conditions.items()}
 
 
         # silviana says: why would we ever not want to do this?  if you make a sub, shouldn't it affect the entire system?!
@@ -593,7 +637,7 @@ class ODESystem(object):
         # remove variables that don't appear in any expressions
 
         variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
-        extant_vars = set(expressions_to_variables( new_derivs + constraints + list(initial_conditions.values()) + [self.indep_var] ))
+        extant_vars = set(expressions_to_variables( new_derivs + constraints + list(initial_conditions.values()) + [self.indep_var] + list(self.non_constant_variables)))
 
         for v in variables_to_inspect:
 

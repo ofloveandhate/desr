@@ -59,7 +59,7 @@ We can then see the exponent (or power) matrix, maximal scaling matrix and corre
     [ 1, 0,  0, 0, 0, 0,  0],
     [ 0, 1,  0, 1, 0, 1,  1],
     [ 0, 1,  0, 0, 0, 0,  1]])
-    >>> max_scal1 = ODETranslation.from_ode_system(reduced_system_km1)
+    >>> max_scal1 = ODETranslation.from_ode_system(reduced_system_km1, renaming_scheme=('t',['s','c'], 'c'))
     >>> max_scal1.scaling_matrix
     Matrix([
     [1, 0, 0, -1, -1, -1, 0],
@@ -79,13 +79,17 @@ The reduced system is also computed:
 However, we need to add in our initial condition for :math:`s`.
 
     >>> reduced_system_km1.update_initial_conditions({'s': 's_0'})
-    >>> max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)
+    >>> max_scal2 = ODETranslation.from_ode_system(reduced_system_km1, renaming_scheme=('t',['s','c'], 'c'))
     >>> max_scal2.scaling_matrix
     Matrix([
     [1, 0, 0, -1, -1, -1, 0, 0],
     [0, 1, 1,  0,  0, -1, 1, 1]])
+    >>> reduced_system_km1.variables
+    (t, s, c, K, k_2, k_1, e_0, s_0)
     >>> max_scal2.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, K/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    >>> max_scal2.translate_parameter_substitutions(reduced_system_km1)
+    {t: t, s: s, c: c, K: c0, k_2: c1, k_1: 1, e_0: c2, s_0: 1}
     >>> max_scal2.translate(reduced_system_km1)
     dt/dt = 1
     dc/dt = -c*c0 - c*s + c2*s
@@ -96,11 +100,22 @@ However, we need to add in our initial condition for :math:`s`.
     s(0) = 1
 
 Some elementary column operations give us equations 8
-
+    >>> reduced_system_km1
+    dt/dt = 1
+    ds/dt = c*k_1*s + c*(K - k_2) - e_0*k_1*s
+    dc/dt = -c*k_1*s - c*k_2 - c*(K - k_2) + e_0*k_1*s
+    dK/dt = 0
+    dk_2/dt = 0
+    dk_1/dt = 0
+    de_0/dt = 0
+    ds_0/dt = 0
+    s(0) = s_0
     >>> max_scal2.multiplier_add_columns(2, -1, 1)  # Scale time by e_0 not s_0
     >>> max_scal2.multiplier_add_columns(4, -1, -1)  # Scale c by e_0
     >>> max_scal2.invariants()
     Matrix([[e_0*k_1*t, s/s_0, c/e_0, K/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    >>> max_scal2.translate_parameter_substitutions(reduced_system_km1)
+    {t: t/c2, s: s, c: c*c2, K: c0, k_2: c1, k_1: 1, e_0: c2, s_0: 1}
     >>> max_scal2.translate(reduced_system_km1)
     dt/dt = 1
     dc/dt = -c*c0/c2 - c*s/c2 + s/c2
@@ -116,6 +131,8 @@ We can also scale time by :math:`\epsilon` to get the "inner" equation 11:
     >>> max_scal2.multiplier_add_columns(2, -1, -1)  # Divide time through by epsilon
     >>> max_scal2.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/e_0, K/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    >>> max_scal2.translate_parameter_substitutions(reduced_system_km1)
+    {t: t, s: s, c: c*c2, K: c0, k_2: c1, k_1: 1, e_0: c2, s_0: 1}
     >>> max_scal2.translate(reduced_system_km1)
     dt/dt = 1
     dc/dt = -c*c0 - c*s + s
@@ -146,7 +163,7 @@ So we add a variable $L = s_0 + K_m$.
 Check that if we keep L at the end, we have the same reduced system as before
 
     >>> reduced_system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
-    >>> max_scal = ODETranslation.from_ode_system(reduced_system_l)
+    >>> max_scal = ODETranslation.from_ode_system(reduced_system_l, renaming_scheme=('t',['s','c'], 'c'))
     >>> max_scal.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, 0, 0, 0],
@@ -167,7 +184,7 @@ Check that if we keep L at the end, we have the same reduced system as before
 Now we put L into the mix:
 
     >>> reduced_system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
-    >>> max_scal3 = ODETranslation.from_ode_system(reduced_system_l)
+    >>> max_scal3 = ODETranslation.from_ode_system(reduced_system_l, renaming_scheme=('t',['s','c'], 'c'))
     >>> # Scale t correctly to t/t_C = k_1 L t
     >>> max_scal3.multiplier_add_columns(2, -1, 1)
     >>> # Scale s correctly to s / s_0
@@ -260,7 +277,9 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     ...                 \frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\
     ...                 \frac{dP}{dt} &= k_2 C'''
     >>> original_system = ODESystem.from_tex(system_tex)
-    >>> max_scal1 = ODETranslation.from_ode_system(original_system)
+    >>> original_system.variables
+    (t, C, E, P, S, k_1, k_2, k_m1)
+    >>> max_scal1 = ODETranslation.from_ode_system(original_system, renaming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Variable order: ', max_scal1.variables_domain)
     Variable order:  (t, C, E, P, S, k_1, k_2, k_m1)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
@@ -269,7 +288,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     [1, 0, 0, 0, 0, -1, -1, -1],
     [0, 1, 1, 1, 1, -1,  0,  0]])
 
-Now we can inspect the invariants easily:
+Inspect the scaling invariants:
 
     >>> print('Invariants: ', max_scal1.invariants())
     Invariants:  Matrix([[k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1, k_2/k_m1]])
@@ -302,7 +321,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslatio
     >>> original_system_reorder.reorder_variables(variable_order)
     >>> original_system_reorder.variables
     (t, C, E, P, S, k_1, k_m1, k_2)
-    >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder)
+    >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder, renaming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
     Invariants: k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2, k_m1/k_2
 
@@ -409,7 +428,7 @@ to the last :math:`n-r` columns.
     [0, -1,  0,  0,  0,  1],
     [1,  0, -1, -1, -1, -1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3)
+    >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, renaming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print(max_scal3.translate(original_system))
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S/c0
@@ -439,7 +458,7 @@ Matching Segel and Slemrod's analysis.
     >>> system_mm.reorder_variables(['t', 's', 'c', 'epsilon', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
     >>> system_mm.variables
     (t, s, c, epsilon, k_m1, k_2, k_1, K_m, e_0, s_0)
-    >>> max_scal1 = ODETranslation.from_ode_system(system_mm)
+    >>> max_scal1 = ODETranslation.from_ode_system(system_mm, renaming_scheme=('t',['s','c'],'c'))
     >>> max_scal1.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, -1, 0, 0, 0],
