@@ -4,6 +4,7 @@ import sympy
 from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
+from sympy.abc import _clash1
 
 def _int_inv(matrix_):
     ''' Given an integer matrix, return the inverse, ensuring we do it right in the integers
@@ -526,6 +527,54 @@ class ODETranslation(object):
         raise ValueError("System doesn't have the right number of variables for translation")
 
 
+
+    def translate_parameter(self, system):
+        ''' Translate according to parameter scheme '''
+
+        reduced_system = system.copy()
+        reduced_system._is_reduced = True
+        assert reduced_system.is_reduced
+
+        
+        # make the substitutions
+        to_sub = self.translate_parameter_substitutions(system=system)
+
+        variable_map = self.variable_map(system)
+        new_indep = variable_map[system.indep_var]
+
+        new_deriv_dict = {}
+        for var, deriv in system.derivative_dict.items():
+            
+            # skip the derivatives of constants, since they are `None`.
+            if var in system.constant_variables:
+                continue
+
+            Var = variable_map[var]
+            # the chain rule makes substitution more complicated
+            derivative_factor = (to_sub[var] / Var) * (new_indep / to_sub[system.indep_var])
+
+            new_deriv_dict[Var] = (deriv.subs(to_sub) / derivative_factor).expand()
+
+        reduced_system = ODESystem.from_dict(new_deriv_dict, indep_var=new_indep, is_reduced=True)
+
+        # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
+        if system.initial_conditions:
+            # For parameter substitution, the dependent variables keep their name
+            new_initial_conditions = {var: (init_cond.subs(to_sub) * var / to_sub[var]).expand()
+                                      for var, init_cond in system.initial_conditions.items()}
+            reduced_system.update_initial_conditions(new_initial_conditions)
+
+        if system.constraints:
+            for eqn in system.constraints:
+                reduced_system.add_constraint(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
+
+        # rename the time variable
+        reduced_system.rename_indep_var(new_indep)
+
+        return reduced_system
+
+
+
     def translate_dep_var(self, system):
         '''
         Given a system of ODEs, translate the system into a simplified version. Assume we are only working on
@@ -692,6 +741,33 @@ class ODETranslation(object):
 
         return True
 
+    def variable_map(self, system):
+
+        num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
+
+        if (isinstance(self._renaming_scheme[1], str)):
+            new_vars = ['{}{}'.format(self._renaming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
+            new_vars = [sympy.sympify(v, _clash1) for v in new_vars]
+        else:
+
+            if len(self._renaming_scheme[1]) != system.num_nonconstants:
+                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._renaming_scheme[1])}!={system.num_nonconstants}')
+
+
+            # silviana says:
+            # the reason I'm using `Symbol` here and not sympify: 
+            #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
+            #   and not the variable S.  
+            # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
+            new_vars = [sympy.Symbol(v) for v in self._renaming_scheme[1]]
+
+        the_map = {system.indep_var: sympy.var(self._renaming_scheme[0])}
+
+        for v,V in zip(system.non_constant_variables, new_vars):
+            the_map[v] = V
+
+        return the_map
+
     def translate_parameter_substitutions(self, system):
         '''
         Given a system, determine the substitutions made in the parameter reduction.
@@ -721,6 +797,8 @@ class ODETranslation(object):
         num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
         m = num_variables_wo_time + 1  # Include indep
 
+        
+
         if not self._is_translate_parameter_compatible(system):
             err_str = ['System is not compatible for parameter translation.']
             err_str.append('System may not be ordered properly. Must be independent, dependent, constants. Order is: {}'.format(system.variables))
@@ -736,36 +814,21 @@ class ODETranslation(object):
         W_v = inv_herm_mult_d[:, 1:m]
         W_c = inv_herm_mult_d[:, m:]
 
+        variable_map = self.variable_map(system)
         # Form new constants
         new_consts = ['{}{}'.format(self._renaming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
         new_consts = list(map(sympy.sympify, new_consts))
 
-        if (isinstance(self._renaming_scheme[1], str)):
-            new_vars = ['{}{}'.format(self._renaming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
-            new_vars = list(map(sympy.sympify, new_vars))
-        else:
-
-            if len(self._renaming_scheme[1]) != system.num_nonconstants:
-                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._renaming_scheme[1])}!={system.num_nonconstants}')
-
-
-            # silviana says:
-            # the reason I'm using `Symbol` here and not sympify: 
-            #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
-            #   and not the variable S.  
-            # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
-            new_vars = [sympy.Symbol(v) for v in self._renaming_scheme[1]]
-
         to_sub = {}
 
         # Scale t
-        to_sub[system.indep_var] = scale_action(new_consts, W_t)[0] * sympy.var(self._renaming_scheme[0]) # system.indep_var
+        to_sub[system.indep_var] = scale_action(new_consts, W_t)[0] * variable_map[system.indep_var]
 
         # Scale dependents
         scale = scale_action(new_consts, W_v)
         assert len(system.variables[1:num_variables_wo_time + 1]) == len(scale.T)
-        for dep_var, new_var, _const_scale in zip(system.variables[1:num_variables_wo_time + 1], new_vars, scale.T):
-            to_sub[dep_var] = _const_scale * new_var 
+        for dep_var, _const_scale in zip(system.variables[1:num_variables_wo_time + 1], scale.T):
+            to_sub[dep_var] = _const_scale * variable_map[dep_var] 
 
         # Scale constants
         scale = scale_action(new_consts, W_c)
@@ -775,47 +838,6 @@ class ODETranslation(object):
 
         return to_sub
 
-    def translate_parameter(self, system):
-        ''' Translate according to parameter scheme '''
-
-        
-
-        reduced_system = system.copy()
-        reduced_system._is_reduced = True
-        assert reduced_system.is_reduced
-
-        # make the substitutions
-        to_sub = self.translate_parameter_substitutions(system=system)
-
-
-        new_deriv_dict = {}
-        for var, deriv in system.derivative_dict.items():
-            
-            # skip the derivatives of constants, since they are `None`.
-            if var in system.constant_variables:
-                continue
-
-            # the chain rule makes substitution more complicated
-            derivative_factor = (to_sub[var] / var) * (system.indep_var / to_sub[system.indep_var])
-            new_deriv_dict[var] = (deriv.subs(to_sub) / derivative_factor).expand()
-
-        reduced_system = ODESystem.from_dict(new_deriv_dict,is_reduced=True)
-
-        # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
-        if system.initial_conditions:
-            # For parameter substitution, the dependent variables keep their name
-            new_initial_conditions = {var: (init_cond.subs(to_sub) * var / to_sub[var]).expand()
-                                      for var, init_cond in system.initial_conditions.items()}
-            reduced_system.update_initial_conditions(new_initial_conditions)
-
-        if system.constraints:
-            for eqn in system.constraints:
-                reduced_system.add_constraint(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
-
-        # rename the time variable
-        reduced_system.rename_indep_var(self._renaming_scheme[0])
-
-        return reduced_system
 
     def reverse_translate(self, variables):
         """
