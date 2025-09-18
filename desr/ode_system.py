@@ -848,7 +848,6 @@ class ODESystem(object):
         dk_m1/dt = 0
 
         Todo:
-            * Deal with constraints from tex
             * Allow initial conditions to be set from tex.
         """
         sympification = tex_to_sympy(tex)
@@ -860,6 +859,8 @@ class ODESystem(object):
         for eqn in sympification:
             if not isinstance(eqn.lhs, sympy.Derivative):
                 # since it's not a derivative, it must be a constraint.
+
+                # add to a local container, and then we'll process later
                 constraints[eqn.lhs] = eqn.rhs
 
             else:
