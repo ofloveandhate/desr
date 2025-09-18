@@ -17,7 +17,7 @@ This package requires the Sympy package.
 
 To install, download the package and run:
 
-`$ python setup.py install`
+`$ pip install .`
 
 ## Running the tests
 
@@ -35,6 +35,7 @@ Submissions for contribution are always welcome.
 ## Authors
 
 * **Richard Tanburn** - *Initial work* - [tanbur](https://github.com/tanbur)
+* **Silviana Amethyst** - *Revisions, bugfixes, maintenance, 2025-* - [ofloveandhate](https://github.com/ofloveandhate) 
 
 ## License
 
