@@ -16,6 +16,71 @@ from desr.ode_translation import ODETranslation, scale_action
 from desr.tex_tools import expr_to_tex, matrix_to_tex
 import desr.tex_tools as tex_tools
 
+
+
+def pre_process_latex(system_tex):
+	import re
+
+	# get rid of textrm
+	pattern = r"\\textrm\{([^}]*)\}"
+	text = re.sub(pattern,r'\1',system_tex)
+
+
+	# replaces spaces inside square braces.  
+	# this is scary to me, because sometimes [] is used in place of parentheses in tex, but not in these eqns so it's ok
+	text = re.sub(r"\[([^\]]+)\]", lambda m: "[" + m.group(1).replace(" ", "") + "]", text)
+
+
+	# this codeblock removed because the APC* variable was recognized as a typo.
+	# # replace '*' with 'star' only inside [...] 
+	# text = re.sub(r"\[([^\]]*?)\]", lambda m: "[" + m.group(1).replace("*", "star") + "]", text)
+
+
+
+	# replace [] with ()
+	text = text.replace('[','(').replace(']',')')
+
+	# strip left/right
+	text = re.sub(r"\\left\s*\(", "(", text)
+	text = re.sub(r"\\right\s*\)", ")", text)
+
+
+	# combine variables with spaces between []
+	pattern = re.compile(r"\(\s*([^()+=\-*/]+?)\s*\)")
+
+	while True:
+	    new_text = pattern.sub(r"\1", text)
+	    if new_text == text:
+	        break
+	    text = new_text
+
+
+	# turn d/dt x into dx/dt
+	# pattern: \frac{d}{dt}Variable
+	pattern = r"\\frac\{d\}\{dt\}([a-zA-Z0-9]+)"
+
+	# replace with \frac{dVariable}{dt}
+	text = re.sub(pattern, r"\\frac{d\1}{dt}", text)
+	# print('after moving d/dt x --> dx/dt:\n',text,'\n\n')
+
+
+	# repnace Variable2( with Variable2*(
+	pattern = r"([a-zA-Z0-9]+)\("
+	text = re.sub(pattern, r"\1*(", text)
+	# print('after stars before ():\n',text,'\n')
+
+	# Make multi-char subscipts just underscores.  Flatten all other {...} after underscore
+	text = re.sub(r"_\{([^}]*)\}", r"_\1", text)
+
+	# replace ' with prime
+	text = re.sub(r"'", r"prime", text)
+
+	# finally done doing regex stuff to preprocess so it makes the system from tex ok.
+	return text
+
+
+
+# the tex from our scaling symmetries paper, faithfully transcribed from: J. C. S. . J. J. Tyson, Mathematical modeling as a tool for investigating cell cycle control networks,
 system_tex = \
       r'''\frac{d}{dt}\textrm{[Cyclin]} &= k_1 - k_2 \textrm{[Cyclin]} - k_3 \textrm{[Cyclin]} \textrm{[Cdk]} \\
 \frac{d}{dt}\textrm{[MPF]} &= k_3 \textrm{[Cyclin]} \textrm{[Cdk]} - k_2 \textrm{[MPF]} - k_{\textrm{wee}} \textrm{[MPF]} + k_{25} \textrm{[preMPF]} \\
@@ -30,82 +95,21 @@ k_{\textrm{wee}} &= V_{\textrm{wee}}' \textrm{[Wee1P]} + V_{\textrm{wee}}'' \lef
 k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm{[APC]}'''
 
 
-import re
-
-
-print('before\n', system_tex, '\n')
-
-# pattern = r"\\textrm\{([^}]*)\}"
-# print(pattern)
-# g = re.findall(pattern,system_tex)
-# print(g)
-
-
-
-# get rid of textrm
-pattern = r"\\textrm\{([^}]*)\}"
-text = re.sub(pattern,r'\1',system_tex)
-
-
-# replaces spaces inside square braces.  this is scary to me, because sometimes [] is used in place of parentheses in tex
-text = re.sub(r"\[([^\]]+)\]", lambda m: "[" + m.group(1).replace(" ", "") + "]", text)
-
-
-
-# # replace '*' with 'star' only inside [...] # this code removed because the APC* variable was recognized as a typo.
-# text = re.sub(r"\[([^\]]*?)\]", lambda m: "[" + m.group(1).replace("*", "star") + "]", text)
-
-
-print('uptohere\n',text,'\n')
-
-
-# replace [] with ()
-text = text.replace('[','(').replace(']',')')
-
-# strip left/right
-text = re.sub(r"\\left\s*\(", "(", text)
-text = re.sub(r"\\right\s*\)", ")", text)
-
-print('uptohere\n',text,'\n')
-
-# combine variables with spaces between []
-pattern = re.compile(r"\(\s*([^()+=\-*/]+?)\s*\)")
-
-while True:
-    new_text = pattern.sub(r"\1", text)
-    if new_text == text:
-        break
-    text = new_text
-
-
-# turn d/dt x into dx/dt
-
-# pattern: \frac{d}{dt}Variable
-pattern = r"\\frac\{d\}\{dt\}([a-zA-Z0-9]+)"
-
-# replace with \frac{dVariable}{dt}
-text = re.sub(pattern, r"\\frac{d\1}{dt}", text)
-
-
-# Make multi-char subscipts just underscores.  Flatten all other {...} after underscore
-text = re.sub(r"_\{([^}]*)\}", r"_\1", text)
-
-text = re.sub(r"'", r"prime", text)
-
-print('after\n',text,'\n')
+text = pre_process_latex(system_tex)
 
 
 num_dynamic_eqns = 7
 num_constants = 4
 
 lines = text.split(r'\\')
+assert(len(lines) == num_dynamic_eqns + num_constants)
 
 system_tex_dynamic = r'\\'.join(lines[:num_dynamic_eqns])
 
 
 system = ODESystem.from_tex(system_tex_dynamic)
 
-print(f'{system=}')
+print(system)
 # silviana has faith in this code, up to this point.  she manually checked the ODEs in `system`, and they match what's in the 2007 paper.
 
 
@@ -126,13 +130,14 @@ system = system.diff_subs(subme)
 variable_order = \
 (
 't', # time
-'APC', # the seven variables
-'Cdc25P',
+# the seven variables
 'Cyclin',
-'IEP',
 'MPF',
-'Wee1P',
 'preMPF',
+'Cdc25P',
+'Wee1P',
+'IEP',
+'APC', 
 # start the constants
 'PPase',
 'K_a',
@@ -186,7 +191,7 @@ print(f'{len(system.non_constant_variables)} non-constant variables')
 
 print('\nVariable order: ', system.variables)
 
-translation = ODETranslation.from_ode_system(system)
+translation = ODETranslation.from_ode_system(system, new_indices_start_at=1)
 
 print('\nScaling matrix',translation.scaling_matrix.__repr__())
 print('Scaling matrix size',translation.scaling_matrix.shape)
