@@ -15,7 +15,7 @@ build:
   jobs:
     install:
       - pip install .
-      - pip install sphinx
+      - pip install sphinx sphinxcontrib-bibtex sphinx-rtd-theme
     build:
       html:
         - sphinx-build docs/source/ $READTHEDOCS_OUTPUT/html/
