@@ -4,4 +4,4 @@ Examples
 .. toctree::
    :maxdepth: 2
 
-   example_michael_mentis
+   example_michaelis_menten

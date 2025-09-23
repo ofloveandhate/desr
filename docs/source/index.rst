@@ -13,12 +13,12 @@ Contents:
 
    intro
 
-   hermite_smith_doc
-   ode_system_doc
-   ode_translation_doc
-   crn_doc
    examples/example_index
-
+   crn_doc
+   ode_translation_doc
+   ode_system_doc
+   hermite_smith_doc
+   
    module_reference
 
    zbibliography

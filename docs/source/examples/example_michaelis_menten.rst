@@ -100,6 +100,7 @@ However, we need to add in our initial condition for :math:`s`.
     s(0) = 1
 
 Some elementary column operations give us equations 8
+
     >>> reduced_system_km1
     dt/dt = 1
     ds/dt = c*k_1*s + c*(K - k_2) - e_0*k_1*s
@@ -143,8 +144,8 @@ We can also scale time by :math:`\epsilon` to get the "inner" equation 11:
     s(0) = 1
 
 What is epsilon is not small?
-We can find that $s_0 + K_m$ is an invariant systematically.
-So we add a variable $L = s_0 + K_m$.
+We can find that :math:`s_0 + K_m` is an invariant systematically.
+So we add a variable :math:`L = s_0 + K_m`.
 
     >>> # Substitute K_m into the equations
     >>> system_tex_reduced_l = system_tex.replace('k_{-1}', '(K - k_2)').replace('K', 'K_m k_1')
@@ -160,7 +161,7 @@ So we add a variable $L = s_0 + K_m$.
     >>> reduced_system_l.update_initial_conditions({'s': 's_0'})
     >>> reduced_system_l.add_constraint('L', 's_0 + K_m')
 
-Check that if we keep L at the end, we have the same reduced system as before
+Check that if we keep :math:`L` at the end, we have the same reduced system as before
 
     >>> reduced_system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
     >>> max_scal = ODETranslation.from_ode_system(reduced_system_l, renaming_scheme=('t',['s','c'], 'c'))
@@ -181,7 +182,7 @@ Check that if we keep L at the end, we have the same reduced system as before
     s(0) = 1
     c3 == c0 + 1
 
-Now we put L into the mix:
+Now we put :math:`L` into the mix:
 
     >>> reduced_system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
     >>> max_scal3 = ODETranslation.from_ode_system(reduced_system_l, renaming_scheme=('t',['s','c'], 'c'))
@@ -384,7 +385,7 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
     [0, 0, 0, 0, 1,  0,  0,  0],
     [0, 1, 0, 0, 0,  0,  1,  0]])
 
-For Python code that steps through this procedure, see :py:mod:`desr.examples.example_michael_mentis`.
+For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
 
 Now, this transformation doesn't satisfy the conditions of the parameter reduction scheme, so if we try to reduce it
 :meth:`~desr.ode_translation.ODETranslation.translate` will use the dependent reduction scheme implemented in
