@@ -19,6 +19,7 @@ build:
     build:
       html:
         - cd docs && sphinx-build -b doctest source/ $READTHEDOCS_OUTPUT/
+        - sphinx-build docs/source/ $READTHEDOCS_OUTPUT/
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
