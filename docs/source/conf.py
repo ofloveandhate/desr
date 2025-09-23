@@ -58,15 +58,15 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'desr'
-copyright = u'2017, Richard Tanburn'
-author = u'Richard Tanburn'
+copyright = u'2017, Richard Tanburn, 2025 Silviana Amethyst'
+author = u'Richard Tanburn, Silviana Amethyst'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
 # The short X.Y version.
-version = u'0'
+version = u'1'
 # The full version, including alpha/beta/rc tags.
 release = u'0'
 
