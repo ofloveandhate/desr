@@ -742,7 +742,13 @@ class ODETranslation(object):
         return True
 
     def variable_map(self, system):
+        """
+        Construct a dictionary mapping old variable names to new ones, using the stored renaming scheme.
 
+        The naming scheme is passed in at construct time, not here.
+
+        todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
+        """
         num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
 
         if (isinstance(self._renaming_scheme[1], str)):
@@ -759,6 +765,8 @@ class ODETranslation(object):
             #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
             #   and not the variable S.  
             # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
+
+            # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
             new_vars = [sympy.Symbol(v) for v in self._renaming_scheme[1]]
 
         the_map = {system.indep_var: sympy.var(self._renaming_scheme[0])}
