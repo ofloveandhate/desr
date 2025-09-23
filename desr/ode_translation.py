@@ -594,7 +594,7 @@ class ODETranslation(object):
         dy0/dt = y0*(1 + 1/t)
         '''
         if system.initial_conditions:
-            raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
+            raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
         if self.n == len(system.variables):
             if not self.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
