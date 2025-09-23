@@ -18,7 +18,7 @@ build:
       - pip install sphinx sphinxcontrib-bibtex sphinx-rtd-theme
     build:
       html:
-        - cd docs && sphinx-build -b doctest source/ $READTHEDOCS_OUTPUT/html/
+        - cd docs && sphinx-build -b doctest source/ $READTHEDOCS_OUTPUT/
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
