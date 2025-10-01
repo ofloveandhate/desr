@@ -1,14 +1,14 @@
     
 
 Example Michaelis-Menten
-========================
+==========================
 
 We derive the analysis of the Michaelis-Menten equations found in :cite:`Segel1989`: in a systematic manner.
 
 The model
 ----------
 
-There are two chemical species E and S, which reversibly combine to form ES, which decomposes into E and P.
+There are two chemical species :math:`E` and :math:`S`, which reversibly combine to form :math:`ES`, which decomposes into :math:`E` and :math:`P`.
 
 .. math::
     :nowrap:
