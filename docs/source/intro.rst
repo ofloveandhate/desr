@@ -26,12 +26,12 @@ To install, download the package and run:
 
 
 Running the tests
------------------
+------------------
 
 Doctests are included in most files. To run them, from top level run ``sphinx-build -b doctest docs/source/ build/``, or run the individual submodule of desr as a script. e.g. ``python -m doctest -v module.py``
 
 Building the documentation
-----------
+---------------------------
 
 - The documentation is hosted online at `readthedocs <https://desr.readthedocs.io/latest/>`_.
 - `Sphinx <http://www.sphinx-doc.org/en/stable/>`_ - Used to generate the docs.
