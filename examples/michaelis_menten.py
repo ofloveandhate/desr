@@ -269,16 +269,16 @@ def michaelis_menten_two_variable(verbose=True):
         system_tex = system_tex_two_var()
         # system_tex_reduced_km1 = system_tex.replace('k_{-1}', '(K - k_2)')
         
-        reduced_system_km1 = ODESystem.from_tex(system_tex)
-        reduced_system_km1.add_constraint('Km', '(k_m1 + k_2) / k_1')
+        system = ODESystem.from_tex(system_tex)
+        system.add_constraint('Km', '(k_m1 + k_2) / k_1')
 
-        reduced_system_km1.reorder_variables(['t', 's', 'c', 'Km', 'k_m1', 'k_2', 'k_1', 'e_0'])
+        system.reorder_variables(['t', 's', 'c', 'Km', 'k_m1', 'k_2', 'k_1', 'e_0'])
         
         # Print variable order
 
         
         # # Print scaling matrices
-        # max_scal1 = ODETranslation.from_ode_system(reduced_system_km1)
+        # max_scal1 = ODETranslation.from_ode_system(system)
         # print('Scaling matrix:')
         # print(max_scal1.scaling_matrix.__repr__())
         
@@ -289,54 +289,62 @@ def michaelis_menten_two_variable(verbose=True):
         
         # # Print translated system
         # print('Reduced system:')
-        # print(max_scal1.translate(reduced_system_km1))#.to_tex()
+        # print(max_scal1.translate(system))#.to_tex()
         
         print('\n\nAdding in the initial condition for s')
         print('-------------------------------------')
-        reduced_system_km1.update_initial_conditions({'s': 's0'})
+        system.update_initial_conditions({'s': 's0'})
 
 
-        print('Variable order: ', reduced_system_km1.variables)
+        print('Variable order: ', system.variables)
         
-        print('Power Matrix:', reduced_system_km1.power_matrix().__repr__())
-        max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)
+        print('Power Matrix:', system.power_matrix().__repr__())
+        translation = ODETranslation.from_ode_system(system, renaming_scheme=('tau',['u','v'], 'c'))
         
         
-        print('Scaling matrix:',max_scal2.scaling_matrix.__repr__())
+        print('Scaling matrix:',translation.scaling_matrix.__repr__())
 
-        print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        print('Invariants: ', max_scal2.invariants())
+        print('Hermite multiplier', translation.herm_mult.__repr__())
+        print('Invariants: ', translation.invariants())
 
 
         print('Reduced system:')
-        print(max_scal2.translate(reduced_system_km1))#.to_tex()
+        print(translation.translate(system))#.to_tex()
         
 
         # print('\nMichaelis-Menten Reparametrisation 1')
         print('Changing invariants by column operations on the Hermite multiplier')
         # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        max_scal2.multiplier_add_columns(i=2, j=8, alpha=1)
-        max_scal2.multiplier_add_columns(i=4, j=8, alpha=-1)
+        translation.multiplier_add_columns(i=2, j=8, alpha=1)
+        translation.multiplier_add_columns(i=4, j=8, alpha=-1)
         
-        print('Invariants: ', max_scal2.invariants())
-        print('Hermite multiplier', max_scal2.herm_mult.__repr__())
+        print('Invariants: ', translation.invariants())
+        print('Hermite multiplier', translation.herm_mult.__repr__())
         
 
         # print('\nMichaelis-Menten Reparametrisation 2')
         # print('Changing invariants by column operations on the Hermite multiplier')
         # # Divide time through by epsilon
-        # max_scal2.multiplier_add_columns(i=0, j=8, alpha=1)
+        # translation.multiplier_add_columns(i=0, j=8, alpha=1)
         
-        # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        # print('Invariants: ', max_scal2.invariants())
+        # print('Hermite multiplier', translation.herm_mult.__repr__())
+        # print('Invariants: ', translation.invariants())
         
-        print('W:', max_scal2.inv_herm_mult.__repr__())
+        print('W:', translation.inv_herm_mult.__repr__())
         # Print translated system
 
-        print('substitutions:',max_scal2.translate_parameter_substitutions(reduced_system_km1))
+        print('substitutions:',translation.translate_parameter_substitutions(system))
 
-        print('Reduced system:')
-        print(max_scal2.translate(reduced_system_km1))#.to_tex()
+        reduced_system = translation.translate(system)
+
+        print('Reduced system, in arbitrary parameter names:')
+        print(reduced_system)#.to_tex()
+
+        to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
+        reduced_system = reduced_system.diff_subs(to_sub, subs_constraints=True)
+
+        print('after subbing into canonical names from Murray')
+        print(reduced_system)#.to_tex()
 
         return
 
