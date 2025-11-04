@@ -55,7 +55,7 @@ Choose a variable order, with initial conditions at end so the algorithm will no
 
     >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
 
-    >>> translation = ODETranslation.from_ode_system(system, renaming_scheme=('H',['y','z'],'c'))
+    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
     >>> translation.multiplier_add_columns(2, -1, 1)  # Multiply time by epsilon
     >>> translation.multiplier_add_columns(4, -1, -1)  # divide column 4 by epsilon
 
@@ -123,7 +123,7 @@ A sanity check
 
 Now we can construct the `ODETranslation`
 
-    >>> translation = ODETranslation.from_ode_system(system, renaming_scheme=('tau',['s','c'],'c'))
+    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
     >>> translation.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, -1, 0, 0, 0],
@@ -268,7 +268,7 @@ Computing equations :cite:`Segel1989` (24a-b)
 Another method
 ---------------------------------
 
-We can work with the expression :math:`s_0 + K_m` systematically by adding a new variable :math:`L = s_0 + K_m` via a constraint.
+Starting from the same system, Michaelis-Menten, with :math:`K_m = \frac{k_{-1} + k_2}{k_1}` and initial condition :math:`s(0) = s_0`.
 
     >>> # Substitute K_m into the equations
     >>> system_tex_l = system_tex.replace('k_{-1}', '(K - k_2)').replace('K', 'K_m k_1')
@@ -282,19 +282,28 @@ We can work with the expression :math:`s_0 + K_m` systematically by adding a new
     dk_1/dt = 0
     dk_2/dt = 0
     >>> system_l.update_initial_conditions({'s': 's_0'})
+
+
+Fast transient time scale
+****************************
+
+Let's first work in the fast transient time scale (:cite:`murray` eqn 6.15), we have :math:`t_c = \frac{1}{k_1 (s_0 + K_m)}`.  Our time variable is :math:`\tau = \frac{t}{t_c} = k_1 (s_0 + K_m) \, t`.
+
+We can work with the expression :math:`s_0 + K_m` systematically by adding a new variable :math:`L = s_0 + K_m` via a constraint.
+
     >>> system_l.add_constraint('L', 's_0 + K_m')
 
-Check that if we keep :math:`L` at the end, we have the same reduced system as before
+Check that if we keep :math:`L` near the end, we have the same reduced system as before
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
-    >>> max_scal = ODETranslation.from_ode_system(system_l, renaming_scheme=('t',['s','c'], 'c'))
-    >>> max_scal.scaling_matrix
+    >>> translation = ODETranslation.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
+    >>> translation.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, 0, 0, 0],
     [0, 1, 1, 1,  0, -1, 1, 1, 1]])
-    >>> max_scal.invariants()
+    >>> translation.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, K_m/s_0, k_2/(k_1*s_0), e_0/s_0, L/s_0]])
-    >>> max_scal.translate(system_l)
+    >>> translation.translate(system_l)
     dt/dt = 1
     dc/dt = -c*c0 - c*s + c2*s
     ds/dt = c*c0 - c*c1 + c*s - c2*s
@@ -305,10 +314,10 @@ Check that if we keep :math:`L` at the end, we have the same reduced system as b
     s(0) = 1
     c3 == c0 + 1
 
-Now we put :math:`L` into the mix:
+Putting :math:`K_m` at the end, we have
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
-    >>> translation = ODETranslation.from_ode_system(system_l, renaming_scheme=('t',['s','c'], 'c'))
+    >>> translation = ODETranslation.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
     >>> # Scale t correctly to t/t_C = k_1 L t
     >>> translation.multiplier_add_columns(2, -1, 1)
     >>> # Scale s correctly to s / s_0
@@ -325,59 +334,145 @@ Now we put :math:`L` into the mix:
     >>> translation.invariants()
     Matrix([[L*k_1*t, s/s_0, L*c/(e_0*s_0), K_m*k_1/k_2, e_0/L, s_0/K_m, L/K_m]])
 
-We now have:
+
+In the invariants, first comes the time variable, then the two "space" variables.  Then the scale-invariant coefficients:
 
 .. math::
     :nowrap:
 
     \begin{align}
-    c_0 &= \kappa + 1  = K_m k_1/k_2 \\
-    c_1 &= \epsilon = \frac{e_0}{L} \\
-    c_2 &= \sigma  = \frac{s_0}{K_m}\\
-    c_3 &= \frac{L}{K_m}
+    c_0 &= \frac{K_m k_1}{k_2} = \kappa + 1 \textnormal{ (in Segel)} = \rho + 1 \textnormal{ (in Murray)} \\
+    c_1 &= \frac{e_0}{L} = \frac{e_0}{s_0 + K_m} = \epsilon  \\
+    c_2 &= \frac{s_0}{K_m} = \sigma \textnormal{ (in both Segel and Murray)} \\
+    c_3 &= \frac{L}{K_m} = \sigma + 1
     \end{align}
 
+The substitutions that will be made:
 
-Which, after some trivial rearrangement, gives us exactly equations (24) from Segel and (6.21) from Murray:
+    >>> translation.translate_parameter_substitutions(system_l)
+    {t: tau/c3, s: c2*s, c: c*c1*c2, k_2: 1/c0, k_1: 1, e_0: c1*c3, s_0: c2, L: c3, K_m: 1}
 
-    >>> translation.translate(system_l)
-    dt/dt = 1
-    dc/dt = -c*c2*s/c3 - c/c3 + s
-    ds/dt = c*c1*c2*s/c3 + c*c1/c3 - c*c1/(c0*c3) - c1*s
-    dc0/dt = 0
-    dc1/dt = 0
-    dc2/dt = 0
-    dc3/dt = 0
+Here's the reduced system at this point:
+
+    >>> reduced_system = translation.translate(system_l)
+    >>> reduced_system
+    dtau/dtau = 1
+    dc/dtau = -c*c2*s/c3 - c/c3 + s
+    ds/dtau = c*c1*c2*s/c3 + c*c1/c3 - c*c1/(c0*c3) - c1*s
+    dc0/dtau = 0
+    dc1/dtau = 0
+    dc2/dtau = 0
+    dc3/dtau = 0
     s(0) = 1
     c3 == c2 + 1
 
-To get the equations on the long or slow timescale :math:`t_c` from Murray, multiply :math:`\tau = Lk_1t` by the factors
+To get the system in (21a-d) Segel, let's do the substitutions into known symbol names
+
+    >>> system_segel = reduced_system.diff_subs({'c0':'kappa+1', 'c1':'epsilon', 'c2':'sigma', 'c3':'sigma+1'},expand_after=True, factor_after=False)
+    >>> system_segel
+    dtau/dtau = 1
+    dc/dtau = -c*s*sigma/(sigma + 1) - c/(sigma + 1) + s
+    ds/dtau = c*epsilon*s*sigma/(sigma + 1) - c*epsilon/(kappa*sigma + kappa + sigma + 1) + c*epsilon/(sigma + 1) - epsilon*s
+    depsilon/dtau = 0
+    dkappa/dtau = 0
+    dsigma/dtau = 0
+    s(0) = 1
+
+..
+   _Silviana checked these on November 4, 2025, by hand in research notebook 10, page 75.
+
+The equation for :math:`\frac{dc}{d \tau}` is exactly the same as in Segel (21b).  The formula for :math:`\frac{ds}{d \tau}` looks different from Segel (21a), but algebraically it's exactly the same.  It's just difficult to get Sympy to factor it into exactly the same form.
+
+These are exactly the same equations as in Murray (6.21) upon replacement of :math:`(s,c) = (u,v)`, and :math:`\rho = \kappa`.
+
+
+
+
+
+
+Long/slow time scale
+****************************
+
+To get the equations on the long/slow timescale :math:`t_c` from Murray, multiply :math:`\tau = Lk_1t` by the factors
 :math:`\frac{e_0}{L} \frac{k_2}{K_m*k_1}\frac{K_m}{L} = \frac{c_1}{c_0c_3}`
 
     >>> translation.multiplier_add_columns(2, 6, 1)
     >>> translation.multiplier_add_columns(2, 5, -1)
     >>> translation.multiplier_add_columns(2, -1, -1)
+
+Inspect
+
     >>> translation.invariants()
     Matrix([[e_0*k_2*t/L, s/s_0, L*c/(e_0*s_0), K_m*k_1/k_2, e_0/L, s_0/K_m, L/K_m]])
-    >>> reduced_system = translation.translate(system_l)
+
+    >>> translation.translate_parameter_substitutions(system_l)
+    {t: c0*tau/c1, s: c2*s, c: c*c1*c2, k_2: 1/c0, k_1: 1, e_0: c1*c3, s_0: c2, L: c3, K_m: 1}
+
+Translate and reduce the system
+    
+    >>> reduced_system = translation.translate(system_l, naming_scheme=('T',['s','c'], 'c'))
     >>> reduced_system
-    dt/dt = 1
-    dc/dt = -c*c0*c2*s/c1 - c*c0/c1 + c0*c3*s/c1
-    ds/dt = c*c0*c2*s + c*c0 - c - c0*c3*s
-    dc0/dt = 0
-    dc1/dt = 0
-    dc2/dt = 0
-    dc3/dt = 0
+    dT/dT = 1
+    dc/dT = -c*c0*c2*s/c1 - c*c0/c1 + c0*c3*s/c1
+    ds/dT = c*c0*c2*s + c*c0 - c - c0*c3*s
+    dc0/dT = 0
+    dc1/dT = 0
+    dc2/dT = 0
+    dc3/dT = 0
     s(0) = 1
     c3 == c2 + 1
 
+These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.  
 
-If we do a few substitutions, we get (6.23) from Murray.
 
-    >>> reduced_system.diff_subs({'c':'v', 's':'u', 'c2':'sigma', 'c1':'epsilon', 'c3':'sigma+1', 'c0':'something'},
+First, the time and state variables:
+
+.. math::
+    :nowrap:
+
+    \begin{align}
+    e_0*k_2*t/L &= T \textnormal{ Segel (23)}\\
+    s/s_0 &= \frac{S}{\bar{S_0}} \textnormal{ Segel (20a)}\\
+    L*c/(e_0*s_0) &= \frac{C}{\bar{C}} \textnormal{ Segel (20b)}
+    \end{align}
+
+Then, the coefficients
+
+.. math::
+    :nowrap:
+
+    \begin{align}
+    c_0 &= K_m*k_1/k_2 & &=  \\
+    c_1 &= e_0/L & &= \epsilon \\
+    c_2 &= s_0/K_m & &= \sigma \\
+    c_3 &= L/K_m & &= \sigma+1 
+    \end{align}
+
+
+we do a few substitutions, we get (6.23) from Murray.
+
+    >>> system_murray = reduced_system.diff_subs({#     ...                         'c':'v', 's':'u', 
+    ...                         'c0':'kappa+1', 'c1':'epsilon', 
+    ...                         'c2':'sigma', 'c3':'sigma+1'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,
     ...                         factor_after=True)
+    >>> system_murray
+    dT/dT = 1
+    dc/dT = -(kappa + 1)*(c*s*sigma + c - s*sigma - s)/epsilon
+    ds/dT = c*kappa*s*sigma + c*kappa + c*s*sigma - kappa*s*sigma - kappa*s - s*sigma - s
+    depsilon/dT = 0
+    dkappa/dT = 0
+    dsigma/dT = 0
+    s(0) = 1
 
+
+The equation for :math:`\frac{dc}{dT}` is exactly the same as Segel (24b), after some minor algebra.  
+The equation for :math:`\frac{ds}{dT}` also requires a bit of basic algebra, and is equal to Segal (24a).
+
+We recover Murray (6.23) with a bit more algebra, not shown here.
+
+..
+   _Silviana checked these on November 4, 2025, by hand in research notebook 10, page 77.
 
 
