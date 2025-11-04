@@ -39,14 +39,21 @@ class ODETranslation(object):
             :attr:`~desr.ode_translation.ODETranslation.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
+        naming_scheme (tuple): A tuple of strings giving the names of the variables after reduction.  Default is `('tau', 'nu', 'kappa')`
+            The 0th element of the tuple is the new name of the independent (time) variable.  
+            The 1th is either a string for the pattern for names of independent variables, or a list of strings equal to the number of variables.  
+            The 2th element is the pattern for the scaling-invariant constants computed by the algorithm.  
+            Since we don't know how many constants there will be, only a pattern is usable, so the 2th element of the naming_scheme must be a single string.
+        new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
+            Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
     '''
-    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, renaming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
+    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
         scaling_matrix = scaling_matrix.copy()
 
         self._scaling_matrix = scaling_matrix
         self._variables_domain = variables_domain
-        self._renaming_scheme = renaming_scheme
         self._new_indices_start_at = new_indices_start_at
+        self.set_naming_scheme(naming_scheme)
 
         if (variables_domain is not None) and (self.n != len(self.variables_domain)):
             raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
@@ -60,6 +67,17 @@ class ODETranslation(object):
             self._herm_mult = hermite_multiplier
 
         self._inv_herm_mult = None
+
+    def set_naming_scheme(self, naming_scheme):
+        '''
+        Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslation`.
+        '''
+
+        # we start with some validation.
+        if len(naming_scheme)!= 3:
+            raise ValueError(f'renaming scheme must be a length-3 container')
+
+        self._naming_scheme = naming_scheme
 
     def __repr__(self):
         return 'A=\n{}\nV=\n{}\nW=\n{}'.format(self.scaling_matrix.__repr__(),
@@ -238,7 +256,7 @@ class ODETranslation(object):
         return self._variables_domain
 
     @classmethod
-    def from_ode_system(cls, ode_system, renaming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
+    def from_ode_system(cls, ode_system, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
         '''
         Create a :class:`ODETranslation` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
 
@@ -247,7 +265,7 @@ class ODETranslation(object):
 
         :rtype: ODETranslation
         '''
-        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables, renaming_scheme=renaming_scheme, new_indices_start_at = new_indices_start_at)
+        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
 
     def multiplier_swap_columns(self, i, j):
         '''
@@ -504,7 +522,7 @@ class ODETranslation(object):
         # Blow the cache of the inverse
         self._inv_herm_mult = None
 
-    def translate(self, system):
+    def translate(self, system, naming_scheme=None):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
@@ -512,9 +530,15 @@ class ODETranslation(object):
 
         Args:
             system (ODESystem): System to reduce.
+            naming_scheme: the scheme to use.  A tuple of length 3.  See 
 
         :rtype: ODESystem
         '''
+
+        if naming_scheme is not None:
+            self.set_naming_scheme(naming_scheme)
+
+
         if self._is_translate_parameter_compatible(system=system):
             return self.translate_parameter(system=system)
 
@@ -751,13 +775,13 @@ class ODETranslation(object):
         """
         num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
 
-        if (isinstance(self._renaming_scheme[1], str)):
-            new_vars = ['{}{}'.format(self._renaming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
+        if (isinstance(self._naming_scheme[1], str)):
+            new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
             new_vars = [sympy.sympify(v, _clash1) for v in new_vars]
         else:
 
-            if len(self._renaming_scheme[1]) != system.num_nonconstants:
-                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._renaming_scheme[1])}!={system.num_nonconstants}')
+            if len(self._naming_scheme[1]) != system.num_nonconstants:
+                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._naming_scheme[1])}!={system.num_nonconstants}')
 
 
             # silviana says:
@@ -767,9 +791,9 @@ class ODETranslation(object):
             # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
 
             # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
-            new_vars = [sympy.Symbol(v) for v in self._renaming_scheme[1]]
+            new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
 
-        the_map = {system.indep_var: sympy.var(self._renaming_scheme[0])}
+        the_map = {system.indep_var: sympy.var(self._naming_scheme[0])}
 
         for v,V in zip(system.non_constant_variables, new_vars):
             the_map[v] = V
@@ -793,7 +817,7 @@ class ODETranslation(object):
         {t: tau, n: nu0, p: nu1, K: kappa0, d: 1, h: kappa1, k: 1, r: kappa2, s: 1}
 
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system, renaming_scheme=('t', ['n','p'], 'c'))
+        >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
         >>> translation.translate_parameter_substitutions(system=system)
         {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
 
@@ -824,7 +848,7 @@ class ODETranslation(object):
 
         variable_map = self.variable_map(system)
         # Form new constants
-        new_consts = ['{}{}'.format(self._renaming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
+        new_consts = ['{}{}'.format(self._naming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
         new_consts = list(map(sympy.sympify, new_consts))
 
         to_sub = {}
@@ -910,7 +934,7 @@ class ODETranslation(object):
         ...                           [ 0, 0,  0,  0,  0,  0,  0,  0,  1]])  # s
         >>> translation = ODETranslation(maximal_scaling_matrix,
         ...                              variables_domain=system.variables,
-        ...                              hermite_multiplier=herm_mult, renaming_scheme=('t',['n','p'], 'c'))
+        ...                              hermite_multiplier=herm_mult, naming_scheme=('t',['n','p'], 'c'))
         >>> translation.translate_parameter(system)
         dt/dt = 1
         dn/dt = -c1*n*p/(c0 + n) - n**2 + n

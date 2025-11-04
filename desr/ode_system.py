@@ -500,7 +500,7 @@ class ODESystem(object):
 
         return all_vars, nonconst_vars, new_vars
 
-    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=False, new_symbols_are_constants=True):
+    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=True, new_symbols_are_constants=True):
         '''
         Make substitutions into the derivatives, returning a new system.
 

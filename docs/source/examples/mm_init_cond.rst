@@ -72,7 +72,7 @@ Choose the variable order.
 
 Compute the reduced system by making an `ODETranslation` from the original system,
 
-    >>> translation = ODETranslation.from_ode_system(system, renaming_scheme=('t',['s','c'], 'c'))
+    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('t',['s','c'], 'c'))
 
 Optionally, observe some properties.  First, the scaling matrix :math:`A`:
 
@@ -119,7 +119,7 @@ Returning back to the original system with initial conditions,
     ds_0/dt = 0
     s(0) = s_0
     K_m == (k_2 + k_m1)/k_1
-    >>> translation = ODETranslation.from_ode_system(system, renaming_scheme=('tau',['u','v'], 'c'))
+    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
 
 Do some column operations on the Hermite multiplier
 

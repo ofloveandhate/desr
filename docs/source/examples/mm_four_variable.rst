@@ -32,7 +32,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> original_system.variables
     (t, C, E, P, S, k_1, k_2, k_m1)
-    >>> max_scal1 = ODETranslation.from_ode_system(original_system, renaming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1 = ODETranslation.from_ode_system(original_system, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Variable order: ', max_scal1.variables_domain)
     Variable order:  (t, C, E, P, S, k_1, k_2, k_m1)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
@@ -74,7 +74,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslatio
     >>> original_system_reorder.reorder_variables(variable_order)
     >>> original_system_reorder.variables
     (t, C, E, P, S, k_1, k_m1, k_2)
-    >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder, renaming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
     Invariants: k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2, k_m1/k_2
 
@@ -181,7 +181,7 @@ to the last :math:`n-r` columns.
     [0, -1,  0,  0,  0,  1],
     [1,  0, -1, -1, -1, -1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, renaming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print(max_scal3.translate(original_system))
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S/c0

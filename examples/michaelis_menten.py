@@ -299,7 +299,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Variable order: ', system.variables)
         
         print('Power Matrix:', system.power_matrix().__repr__())
-        translation = ODETranslation.from_ode_system(system, renaming_scheme=('tau',['u','v'], 'c'))
+        translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
         
         
         print('Scaling matrix:',translation.scaling_matrix.__repr__())
