@@ -34,8 +34,11 @@ This is the starting point for our reduction.
     ... \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c \\\\'''
 
 
+Primary method
+-----------------
+
 "Outer" equations from Segel 1989
--------------------------------------
+***********************************
 
 Let's recover :cite:`Segel1989` "outer" equations (8a-b).
     
@@ -93,7 +96,7 @@ Do a few substitutions, and we have :cite:`Segel1989` (8a-b)
 
 
 Reduction to Segel (21a-d)
-------------------------------
+***********************************
 
 
 First create the original system.
@@ -228,7 +231,7 @@ To get :cite:`murray` (6.21), we need to rename some variables
 
 
 After the pre-steady state
--------------------------------
+***********************************
 
 Computing equations :cite:`Segel1989` (24a-b)
 
@@ -265,8 +268,8 @@ Computing equations :cite:`Segel1989` (24a-b)
 
 
 
-Another method
----------------------------------
+Another method: using :math:`L = s_0 + K_m`
+-------------------------------------------------
 
 Starting from the same system, Michaelis-Menten, with :math:`K_m = \frac{k_{-1} + k_2}{k_1}` and initial condition :math:`s(0) = s_0`.
 
@@ -395,7 +398,9 @@ Long/slow time scale
 
 To get the equations on the long/slow timescale :math:`t_c` from Murray, multiply :math:`\tau = Lk_1t` by the factors
 :math:`\frac{e_0}{L} \frac{k_2}{K_m*k_1}\frac{K_m}{L} = \frac{c_1}{c_0c_3}`
-
+    
+    >>> translation.herm_mult.shape
+    (9, 9)
     >>> translation.multiplier_add_columns(2, 6, 1)
     >>> translation.multiplier_add_columns(2, 5, -1)
     >>> translation.multiplier_add_columns(2, -1, -1)
@@ -431,9 +436,9 @@ First, the time and state variables:
     :nowrap:
 
     \begin{align}
-    e_0*k_2*t/L &= T \textnormal{ Segel (23)}\\
-    s/s_0 &= \frac{S}{\bar{S_0}} \textnormal{ Segel (20a)}\\
-    L*c/(e_0*s_0) &= \frac{C}{\bar{C}} \textnormal{ Segel (20b)}
+    e_0*k_2*t/L &= T & & \textnormal{ Segel (23)}\\
+    s/s_0 &= \frac{S}{\bar{S_0}} & & \textnormal{ Segel (20a)}\\
+    L*c/(e_0*s_0) &= \frac{C}{\bar{C}} & & \textnormal{ Segel (20b)}
     \end{align}
 
 Then, the coefficients
@@ -442,7 +447,7 @@ Then, the coefficients
     :nowrap:
 
     \begin{align}
-    c_0 &= K_m*k_1/k_2 & &=  \\
+    c_0 &= K_m*k_1/k_2 & &=  \kappa+1 \\
     c_1 &= e_0/L & &= \epsilon \\
     c_2 &= s_0/K_m & &= \sigma \\
     c_3 &= L/K_m & &= \sigma+1 
