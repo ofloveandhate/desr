@@ -1,8 +1,8 @@
-Michaelis-Menten, four variables
-========================================
+Extending invariants in four-variable Michaelis-Menten
+=======================================================
 
 Raw Michaelis-Menten Equation Analysis
---------------------------------------
+---------------------------------------
 
 We perform an example analysis of the Michael-Mentis equations :cite:`Segel1989`:
 
@@ -182,13 +182,13 @@ to the last :math:`n-r` columns.
     [1,  0, -1, -1, -1, -1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
     >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
-    >>> print(max_scal3.translate(original_system))
+    >>> print(max_scal3.translate(original_system).diff_subs({'c0':'alpha'}))
     dt/dt = 1
-    dC/dt = -C*c0 - C + E*S/c0
-    dE/dt = C*c0**2 + C*c0 - E*S
-    dP/dt = C*c0**2
-    dS/dt = C*c0 - E*S
-    dc0/dt = 0
+    dC/dt = -C*alpha - C + E*S/alpha
+    dE/dt = C*alpha**2 + C*alpha - E*S
+    dP/dt = C*alpha**2
+    dS/dt = C*alpha - E*S
+    dalpha/dt = 0
 
 So we have found a third different reparametrization of the Michaelis-Menten equations.
 
