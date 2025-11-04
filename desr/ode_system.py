@@ -129,7 +129,7 @@ class ODESystem(object):
         (tau, x, y, c_0, c_1, x_0)
         """
         if not isinstance(new_indep, sympy.Symbol):
-            new_indep = sympy.sympify(new_indep)
+            new_indep = sympy.sympify(new_indep, locals=_clash1)
 
             expressions_to_variables
 
@@ -350,7 +350,7 @@ class ODESystem(object):
                 variable = sympy.Symbol(variable)
 
             if isinstance(init_cond, str):
-                init_cond = sympy.sympify(init_cond)
+                init_cond = sympy.sympify(init_cond, locals=_clash1)
 
             # We can only set initial conditions for non-constant variables we already know about.
             if variable not in self.non_constant_variables:
@@ -405,7 +405,7 @@ class ODESystem(object):
                 var = sympy.Symbol(var)
 
             if isinstance(expr, str):
-                expr = sympy.sympify(expr)
+                expr = sympy.sympify(expr, locals=_clash1)
 
             expr_vars = expressions_to_variables([expr])
 
@@ -464,9 +464,9 @@ class ODESystem(object):
         ValueError: Cannot express equality with 0.
         '''
         if isinstance(lhs, str):
-            lhs = sympy.sympify(lhs)
+            lhs = sympy.sympify(lhs, locals=_clash1)
         if isinstance(rhs, str):
-            rhs = sympy.sympify(rhs)
+            rhs = sympy.sympify(rhs, locals=_clash1)
         if (lhs == 0) or (rhs == 0):
             raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
@@ -548,7 +548,7 @@ class ODESystem(object):
         '''
 
         # sympify the dict of things to substitute
-        to_sub = {sympy.sympify(lhs): sympy.sympify(rhs) for lhs, rhs in to_sub.items()}
+        to_sub = {sympy.sympify(lhs, locals=_clash1): sympy.sympify(rhs, locals=_clash1) for lhs, rhs in to_sub.items()}
 
         variable_renamings = []
         
@@ -607,6 +607,9 @@ class ODESystem(object):
         if subs_constraints: 
             constraints = [eqn.subs(to_sub) for eqn in constraints]
 
+            # filter out the trivial constraints after doing the substitution
+            constraints = [c for c in constraints if not c==True]
+
 
         # post-substitution actions
 
@@ -648,7 +651,6 @@ class ODESystem(object):
                 new_vars = new_vars[:var_loc] + new_vars[var_loc+1:]
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
 
-        
         # we're finally ready to construct the new post-substitution System. Huzzah.
         subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
