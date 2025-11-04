@@ -560,7 +560,7 @@ class ODETranslation(object):
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
         if system.initial_conditions:
             # For parameter substitution, the dependent variables keep their name
-            new_initial_conditions = {var: (init_cond.subs(to_sub) * var / to_sub[var]).expand()
+            new_initial_conditions = {variable_map[var]: (init_cond.subs(to_sub) * variable_map[var] / to_sub[var]).expand()
                                       for var, init_cond in system.initial_conditions.items()}
             reduced_system.update_initial_conditions(new_initial_conditions)
 
