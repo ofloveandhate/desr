@@ -114,7 +114,7 @@ def tex_to_sympy(tex):
     """
     # Parse each line individually
 
-    return list(map(_tex_to_sympy_one_line, tex.split('\n')))
+    return list(map(_tex_to_sympy_one_line, filter(lambda t: len(t.strip())>0, tex.split('\n'))  ))
 
 
 def _tex_to_sympy_one_line(tex):
