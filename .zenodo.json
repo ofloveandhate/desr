@@ -1,0 +1,200 @@
+{
+         "title": "desr: Differental Equation Symmetry Reduction",
+         "upload_type": "Software",
+         "description": "*desr* is a package used for Differental Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems",
+         "creators": [
+           {
+             "affiliations": [
+               {
+                 "id": "05b8d3w18",
+                 "identifiers": [
+                   {
+                     "identifier": "05b8d3w18",
+                     "scheme": "ror"
+                   },
+                   {
+                     "identifier": "grid.419537.d",
+                     "scheme": "grid"
+                   },
+                   {
+                     "identifier": "0000 0001 2113 4567",
+                     "scheme": "isni"
+                   }
+                 ],
+                 "name": "Max Planck Institute of Molecular Cell Biology and Genetics"
+               },
+               {
+                 "id": "05hrn3e05",
+                 "identifiers": [
+                   {
+                     "identifier": "05hrn3e05",
+                     "scheme": "ror"
+                   },
+                   {
+                     "identifier": "grid.495510.c",
+                     "scheme": "grid"
+                   }
+                 ],
+                 "name": "Center for Systems Biology Dresden"
+               }
+             ],
+             "person_or_org": {
+               "family_name": "Amethyst",
+               "given_name": "Silviana",
+               "identifiers": [
+                 {
+                   "identifier": "0000-0001-7535-4602",
+                   "scheme": "orcid"
+                 }
+               ],
+               "name": "Amethyst, Silviana",
+               "type": "personal"
+             },
+             "role": {
+               "id": "researcher",
+               "title": {
+                 "de": "WissenschaftlerIn",
+                 "en": "Researcher"
+               }
+             }
+           },
+           {
+             "person_or_org": {
+               "family_name": "Tanburn",
+               "given_name": "Richard",
+               "name": "Tanburn, Richard",
+               "type": "personal"
+             },
+             "role": {
+               "id": "researcher",
+               "title": {
+                 "de": "WissenschaftlerIn",
+                 "en": "Researcher"
+               }
+             }
+           },
+           {
+             "affiliations": [
+               {
+                 "id": "05b8d3w18",
+                 "identifiers": [
+                   {
+                     "identifier": "05b8d3w18",
+                     "scheme": "ror"
+                   },
+                   {
+                     "identifier": "grid.419537.d",
+                     "scheme": "grid"
+                   },
+                   {
+                     "identifier": "0000 0001 2113 4567",
+                     "scheme": "isni"
+                   }
+                 ],
+                 "name": "Max Planck Institute of Molecular Cell Biology and Genetics"
+               },
+               {
+                 "id": "05hrn3e05",
+                 "identifiers": [
+                   {
+                     "identifier": "05hrn3e05",
+                     "scheme": "ror"
+                   },
+                   {
+                     "identifier": "grid.495510.c",
+                     "scheme": "grid"
+                   }
+                 ],
+                 "name": "Center for Systems Biology Dresden"
+               }
+             ],
+             "person_or_org": {
+               "family_name": "Harrington",
+               "given_name": "Heather",
+               "identifiers": [
+                 {
+                   "identifier": "0000-0002-1705-7869",
+                   "scheme": "orcid"
+                 }
+               ],
+               "name": "Harrington, Heather",
+               "type": "personal"
+             },
+             "role": {
+               "id": "projectleader",
+               "title": {
+                 "de": "ProjektleiterIn",
+                 "en": "Project leader"
+               }
+             }
+           }
+         ],
+
+         "subjects": [
+           {
+             "subject": "Mathematics"
+           },
+           {
+             "id": "euroscivoc:1637",
+             "identifiers": [
+               {
+                 "identifier": "http://data.europa.eu/8mn/euroscivoc/fad48e49-fad0-43df-8328-87dd8d61618c",
+                 "scheme": "url"
+               }
+             ],
+             "props": {
+               "parents": "euroscivoc:23,euroscivoc:51,euroscivoc:359,euroscivoc:1067"
+             },
+             "scheme": "EuroSciVoc",
+             "subject": "Differential equations"
+           },
+           {
+             "subject": "Scaling symmetry"
+           }
+         ],
+
+         "related_identifiers": [
+           {
+             "identifier": "https://github.com/tanbur/desr",
+             "relation_type": {
+               "id": "obsoletes",
+               "title": {
+                 "de": "Ersetzt",
+                 "en": "Obsoletes"
+               }
+             },
+             "resource_type": {
+               "id": "software",
+               "title": {
+                 "de": "Software",
+                 "en": "Software"
+               }
+             },
+             "scheme": "url"
+           }
+         ],
+
+         "resource_type": {
+           "id": "software",
+           "title": {
+             "de": "Software",
+             "en": "Software"
+           }
+         },
+
+         "rights": [
+           {
+             "description": {
+               "en": "A permissive license whose main conditions require preservation of copyright and license notices. Contributors provide an express grant of patent rights. Licensed works, modifications, and larger works may be distributed under different terms and without source code."
+             },
+             "id": "apache-2.0",
+             "props": {
+               "scheme": "spdx",
+               "url": "http://www.apache.org/licenses/LICENSE-2.0"
+             },
+             "title": {
+               "en": "Apache License 2.0"
+             }
+           }
+         ],
+}

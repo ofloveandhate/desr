@@ -110,11 +110,11 @@ def tex_to_sympy(tex):
 
 
     >>> print(tex_to_sympy('k_2 &= V_2d ( APCT - APCs ) + V_2dd APCs'))
-    Eq(k_2, APCs*V_2dd + V_2d*(APCT - APCs))
+    [Eq(k_2, APCs*V_2dd + V_2d*(APCT - APCs))]
     """
     # Parse each line individually
 
-    return list(map(_tex_to_sympy_one_line, tex.split('\n')))
+    return list(map(_tex_to_sympy_one_line, filter(lambda t: len(t.strip())>0, tex.split('\n'))  ))
 
 
 def _tex_to_sympy_one_line(tex):
@@ -147,6 +147,7 @@ def _tex_to_sympy_one_line(tex):
 
     # Turn \frac into ratios. Consume the shortest amount possible
     tex = re.sub(r'[\\f\ff]?rac{(.*?)}{(.*?)}', '((\\1) / (\\2))', tex)
+    
     # Turn spaces between variables into *. Do this by matching anything that isn't an operation
     # Use a lookahead assertion to get overlapping instances.
     tex = re.sub(r'([^+\-*\s/(]+)\s+(?=[^+\-*\s/)]+)', '\\1 * ', tex)

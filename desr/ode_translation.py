@@ -4,6 +4,7 @@ import sympy
 from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
+from sympy.abc import _clash1
 
 def _int_inv(matrix_):
     ''' Given an integer matrix, return the inverse, ensuring we do it right in the integers
@@ -38,14 +39,24 @@ class ODETranslation(object):
             :attr:`~desr.ode_translation.ODETranslation.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
+        naming_scheme (tuple): A tuple of strings giving the names of the variables after reduction.  Default is `('tau', 'nu', 'kappa')`
+            The 0th element of the tuple is the new name of the independent (time) variable.  
+            The 1th is either a string for the pattern for names of independent variables, or a list of strings equal to the number of variables.  
+            The 2th element is the pattern for the scaling-invariant constants computed by the algorithm.  
+            Since we don't know how many constants there will be, only a pattern is usable, so the 2th element of the naming_scheme must be a single string.
+        new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
+            Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
     '''
-    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None):
+    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
         scaling_matrix = scaling_matrix.copy()
 
         self._scaling_matrix = scaling_matrix
         self._variables_domain = variables_domain
+        self._new_indices_start_at = new_indices_start_at
+        self.set_naming_scheme(naming_scheme)
+
         if (variables_domain is not None) and (self.n != len(self.variables_domain)):
-            raise ValueError('{} variables given but we have {} actions'.format(len(self.variables_domain), self.n))
+            raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
 
         self._scaling_matrix_hnf, self._herm_mult = normal_hnf_col(scaling_matrix)
 
@@ -56,6 +67,17 @@ class ODETranslation(object):
             self._herm_mult = hermite_multiplier
 
         self._inv_herm_mult = None
+
+    def set_naming_scheme(self, naming_scheme):
+        '''
+        Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslation`.
+        '''
+
+        # we start with some validation.
+        if len(naming_scheme)!= 3:
+            raise ValueError(f'renaming scheme must be a length-3 container')
+
+        self._naming_scheme = naming_scheme
 
     def __repr__(self):
         return 'A=\n{}\nV=\n{}\nW=\n{}'.format(self.scaling_matrix.__repr__(),
@@ -234,7 +256,7 @@ class ODETranslation(object):
         return self._variables_domain
 
     @classmethod
-    def from_ode_system(cls, ode_system):
+    def from_ode_system(cls, ode_system, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
         '''
         Create a :class:`ODETranslation` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
 
@@ -243,7 +265,7 @@ class ODETranslation(object):
 
         :rtype: ODETranslation
         '''
-        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables)
+        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
 
     def multiplier_swap_columns(self, i, j):
         '''
@@ -500,7 +522,7 @@ class ODETranslation(object):
         # Blow the cache of the inverse
         self._inv_herm_mult = None
 
-    def translate(self, system):
+    def translate(self, system, naming_scheme=None):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
@@ -508,17 +530,73 @@ class ODETranslation(object):
 
         Args:
             system (ODESystem): System to reduce.
+            naming_scheme: the scheme to use.  A tuple of length 3.  See 
 
         :rtype: ODESystem
         '''
+
+        if naming_scheme is not None:
+            self.set_naming_scheme(naming_scheme)
+
+
         if self._is_translate_parameter_compatible(system=system):
             return self.translate_parameter(system=system)
-        elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or
-            (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
+
+        elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
             return self.translate_dep_var(system=system)
+
         elif (len(system.variables) == self.scaling_matrix.shape[1]):
             return self.translate_general(system=system)
+
         raise ValueError("System doesn't have the right number of variables for translation")
+
+
+
+    def translate_parameter(self, system):
+        ''' Translate according to parameter scheme '''
+
+        reduced_system = system.copy()
+        reduced_system._is_reduced = True
+        assert reduced_system.is_reduced
+
+        
+        # make the substitutions
+        to_sub = self.translate_parameter_substitutions(system=system)
+
+        variable_map = self.variable_map(system)
+        new_indep = variable_map[system.indep_var]
+
+        new_deriv_dict = {}
+        for var, deriv in system.derivative_dict.items():
+            
+            # skip the derivatives of constants, since they are `None`.
+            if var in system.constant_variables:
+                continue
+
+            Var = variable_map[var]
+            # the chain rule makes substitution more complicated
+            derivative_factor = (to_sub[var] / Var) * (new_indep / to_sub[system.indep_var])
+
+            new_deriv_dict[Var] = (deriv.subs(to_sub) / derivative_factor).expand()
+
+        reduced_system = ODESystem.from_dict(new_deriv_dict, indep_var=new_indep, is_reduced=True)
+
+        # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
+        if system.initial_conditions:
+            # For parameter substitution, the dependent variables keep their name
+            new_initial_conditions = {variable_map[var]: (init_cond.subs(to_sub) * variable_map[var] / to_sub[var]).expand()
+                                      for var, init_cond in system.initial_conditions.items()}
+            reduced_system.update_initial_conditions(new_initial_conditions)
+
+        if system.constraints:
+            for eqn in system.constraints:
+                reduced_system.add_constraint(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
+
+        # rename the time variable
+        reduced_system.rename_indep_var(new_indep)
+
+        return reduced_system
+
 
 
     def translate_dep_var(self, system):
@@ -540,7 +618,7 @@ class ODETranslation(object):
         dy0/dt = y0*(1 + 1/t)
         '''
         if system.initial_conditions:
-            raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
+            raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
         if self.n == len(system.variables):
             if not self.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
@@ -562,6 +640,7 @@ class ODETranslation(object):
         else:
             variables_domain = None
 
+        # silviana says: i think it is weird that an ODETranslation is made here.  we're already in one.  why make another one?
         reduced_scaling = ODETranslation(scaling_matrix=scaling_matrix,
                                          variables_domain=variables_domain,
                                          hermite_multiplier=new_herm_mult)
@@ -569,7 +648,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -578,7 +657,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -598,7 +677,7 @@ class ODETranslation(object):
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var)
+        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var, is_reduced=True)
 
     def translate_general(self, system):
         '''
@@ -631,7 +710,7 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i) for i in range(num_inv_var)]))
+        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
         if num_inv_var == 1:
             invariant_variables = [invariant_variables]
         else:
@@ -640,7 +719,7 @@ class ODETranslation(object):
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = self.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i) for i in range(num_aux_var)]))
+        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
         if num_aux_var == 1:
             auxiliary_variables = [auxiliary_variables]
         else:
@@ -657,7 +736,7 @@ class ODETranslation(object):
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
         assert len(new_variables) == len(new_derivatives) == len(system.variables) + 1
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var)
+        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
 
     def _is_translate_parameter_compatible(self, system):
         ''' Check whether a system satisfies the conditions of the parameter scheme of translation '''
@@ -686,6 +765,41 @@ class ODETranslation(object):
 
         return True
 
+    def variable_map(self, system):
+        """
+        Construct a dictionary mapping old variable names to new ones, using the stored renaming scheme.
+
+        The naming scheme is passed in at construct time, not here.
+
+        todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
+        """
+        num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
+
+        if (isinstance(self._naming_scheme[1], str)):
+            new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
+            new_vars = [sympy.sympify(v, _clash1) for v in new_vars]
+        else:
+
+            if len(self._naming_scheme[1]) != system.num_nonconstants:
+                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._naming_scheme[1])}!={system.num_nonconstants}')
+
+
+            # silviana says:
+            # the reason I'm using `Symbol` here and not sympify: 
+            #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
+            #   and not the variable S.  
+            # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
+
+            # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
+            new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
+
+        the_map = {system.indep_var: sympy.var(self._naming_scheme[0])}
+
+        for v,V in zip(system.non_constant_variables, new_vars):
+            the_map[v] = V
+
+        return the_map
+
     def translate_parameter_substitutions(self, system):
         '''
         Given a system, determine the substitutions made in the parameter reduction.
@@ -700,10 +814,22 @@ class ODETranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translation = ODETranslation.from_ode_system(system)
         >>> translation.translate_parameter_substitutions(system=system)
+        {t: tau, n: nu0, p: nu1, K: kappa0, d: 1, h: kappa1, k: 1, r: kappa2, s: 1}
+
+        >>> system = ODESystem.from_equations(equations)
+        >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
+        >>> translation.translate_parameter_substitutions(system=system)
         {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
+
+        >>> translation = ODETranslation.from_ode_system(system, new_indices_start_at=1)
+        >>> translation.translate_parameter_substitutions(system=system)
+        {t: tau, n: nu1, p: nu2, K: kappa1, d: 1, h: kappa2, k: 1, r: kappa3, s: 1}
         '''
-        num_variables = len(system.variables) - system.num_constants - 1  # Excluding indep
-        m = num_variables + 1  # Include indep
+
+        num_variables_wo_time = len(system.variables) - system.num_constants - 1  # Excluding indep
+        m = num_variables_wo_time + 1  # Include indep
+
+        
 
         if not self._is_translate_parameter_compatible(system):
             err_str = ['System is not compatible for parameter translation.']
@@ -720,53 +846,30 @@ class ODETranslation(object):
         W_v = inv_herm_mult_d[:, 1:m]
         W_c = inv_herm_mult_d[:, m:]
 
+        variable_map = self.variable_map(system)
         # Form new constants
-        new_const = ['c{}'.format(i) for i in range(system.num_constants - self.r)]
-        new_const = list(map(sympy.sympify, new_const))
+        new_consts = ['{}{}'.format(self._naming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
+        new_consts = list(map(sympy.sympify, new_consts))
+
         to_sub = {}
 
         # Scale t
-        to_sub[system.indep_var] = scale_action(new_const, W_t)[0] * system.indep_var
+        to_sub[system.indep_var] = scale_action(new_consts, W_t)[0] * variable_map[system.indep_var]
 
         # Scale dependents
-        const_scale = scale_action(new_const, W_v)
-        assert len(system.variables[1:num_variables + 1]) == len(const_scale.T)
-        for dep_var, _const_scale in zip(system.variables[1:num_variables + 1], const_scale.T):
-            to_sub[dep_var] = _const_scale * dep_var
+        scale = scale_action(new_consts, W_v)
+        assert len(system.variables[1:num_variables_wo_time + 1]) == len(scale.T)
+        for dep_var, _const_scale in zip(system.variables[1:num_variables_wo_time + 1], scale.T):
+            to_sub[dep_var] = _const_scale * variable_map[dep_var] 
 
         # Scale constants
-        const_scale = scale_action(new_const, W_c)
-        assert len(system.variables[- system.num_constants:]) == len(const_scale.T)
-        for const, _const_scale in zip(system.variables[- system.num_constants:], const_scale.T):
+        scale = scale_action(new_consts, W_c)
+        assert len(system.variables[- system.num_constants:]) == len(scale.T)
+        for const, _const_scale in zip(system.variables[- system.num_constants:], scale.T):
             to_sub[const] = _const_scale
 
         return to_sub
 
-    def translate_parameter(self, system):
-        ''' Translate according to parameter scheme '''
-        to_sub = self.translate_parameter_substitutions(system=system)
-
-        new_deriv_dict = {}
-        for key, val in system.derivative_dict.items():
-            if key in system.constant_variables:
-                continue
-            derivative_factor = (to_sub[key] / key) * (system.indep_var / to_sub[system.indep_var])
-            new_deriv_dict[key] = (val.subs(to_sub) / derivative_factor).expand()
-
-        reduced_system = ODESystem.from_dict(new_deriv_dict)
-
-        # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
-        if system.initial_conditions:
-            # For parameter substitution, the dependent variables keep their name
-            new_initial_conditions = {var: (init_cond.subs(to_sub) * var / to_sub[var]).expand()
-                                      for var, init_cond in system.initial_conditions.items()}
-            reduced_system.update_initial_conditions(new_initial_conditions)
-
-        if system.constraints:
-            for eqn in system.constraints:
-                reduced_system.add_constraints(eqn.lhs.subs(to_sub), eqn.rhs.subs(to_sub))
-
-        return reduced_system
 
     def reverse_translate(self, variables):
         """
@@ -831,7 +934,7 @@ class ODETranslation(object):
         ...                           [ 0, 0,  0,  0,  0,  0,  0,  0,  1]])  # s
         >>> translation = ODETranslation(maximal_scaling_matrix,
         ...                              variables_domain=system.variables,
-        ...                              hermite_multiplier=herm_mult)
+        ...                              hermite_multiplier=herm_mult, naming_scheme=('t',['n','p'], 'c'))
         >>> translation.translate_parameter(system)
         dt/dt = 1
         dn/dt = -c1*n*p/(c0 + n) - n**2 + n

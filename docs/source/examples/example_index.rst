@@ -4,4 +4,7 @@ Examples
 .. toctree::
    :maxdepth: 2
 
-   example_michael_mentis
+   mm_basic
+   mm_init_cond
+   segel_slemrod
+   mm_four_variable

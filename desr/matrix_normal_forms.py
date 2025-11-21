@@ -460,6 +460,24 @@ def _swap_ij_cols(matrices, i, j):
     """
     return tuple(matrix_.T for matrix_ in _swap_ij_rows([_matrix.T for _matrix in matrices], i, j))
 
+ # this one is less performant, because it has to convert the entire matrix to bools before checking.  so i have the other one.
+def is_non_negative(matrix_):
+    """
+    Check that all entries in a sympy matrix are at least 0.
+
+    >>> x = sympy.eye(2) * 3
+    >>> is_non_negative(x)
+    True
+
+    >>> y = sympy.Matrix([[0,1], [12.2, -1]])
+    >>> is_non_negative(y)
+    False
+    """
+    for m in matrix_:
+        if m<0:
+            return False
+    return True
+
 def element_wise_lt(matrix_, other):
     """
     Given a rectangular :math:`n \\times m` integer matrix, return a matrix of bools with (i, j)th entry equal to
@@ -481,19 +499,19 @@ def element_wise_lt(matrix_, other):
     >>> x = sympy.eye(2) * 3
     >>> element_wise_lt(x, 2)
     Matrix([
-    [False,  True],
-    [ True, False]])
+    [0, 1],
+    [1, 0]])
     >>> element_wise_lt(x, sympy.Matrix([[4, -1], [1, 1]]))
     Matrix([
-    [True, False],
-    [True, False]])
+    [1, 0],
+    [1, 0]])
     """
     if isinstance(other, sympy.Matrix):
         if other.shape != matrix_.shape:
             raise ValueError('Incompatible shapes: {} != {}'.format(matrix_.shape, other.shape))
-        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: matrix_[i, j] < other[i, j])
+        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: 1 if matrix_[i, j] < other[i, j] else 0)
     else:
-        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: matrix_[i, j] < other)
+        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: 1 if matrix_[i, j] < other else 0)
 
 def is_smf(matrix_):
     """
@@ -565,7 +583,8 @@ def is_smf(matrix_):
         return False
 
     # Check all entries are non-negative
-    if any(element_wise_lt(matrix_, 0)):
+    # if any(element_wise_lt(matrix_, 0)): # this one is less performant, because it has to convert the entire matrix to bools before checking.  so i have the other one.
+    if not is_non_negative(matrix_):
         return False
 
     current_int = matrix_[0, 0]

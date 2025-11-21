@@ -145,6 +145,8 @@ def example_two_layer_cascade():
     ''' Two layer cascade example.
         Consider a substrate S0 with kinase E and phosphatase F1 , with active form S1 that acts as a
         kinase on the substrate P0 , which has phosphatase F2 . All the species are highly diffusible.
+
+        This is equations (35)-(38) in https://arxiv.org/pdf/1101.5799
     '''
     variables = 'S0, S1, P0, P1, Ev, F1, F2, X1, X2, Y1, Y2'
     variables = sympy.var(variables)
@@ -189,11 +191,13 @@ def main():
         max_scal = system.maximal_scaling_matrix()
         print('Original system:\n{}\n'.format(system))
         print('Scaling action:\n{}\n{}\n'.format(system.variables, max_scal))
+
         translation = ODETranslation(max_scal)
         print('Hermite multiplier:\n{}\n'.format(translation.herm_mult))
-
         print('Invariants of the system:\n{}\n'.format(translation.invariants(system.variables)))
-        reduced = translation.translate_general(system)
+        print('Substitutions:',translation.translate_parameter_substitutions(system))
+
+        reduced = translation.translate(system)
         print('Reduced system:\n{}\n'.format(reduced))
         print('\n\n' + '*' * 10 + '\n\n')
 

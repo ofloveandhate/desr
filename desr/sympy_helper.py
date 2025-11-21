@@ -181,7 +181,7 @@ def expressions_to_variables(exprs):
         return set()
     if sympy.__version__ == '0.7.5':
         assert all(map(lambda x: isinstance(x, sympy.Basic), exprs))
-    return set.union(*[expr.atoms(sympy.Symbol) for expr in exprs])
+    return set.union(*[expr.atoms(sympy.Symbol) for expr in exprs if expr is not None])
 
 def eqns_with_variables(eqns, variables, strict=False):
     ''' Given a set of atoms, return only equations that have something in
