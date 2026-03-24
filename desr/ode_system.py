@@ -1200,6 +1200,7 @@ def maximal_scaling_matrix(exprs, variables=None):
     # Return the last num_nonzero rows of the Hermite multiplier
     return hnf_row(multiplier_rform[-num_nonzero:, :])[0]
 
+__all__ = ['ODESystem','parse_de','rational_expr_to_power_matrix','maximal_scaling_matrix']
 
 if __name__ == '__main__':
     import doctest

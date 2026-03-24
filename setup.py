@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='desr',
-    version='1.0.1',
+    version='1.0.2',
     packages=['desr',],
     author='Richard Tanburn, Silviana Amethyst',
     author_email='richard.tanburn@gmail.com, amethyst@mpi-cbg.de',
