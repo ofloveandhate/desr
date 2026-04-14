@@ -1491,6 +1491,8 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
 
     return extended
 
+__all__ = ['ODETranslation', 'scale_action', 'extend_rectangular_matrix']
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
