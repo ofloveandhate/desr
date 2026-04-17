@@ -12,4 +12,12 @@ setup(
     install_requires=[
         'sympy',
     ],
+    project_urls={
+        "DOI": "https://doi.org/10.5281/zenodo.17671203",
+        "repo_MPI": "https://git.mpi-cbg.de/ASB/desr"
+    }
 )
+
+
+
+
