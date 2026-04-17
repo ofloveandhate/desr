@@ -15,7 +15,7 @@
 import sympy
 from desr.matrix_normal_forms import smf
 from desr.ode_system import ODESystem
-from desr.ode_system import maximal_scaling_matrix, rational_expr_to_power_matrix, hnf_col, hnf_row, normal_hnf_col
+from desr.ode_system import maximal_scaling_matrix, rational_expr_to_exponent_matrix, hnf_col, hnf_row, normal_hnf_col
 from desr.matrix_normal_forms import normal_hnf_row
 from desr.ode_translation import ODETranslation, scale_action
 from desr.tex_tools import expr_to_tex, matrix_to_tex
