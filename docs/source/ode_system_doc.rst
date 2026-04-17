@@ -21,7 +21,7 @@ There are a number of different ways of creating an :class:`~desr.ode_system.ODE
 Finding Scaling Actions
 -----------------------
 
-.. automethod:: desr.ode_system.ODESystem.power_matrix
+.. automethod:: desr.ode_system.ODESystem.exponent_matrix
     :noindex:
 .. automethod:: desr.ode_system.ODESystem.maximal_scaling_matrix
     :noindex:

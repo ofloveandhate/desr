@@ -51,7 +51,7 @@ To match the analysis in Murray, We need to add in our initial condition for :ma
     >>> system.update_initial_conditions({'s': 's_0'})
 
 
-    >>> system.power_matrix()
+    >>> system.exponent_matrix()
     Matrix([
     [1, 1, 1,  1, 1, 1,  1,  0,  0,  0],
     [0, 0, 0, -1, 0, 1,  1,  0,  0,  0],

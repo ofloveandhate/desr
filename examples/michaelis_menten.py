@@ -16,7 +16,7 @@ articlerender.fcgi?artid=PMC3991559.
 import sympy
 from desr.matrix_normal_forms import smf
 from desr.ode_system import ODESystem
-from desr.ode_system import maximal_scaling_matrix, rational_expr_to_power_matrix, hnf_col, hnf_row, normal_hnf_col
+from desr.ode_system import maximal_scaling_matrix, rational_expr_to_exponent_matrix, hnf_col, hnf_row, normal_hnf_col
 from desr.matrix_normal_forms import normal_hnf_row
 from desr.ode_translation import ODETranslation, scale_action
 from desr.tex_tools import expr_to_tex, matrix_to_tex
@@ -210,7 +210,7 @@ def michaelis_menten_two_variable(verbose=True):
         # Print variable order
         print('Variable order: ', reduced_system_km1.variables)
         
-        print('Power Matrix:', reduced_system_km1.power_matrix().__repr__())
+        print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
         
         # Print scaling matrices
         max_scal1 = ODETranslation.from_ode_system(reduced_system_km1)
@@ -298,7 +298,7 @@ def michaelis_menten_two_variable(verbose=True):
 
         print('Variable order: ', system.variables)
         
-        print('Power Matrix:', system.power_matrix().__repr__())
+        print('Power Matrix:', system.exponent_matrix().__repr__())
         translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
         
         
@@ -367,7 +367,7 @@ def michaelis_menten_two_variable(verbose=True):
         
         # Print variable order
         
-        print('Power Matrix:', reduced_system_km1.power_matrix().__repr__())
+        print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
         print('constants: ',reduced_system_km1.constant_variables)
 
         max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)

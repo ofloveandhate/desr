@@ -433,7 +433,7 @@ class TestInitialConditions(TestCase):
         variables = ['t', 's', 'c', 'K', 'k_2', 'k_1', 'e_0']
         original_system.reorder_variables(variables)
         self.assertEqual(variables, map(str, original_system.variables))
-        self.assertEqual(original_system.power_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1],
+        self.assertEqual(original_system.exponent_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1],
                                                                        [-1, 0, -1, 0, 0, 1,  1],
                                                                        [ 1, 0,  1, 1, 0, 0, -1],
                                                                        [ 0, 0,  1, 0, 1, 0,  0],
@@ -450,7 +450,7 @@ class TestInitialConditions(TestCase):
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
                                     (('s', 's_0'),))))
         self.assertEqual(variables + ['s_0'], map(str, original_system.variables))
-        self.assertEqual(original_system.power_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1,  0],
+        self.assertEqual(original_system.exponent_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1,  0],
                                                                        [-1, 0, -1, 0, 0, 1,  1,  1],
                                                                        [ 1, 0,  1, 1, 0, 0, -1,  0],
                                                                        [ 0, 0,  1, 0, 1, 0,  0,  0],

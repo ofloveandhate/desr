@@ -941,7 +941,7 @@ class ODESystem(object):
                 raise RuntimeError(f'variable `{v}` appears to not actually be a single variable.  have {found_vars}')
 
 
-    def power_matrix(self):
+    def exponent_matrix(self):
         '''
         Determine the 'exponent' or 'power' matrix of the system, denoted by :math:`K` in the literature,
         by gluing together the power matrices of each derivative, initial condition, constraint, and require-same-variable.
@@ -954,7 +954,7 @@ class ODESystem(object):
         >>> system = ODESystem.from_equations(eqns)
         >>> system.variables
         (t, c, s, e_0, k_1, k_2, k_m1)
-        >>> system.power_matrix()
+        >>> system.exponent_matrix()
         Matrix([
         [1, 1, 1,  1, 1, 1,  1],
         [0, 0, 0, -1, 0, 1,  1],
@@ -970,7 +970,7 @@ class ODESystem(object):
             * Change the code to agree with the paper.
 
         >>> system.update_initial_conditions({'s': 's_0'})
-        >>> system.power_matrix()
+        >>> system.exponent_matrix()
         Matrix([
         [1, 1, 1,  1, 1, 1,  1,  0],
         [0, 0, 0, -1, 0, 1,  1,  0],
@@ -984,7 +984,7 @@ class ODESystem(object):
 
         exprs = self._expressions()
 
-        matrices = [rational_expr_to_power_matrix(expr, self.variables) for expr in exprs]
+        matrices = [rational_expr_to_exponent_matrix(expr, self.variables) for expr in exprs]
         out = sympy.Matrix.hstack(*matrices)
         assert out.shape[0] == len(self.variables)
         return out
@@ -1098,7 +1098,7 @@ def parse_de(diff_eq, indep_var='t'):
     # Feed in _clash1 so that we can use variables S, C, etc., which are special characters in sympy.
     return sympy.var(match.group(1)), sympy.sympify(match.group(3), _clash1)
 
-def rational_expr_to_power_matrix(expr, variables):
+def rational_expr_to_exponent_matrix(expr, variables):
     '''
     Take a rational expression and determine the power matrix wrt an ordering on the variables, as on page 497 of
     Hubert-Labahn.
@@ -1107,7 +1107,7 @@ def rational_expr_to_power_matrix(expr, variables):
     >>> variables = sorted(expressions_to_variables(exprs), key=str)
     >>> variables
     [K, d, h, k, n, p, r, s]
-    >>> rational_expr_to_power_matrix(exprs[0], variables)
+    >>> rational_expr_to_exponent_matrix(exprs[0], variables)
     Matrix([
     [0, -1, -1, 0, 0,  0],
     [0,  1,  0, 1, 0,  1],
@@ -1118,7 +1118,7 @@ def rational_expr_to_power_matrix(expr, variables):
     [0,  1,  1, 1, 1,  0],
     [0,  0,  0, 0, 0,  0]])
 
-    >>> rational_expr_to_power_matrix(exprs[1], variables)
+    >>> rational_expr_to_exponent_matrix(exprs[1], variables)
     Matrix([
     [ 0, 0],
     [ 0, 0],
@@ -1181,11 +1181,11 @@ def maximal_scaling_matrix(exprs, variables=None):
     '''
     if variables is None:
         variables = sorted(expressions_to_variables(exprs), key=str)
-    matrices = [rational_expr_to_power_matrix(expr, variables) for expr in exprs]
-    power_matrix = sympy.Matrix.hstack(*matrices)
-    assert power_matrix.shape[0] == len(variables)
+    matrices = [rational_expr_to_exponent_matrix(expr, variables) for expr in exprs]
+    exponent_matrix = sympy.Matrix.hstack(*matrices)
+    assert exponent_matrix.shape[0] == len(variables)
 
-    hermite_rform, multiplier_rform = hnf_row(power_matrix)
+    hermite_rform, multiplier_rform = hnf_row(exponent_matrix)
 
     # Find the non-zero rows at the bottom
     row_is_zero = [all([i == 0 for i in row]) for row in hermite_rform.tolist()]
@@ -1200,7 +1200,7 @@ def maximal_scaling_matrix(exprs, variables=None):
     # Return the last num_nonzero rows of the Hermite multiplier
     return hnf_row(multiplier_rform[-num_nonzero:, :])[0]
 
-__all__ = ['ODESystem','parse_de','rational_expr_to_power_matrix','maximal_scaling_matrix']
+__all__ = ['ODESystem','parse_de','rational_expr_to_exponent_matrix','maximal_scaling_matrix']
 
 if __name__ == '__main__':
     import doctest

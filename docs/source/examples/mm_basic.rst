@@ -50,7 +50,7 @@ First we make the system in Python from LaTeX code.
 
 We can see the system's properties
 
-    >>> system.power_matrix()
+    >>> system.exponent_matrix()
     Matrix([
     [1, 1,  1, 1, 1, 1,  1],
     [0, 0, -1, 1, 0, 0,  1],
