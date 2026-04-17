@@ -522,7 +522,7 @@ class ODETranslation(object):
         # Blow the cache of the inverse
         self._inv_herm_mult = None
 
-    def translate(self, system, naming_scheme=None):
+    def translate(self, system, naming_scheme=None, include_aux_vars=True):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
@@ -546,7 +546,7 @@ class ODETranslation(object):
             return self.translate_dep_var(system=system)
 
         elif (len(system.variables) == self.scaling_matrix.shape[1]):
-            return self.translate_general(system=system)
+            return self.translate_general(system=system,include_aux_vars=include_aux_vars)
 
         raise ValueError("System doesn't have the right number of variables for translation")
 
@@ -679,7 +679,7 @@ class ODETranslation(object):
 
         return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var, is_reduced=True)
 
-    def translate_general(self, system):
+    def translate_general(self, system, include_aux_vars = True):
         '''
         The most general reduction scheme.
         If there are :math:`n` variables (including the independent variable) then there will be a system of
@@ -704,6 +704,15 @@ class ODETranslation(object):
         dy3/dt = 0
         dy4/dt = 0
         dy5/dt = 0
+
+        >>> translation.translate_general(system=system, include_aux_vars=False)
+        dt/dt = 1
+        dy0/dt = y0/t
+        dy1/dt = y1*(-y0*y1*y5/y3 - y0*y2/(y1 + 1) + y0*y5)/t
+        dy2/dt = y2*(y0 - y0*y2*y4/y1)/t
+        dy3/dt = 0
+        dy4/dt = 0
+        dy5/dt = 0
         '''
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
@@ -716,26 +725,39 @@ class ODETranslation(object):
         else:
             invariant_variables = list(invariant_variables)
 
-        # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
-        #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
-        num_aux_var = self.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
-        if num_aux_var == 1:
-            auxiliary_variables = [auxiliary_variables]
-        else:
-            auxiliary_variables = list(auxiliary_variables)
+
+        if include_aux_vars:
+            # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
+            #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
+            num_aux_var = self.herm_mult_i.shape[1]
+            auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
+            if num_aux_var == 1:
+                auxiliary_variables = [auxiliary_variables]
+            else:
+                auxiliary_variables = list(auxiliary_variables)
 
         to_sub = dict(zip(system.variables, scale_action(invariant_variables, self.inv_herm_mult_d)))
         system_derivatives = system.derivatives
+
         # fywd = F(y^(W_d)) in Hubert Labahn
         fywd = sympy.Matrix([(system.indep_var * f / v).subs(to_sub, simultaneous=True).expand() for v, f in
                             zip(system.variables, system_derivatives)]).T
         dydt = sympy.Matrix(invariant_variables).T.multiply_elementwise(fywd * self.herm_mult_n) / system.indep_var
-        dxdt = sympy.Matrix(auxiliary_variables).T.multiply_elementwise(fywd * self.herm_mult_i) / system.indep_var
 
-        new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
-        new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
-        assert len(new_variables) == len(new_derivatives) == len(system.variables) + 1
+        if include_aux_vars:
+            dxdt = sympy.Matrix(auxiliary_variables).T.multiply_elementwise(fywd * self.herm_mult_i) / system.indep_var
+
+        if include_aux_vars:
+            new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
+            new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
+            assert len(new_variables) == len(new_derivatives) == len(system.variables) + 1
+        else:
+            # don't include the aux vars.
+            new_variables = [system.indep_var] + list(invariant_variables)
+            new_derivatives = [sympy.sympify(1)] + list(dydt)
+            # see remark 3.2 in the second arxiv version of the paper, where we discuss this number
+            assert len(new_variables) == len(new_derivatives) == len(system.variables) - self.r + 1
+
         return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
 
     def _is_translate_parameter_compatible(self, system):
