@@ -58,15 +58,17 @@ class ODETranslation(object):
         if (variables_domain is not None) and (self.n != len(self.variables_domain)):
             raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
 
-        self._scaling_matrix_hnf, self._herm_mult = normal_hnf_col(scaling_matrix)
-
         if hermite_multiplier is not None:
-            if not is_hnf_col(scaling_matrix * hermite_multiplier):
+            self._scaling_matrix_hnf = scaling_matrix * hermite_multiplier
+            if not is_hnf_col(self._scaling_matrix_hnf):
                 raise ValueError('{}.{}={} is not in HNF'.format(scaling_matrix,
-                                 hermite_multiplier, scaling_matrix * hermite_multiplier))
+                                 hermite_multiplier, self._scaling_matrix_hnf))
             self._herm_mult = hermite_multiplier
+        else:
+            self._scaling_matrix_hnf, self._herm_mult = normal_hnf_col(scaling_matrix)
 
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def set_naming_scheme(self, naming_scheme):
         '''
@@ -245,7 +247,10 @@ class ODETranslation(object):
         [1, 1, 1],
         [1, 0, 0]])
         '''
-        return _int_inv(self.dep_var_herm_mult(indep_var_index=indep_var_index))
+        if indep_var_index not in self._dep_var_inv_herm_mult_cache:
+            self._dep_var_inv_herm_mult_cache[indep_var_index] = \
+                _int_inv(self.dep_var_herm_mult(indep_var_index=indep_var_index))
+        return self._dep_var_inv_herm_mult_cache[indep_var_index].copy()
 
     @property
     def variables_domain(self):
@@ -355,6 +360,7 @@ class ODETranslation(object):
         self._herm_mult.col_swap(i, j)
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def multiplier_add_columns(self, i, j, alpha):
         '''
@@ -445,6 +451,7 @@ class ODETranslation(object):
         self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def multiplier_negate_column(self, i):
         '''
@@ -521,6 +528,7 @@ class ODETranslation(object):
         self._herm_mult.col_op(i, lambda v, index: -v)
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def translate(self, system, naming_scheme=None, include_aux_vars=True):
         '''
@@ -711,22 +719,13 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
-        if num_inv_var == 1:
-            invariant_variables = [invariant_variables]
-        else:
-            invariant_variables = list(invariant_variables)
-
+        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             num_aux_var = self.herm_mult_i.shape[1]
-            auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
-            if num_aux_var == 1:
-                auxiliary_variables = [auxiliary_variables]
-            else:
-                auxiliary_variables = list(auxiliary_variables)
+            auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
 
         to_sub = dict(zip(system.variables, scale_action(invariant_variables, self.inv_herm_mult_d)))
         system_derivatives = system.derivatives
