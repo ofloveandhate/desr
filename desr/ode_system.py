@@ -1036,16 +1036,13 @@ class ODESystem(object):
             else:
                 variables = tuple(variables)
 
-        # test that the set of variables is the same in the new order.
-        # silvaina suspects the code would be clearer if we just set-ified them.
-        if not sorted(list(map(str, variables))) == sorted(list(map(str, self.variables))):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(list(map(str, self.variables))), sorted(list(map(str, variables)))))
-        
-        column_shuffle = []
-        for new_var in variables:
-            for i, var in enumerate(self.variables):
-                if str(var) == str(new_var):
-                    column_shuffle.append(i)
+        variables = [sympy.Symbol(v) if isinstance(v, str) else v for v in variables]
+
+        if set(variables) != set(self.variables):
+            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(self.variables, key=str), sorted(variables, key=str)))
+
+        var_to_index = {var: i for i, var in enumerate(self.variables)}
+        column_shuffle = [var_to_index[new_var] for new_var in variables]
 
         self._variables = tuple( [self._variables[i] for i in column_shuffle])
         self._derivatives = tuple( [self._derivatives[i] for i in column_shuffle])

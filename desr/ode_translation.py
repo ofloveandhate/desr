@@ -648,20 +648,12 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
-        if num_inv_var == 1:
-            invariant_variables = [invariant_variables]
-        else:
-            invariant_variables = list(invariant_variables)
+        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
 
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
-        if num_aux_var == 1:
-            auxiliary_variables = [auxiliary_variables]
-        else:
-            auxiliary_variables = list(auxiliary_variables)
+        auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
 
         system_var_no_indep = list(system.variables)
         system_var_no_indep.pop(system.indep_var_index)
@@ -799,7 +791,7 @@ class ODETranslation(object):
 
         if (isinstance(self._naming_scheme[1], str)):
             new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
-            new_vars = [sympy.sympify(v, _clash1) for v in new_vars]
+            new_vars = [sympy.Symbol(v) for v in new_vars]
         else:
 
             if len(self._naming_scheme[1]) != system.num_nonconstants:
@@ -815,7 +807,7 @@ class ODETranslation(object):
             # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
             new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
 
-        the_map = {system.indep_var: sympy.var(self._naming_scheme[0])}
+        the_map = {system.indep_var: sympy.Symbol(self._naming_scheme[0])}
 
         for v,V in zip(system.non_constant_variables, new_vars):
             the_map[v] = V
@@ -870,8 +862,7 @@ class ODETranslation(object):
 
         variable_map = self.variable_map(system)
         # Form new constants
-        new_consts = ['{}{}'.format(self._naming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
-        new_consts = list(map(sympy.sympify, new_consts))
+        new_consts = [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at)) for i in range(system.num_constants - self.r)]
 
         to_sub = {}
 

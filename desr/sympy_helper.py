@@ -101,7 +101,7 @@ def degree(expr):
         return 0
     degree = 0
     for term in expr.as_coefficients_dict().keys():
-        degree = max(degree, len(term.atoms(sympy.Symbol)))
+        degree = max(degree, len(term.free_symbols))
     return degree
 
 def is_constant(expr):
@@ -121,7 +121,7 @@ def is_constant(expr):
     '''
     if isinstance(expr, (int, float)):
         return True
-    return len(expr.atoms(sympy.Symbol)) == 0
+    return not expr.free_symbols
 
 def is_equation(eqn, check_true=True):
     ''' Return True if it is an equation rather than a boolean value.
