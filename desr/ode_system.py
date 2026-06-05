@@ -310,7 +310,7 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'c_0': 'k'})
         Traceback (most recent call last):
             ...
-        ValueError: Cannot set initial condition k for variable c_0 with derivative None.
+        ValueError: Cannot set initial condition k for constant variable c_0 with derivative None.
         
         >>> system
         dt/dt = 1
@@ -327,12 +327,12 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'x': '1'})
         Traceback (most recent call last):
             ...
-        ValueError: initial condition `1` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
+        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
         
         >>> system.update_initial_conditions({'x': '0'})
         Traceback (most recent call last):
             ...
-        ValueError: initial condition `0` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
+        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
 
         >>> system
         dt/dt = 1
@@ -456,12 +456,12 @@ class ODESystem(object):
         >>> system.add_constraint('c_2', 'c_0 + x')
         Traceback (most recent call last):
             ...
-        ValueError: Cannot add constraints on non-constant parameters set([x]). This would make an interesting project though...
+        ValueError: Cannot add constraints on non-constant parameters {x}. .  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...
 
         >>> system.add_constraint('c_0', 0)
         Traceback (most recent call last):
             ...
-        ValueError: Cannot express equality with 0.
+        ValueError: Cannot express equality constraint with 0. (c_0 == 0)
         '''
         if isinstance(lhs, str):
             lhs = sympy.sympify(lhs, locals=_clash1)
