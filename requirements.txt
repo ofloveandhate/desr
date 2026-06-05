@@ -4,6 +4,7 @@
 
 # Python dependencies
 sympy >= 1.0
+python-flint >= 0.7
 
 # Sphinx dependencies
 Sphinx

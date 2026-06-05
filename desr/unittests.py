@@ -347,13 +347,13 @@ class TestODESystemScaling(TestCase):
                                         ]).T  # Note the transpose! Each column expresses an invariant
 
         max_scal2 = max_scal.extend_from_invariants(invariant_choice=invariant_choice)
-        self.assertTupleEqual(tuple(max_scal2.invariants()), (t*r, h*p/d, n / d, K/d, h*s/k, r/s))
+        self.assertTupleEqual(tuple(max_scal2.invariants()), (t*r, h*p/d, n/d, k*p/(d*s), K/d, r/s))
 
         # This should work even if we move the time about
         invariant_choice = sympy.Matrix([[0, 0, 1, 0, -1, 1, 0, 0, 0],  # p * h /d
                                         ]).T  # Note the transpose! Each column expresses an invariant
         max_scal3 = max_scal.extend_from_invariants(invariant_choice=invariant_choice)
-        self.assertTupleEqual(tuple(max_scal3.invariants()), (h*p/d, t*s, n / d, K/d, h*s/k, r/s))
+        self.assertTupleEqual(tuple(max_scal3.invariants()), (h*p/d, s*t, n/d, k*p/(d*s), K/d, r/s))
 
 
         reduced_system = max_scal.translate(system=system)

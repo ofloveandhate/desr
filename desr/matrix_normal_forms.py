@@ -3,7 +3,17 @@
 import sympy
 import itertools
 
-import desr.diophantine as diophantine
+from flint import fmpz_mat as _fmpz_mat
+
+
+def _to_fmpz(m):
+    """sympy.Matrix (integer entries) → fmpz_mat"""
+    return _fmpz_mat([[int(v) for v in row] for row in m.tolist()])
+
+
+def _from_fmpz(m):
+    """fmpz_mat → sympy.Matrix"""
+    return sympy.Matrix(m.tolist())
 
 def get_pivot_row_indices(matrix_):
     ''' Return the pivot indices of the matrix
@@ -139,13 +149,9 @@ def hnf_row_lll(matrix_):
     '''
     assert len(matrix_.shape) == 2
 
-    # For some reason diophantine barfs if we only have one row. Work around this.
-    if matrix_.shape[0] == 1:
-        hnf = matrix_.copy()
-        unimodular_matrix = sympy.Matrix([[1]])
-        rank = 1 - int(hnf.is_zero_matrix)
-    else:
-        hnf, unimodular_matrix, rank = diophantine.lllhermite(matrix_, m1=1, n1=1)
+    h, u = _to_fmpz(matrix_).hnf(transform=True)   # H == U * A
+    hnf = _from_fmpz(h)
+    unimodular_matrix = _from_fmpz(u)
 
     if not abs(unimodular_matrix.det()) == 1:
         raise RuntimeError('Row operation matrix {} has determinant {}, not +-1'.format(unimodular_matrix, unimodular_matrix.det()))
@@ -189,11 +195,11 @@ def hnf_col_lll(matrix_):
     [0, 1, 0, 0, 0]])
     >>> v
     Matrix([
-    [-1,  0,  0, -1, -1],
-    [-3, -1,  6, -1,  0],
-    [ 1,  0,  1,  1,  2],
-    [ 0, -1, -3, -3,  0],
-    [ 0,  1,  0,  2, -2]])
+    [ 1,  -7, -2,  -28,  5],
+    [ 4, -28, -7, -104, 20],
+    [-1,   7,  2,   27, -5],
+    [ 0,   2,  0,    3, -3],
+    [ 0,  -1,  0,    0,  2]])
      >>> A * v == h
      True
     '''

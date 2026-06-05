@@ -1341,7 +1341,7 @@ class ODETranslation(object):
 
         >>> new_translation = ode_translation.extend_from_invariants(new_inv)
         >>> new_translation.invariants(variables=variables)
-        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y1*y4**2/y5**2]])
+        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y2**2/y4**3]])
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
@@ -1475,9 +1475,9 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     ...                         [5, 6],])
     >>> extend_rectangular_matrix(matrix_)
     Matrix([
-    [ 3, 2, 0],
-    [-2, 1, 1],
-    [ 5, 6, 1]])
+    [ 3, 2,  3],
+    [-2, 1, -3],
+    [ 5, 6,  4]])
     """
     matrix_ = matrix_.copy()
     if len(matrix_.shape) != 2:
