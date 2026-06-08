@@ -104,6 +104,36 @@ def is_hnf_row(matrix_):
                 return False
     return True
 
+def _canonicalise_hnf_row(hnf, unimodular_matrix):
+    '''Canonicalise a row-style Hermite normal form in place.
+
+    Makes every pivot positive and reduces every entry *above* a pivot into the range
+    ``[0, pivot)``, applying the same row operations to ``unimodular_matrix`` so that the
+    relation ``unimodular_matrix * A == hnf`` is preserved.
+
+    Some HNF backends return a valid unimodular triangularisation whose above-pivot entries
+    are not fully reduced -- notably the diophantine LLL port, whose row sign-normalisation
+    can un-reduce a previously reduced entry and which has no final reduction sweep.  This
+    makes the output canonical, and therefore independent of the backend.  It is a no-op on
+    output that is already in canonical HNF (e.g. from FLINT).
+
+    Args:
+        hnf (sympy.Matrix): A row-style HNF candidate (any zero rows are at the bottom).
+        unimodular_matrix (sympy.Matrix): The accompanying unimodular row-operation matrix.
+    '''
+    num_nonzero_rows = sum(1 for row in hnf.tolist() if any(val != 0 for val in row))
+    for piv_row, piv_col in enumerate(get_pivot_row_indices(hnf[:num_nonzero_rows, :])):
+        if hnf[piv_row, piv_col] < 0:
+            hnf[piv_row, :] *= -1
+            unimodular_matrix[piv_row, :] *= -1
+        pivot = hnf[piv_row, piv_col]
+        for above in range(piv_row):
+            quotient = hnf[above, piv_col] // pivot
+            if quotient != 0:
+                hnf[above, :] -= quotient * hnf[piv_row, :]
+                unimodular_matrix[above, :] -= quotient * unimodular_matrix[piv_row, :]
+
+
 def hnf_row_lll(matrix_):
     '''
     Compute the Hermite normal form, acts on the ROWS of a matrix.
@@ -156,13 +186,10 @@ def hnf_row_lll(matrix_):
     if not abs(unimodular_matrix.det()) == 1:
         raise RuntimeError('Row operation matrix {} has determinant {}, not +-1'.format(unimodular_matrix, unimodular_matrix.det()))
 
-    # Rectify any negative entries in the HNF:
-    for row_ind, row in enumerate(hnf.tolist()):
-        nonzero_ind = [_ind for _ind, _val in enumerate(row) if _val != 0]
-        if len(nonzero_ind):
-            if row[nonzero_ind[0]] < 0:
-                hnf[row_ind, :] *= -1
-                unimodular_matrix[row_ind, :] *= -1
+    # Canonicalise into Hermite normal form (positive pivots, above-pivot entries in [0, pivot)).
+    # This is what makes the result unique and independent of the HNF backend; see
+    # _canonicalise_hnf_row for why some backends return a non-canonical triangularisation.
+    _canonicalise_hnf_row(hnf, unimodular_matrix)
 
     if not is_hnf_row(hnf):
         raise ValueError('{} not able to be put into row HNF. Output is:\n{}'.format(matrix_, hnf))

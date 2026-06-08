@@ -37,6 +37,34 @@ class TestHermiteMethods(TestCase):
         # self.assertEqual(H, V * A)
         # self.assertTrue(is_hnf_row(H))
 
+    def test_canonicalise_hnf_row(self):
+        ''' _canonicalise_hnf_row turns a valid but non-canonical row HNF into the unique
+            canonical one (positive pivots; above-pivot entries reduced into [0, pivot)),
+            while preserving U * A == H.  This guards the post-pass that makes hnf_row_lll
+            backend-independent: FLINT output is already canonical, but other backends (e.g.
+            the diophantine LLL port) can return a non-canonical triangularisation.
+        '''
+        from desr.matrix_normal_forms import _canonicalise_hnf_row
+        A = sympy.Matrix([[3, 1, 4], [1, 5, 9], [2, 6, 5]])
+        H, U = hnf_row_lll(A)
+        self.assertTrue(is_hnf_row(H))
+
+        # Perturb into a valid but non-canonical pair by adding multiples of lower pivot
+        # rows to the rows above them (valid unimodular row ops), pushing above-pivot
+        # entries out of [0, pivot).
+        H_bad, U_bad = H.copy(), U.copy()
+        H_bad[0, :] += 3 * H[2, :]; U_bad[0, :] += 3 * U[2, :]
+        H_bad[1, :] -= 2 * H[2, :]; U_bad[1, :] -= 2 * U[2, :]
+        H_bad[0, :] -= 5 * H[1, :]; U_bad[0, :] -= 5 * U[1, :]
+        self.assertEqual(U_bad * A, H_bad)       # still a valid factorisation
+        self.assertFalse(is_hnf_row(H_bad))      # but no longer canonical
+
+        _canonicalise_hnf_row(H_bad, U_bad)
+        self.assertTrue(is_hnf_row(H_bad))       # now canonical
+        self.assertEqual(H_bad, H)               # equals the unique canonical HNF
+        self.assertEqual(U_bad, U)               # row ops mirrored -> multiplier restored
+        self.assertEqual(U_bad * A, H_bad)       # invariant U * A == H preserved
+
     def test_example1(self):
         ''' Example from Extended gcd and Hermite nomal form via lattice basis reduction '''
 
