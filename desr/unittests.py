@@ -41,8 +41,8 @@ class TestHermiteMethods(TestCase):
         ''' _canonicalise_hnf_row turns a valid but non-canonical row HNF into the unique
             canonical one (positive pivots; above-pivot entries reduced into [0, pivot)),
             while preserving U * A == H.  This guards the post-pass that makes hnf_row_lll
-            backend-independent: FLINT output is already canonical, but other backends (e.g.
-            the diophantine LLL port) can return a non-canonical triangularisation.
+            backend-independent: FLINT output is already canonical, but other HNF algorithms
+            (e.g. an LLL-based Hermite method) can return a non-canonical triangularisation.
         '''
         from desr.matrix_normal_forms import _canonicalise_hnf_row
         A = sympy.Matrix([[3, 1, 4], [1, 5, 9], [2, 6, 5]])

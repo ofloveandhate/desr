@@ -111,11 +111,11 @@ def _canonicalise_hnf_row(hnf, unimodular_matrix):
     ``[0, pivot)``, applying the same row operations to ``unimodular_matrix`` so that the
     relation ``unimodular_matrix * A == hnf`` is preserved.
 
-    Some HNF backends return a valid unimodular triangularisation whose above-pivot entries
-    are not fully reduced -- notably the diophantine LLL port, whose row sign-normalisation
-    can un-reduce a previously reduced entry and which has no final reduction sweep.  This
-    makes the output canonical, and therefore independent of the backend.  It is a no-op on
-    output that is already in canonical HNF (e.g. from FLINT).
+    Some HNF algorithms return a valid unimodular triangularisation whose above-pivot
+    entries are not fully reduced (e.g. an LLL-based Hermite method whose row sign-
+    normalisation can un-reduce a previously reduced entry, with no final reduction sweep).
+    Canonicalising here makes the output independent of the backend.  It is a no-op on output
+    that is already in canonical HNF, such as FLINT's.
 
     Args:
         hnf (sympy.Matrix): A row-style HNF candidate (any zero rows are at the bottom).
