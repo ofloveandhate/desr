@@ -119,23 +119,23 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
     V=
     Matrix([
     [ 0,  0,  0,  0, 1,  0,  0,  0],
-    [ 0,  0,  1,  0, 0,  0,  0,  0],
-    [ 0,  0,  0,  0, 0,  1,  0,  0],
-    [ 0,  0,  0,  1, 0,  0,  0,  0],
+    [ 0,  0,  1,  0, 0,  1,  0,  0],
     [ 0,  0,  0,  0, 0,  0,  1,  0],
-    [ 0, -1,  1,  1, 0,  1,  1,  0],
-    [ 0,  0, -1,  0, 0,  0,  0,  1],
+    [ 0,  0,  0,  1, 0,  0,  0,  0],
+    [ 0,  0,  0,  0, 0,  0,  0,  1],
+    [ 0, -1,  1,  1, 0,  1,  1,  1],
+    [ 0,  0, -1,  0, 0,  0,  0,  0],
     [-1,  1,  0, -1, 1, -1, -1, -1]])
     W=
     Matrix([
     [1, 0, 0, 0, 0, -1, -1, -1],
     [0, 1, 1, 1, 1, -1,  0,  0],
-    [0, 1, 0, 0, 0,  0,  0,  0],
+    [0, 0, 0, 0, 0,  0, -1,  0],
     [0, 0, 0, 1, 0,  0,  0,  0],
     [1, 0, 0, 0, 0,  0,  0,  0],
+    [0, 1, 0, 0, 0,  0,  1,  0],
     [0, 0, 1, 0, 0,  0,  0,  0],
-    [0, 0, 0, 0, 1,  0,  0,  0],
-    [0, 1, 0, 0, 0,  0,  1,  0]])
+    [0, 0, 0, 0, 1,  0,  0,  0]])
 
 For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
 
@@ -144,31 +144,31 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
 :meth:`~desr.ode_translation.ODETranslation.translate_dep_var`.
 
     >>> max_scal2.invariants()
-    Matrix([[C*k_1/k_2, P*k_1/k_m1, k_m1*t, E*k_1/k_m1, S*k_1/k_m1, k_2/k_m1]])
+    Matrix([[C*k_1/k_2, P*k_1/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, S*k_1/k_m1]])
     >>> max_scal2.translate(original_system)
     dt/dt = 1
     dx0/dt = 0
     dx1/dt = 0
-    dy0/dt = y0*(-y2*y5 - y2 + y2*y3*y4/(y0*y5))/t
-    dy1/dt = y0*y2*y5**2/t
+    dy0/dt = y0*(-y2 + y2*y4*y5/y3 - y2*y3/y0)/t
+    dy1/dt = y2*y3**2/(t*y0)
     dy2/dt = y2/t
-    dy3/dt = y3*(y0*y2*y5**2/y3 + y0*y2*y5/y3 - y2*y4)/t
-    dy4/dt = y4*(y0*y2*y5/y4 - y2*y3)/t
-    dy5/dt = 0
+    dy3/dt = y3*(-y2 + y2*y4*y5/y3 - y2*y3/y0)/t
+    dy4/dt = y4*(y2*y3/y4 - y2*y5 + y2*y3**2/(y0*y4))/t
+    dy5/dt = y5*(y2*y3/y5 - y2*y4)/t
 
 Here, :code:`x0` and :code:`x1` are auxiliary variables, which can be fixed at any value at all.
-:code:`(y0, y1, y2, y3, y4) = (C*k_1/k_2, P*k_1/k_m1, k_m1*t, E*k_1/k_m1, S*k_1/k_m1)` are our new dependent invariants.
-Finally, :code:`y5 = k_2/k_m1` is the single parameter of the reduced system.
+The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, S*k_1/k_m1)`
+are our new dependent invariants; the first two are exactly the invariants we chose to study.
 
-However, we can see that after performing a permutation of the columns, we can satisfy the parameter reduction scheme.
-While this isn't implemented yet, we can do it by hand for the moment. We must apply the cycle
-:math:`\begin{pmatrix}0 & 1 & 3 & 2\end{pmatrix}`
-to the last :math:`n-r` columns.
+However, we can rearrange these invariants into an order that *does* satisfy the parameter reduction scheme.
+While this isn't implemented yet, we can do it by hand for the moment. First we expose the parameter
+:math:`k_2 / k_{-1}` as a single column, by subtracting the :math:`\frac{k_1}{k_2} C` column from the
+:math:`\frac{k_1}{k_{-1}} C` column. We then reorder the last :math:`n-r` columns so that the dependent
+invariants come first and the parameter comes last.
 
     >>> max_scal3 = max_scal2.herm_mult_n
-    >>> max_scal3.col_swap(0, 1)
-    >>> max_scal3.col_swap(0, 3)
-    >>> max_scal3.col_swap(0, 2)
+    >>> max_scal3[:, 3] = max_scal3[:, 3] - max_scal3[:, 0]  # C*k_1/k_m1 - C*k_1/k_2 = k_2/k_m1
+    >>> max_scal3 = max_scal3[:, [2, 0, 4, 1, 5, 3]]  # dependent invariants first, parameter last
     >>> print(f'Permuted Vn:\n{repr(max_scal3)}')
     Permuted Vn:
     Matrix([

@@ -1,7 +1,7 @@
 
 import sympy
 
-from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
+from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
 from sympy.abc import _clash1
@@ -1331,7 +1331,7 @@ class ODETranslation(object):
 
         >>> new_translation = ode_translation.extend_from_invariants(new_inv)
         >>> new_translation.invariants(variables=variables)
-        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y2**2/y4**3]])
+        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y0**3*y2*y5**2/(y3**2*y4**5)]])
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
@@ -1465,9 +1465,9 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     ...                         [5, 6],])
     >>> extend_rectangular_matrix(matrix_)
     Matrix([
-    [ 3, 2,  3],
-    [-2, 1, -3],
-    [ 5, 6,  4]])
+    [ 3, 2, -2],
+    [-2, 1,  0],
+    [ 5, 6, -5]])
     """
     matrix_ = matrix_.copy()
     if len(matrix_.shape) != 2:
@@ -1481,18 +1481,20 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     elif n == m:
         return matrix_
 
-    # First find a Smith normal form decomposition of matrix_
-    smith_normal_form, row_actions, col_actions = smf(matrix_=matrix_)
+    # Compute the unique normal row Hermite multiplier, so that multiplier . matrix_ = [I; 0].
+    # matrix_ extends to a unimodular matrix exactly when this row HNF is [I; 0]; then
+    # [matrix_ | extension] = multiplier^-1, so the canonical extension is the last n - m
+    # columns of multiplier^-1.  Using the *normal* (unique) Hermite multiplier makes the
+    # extension unique and independent of the underlying HNF backend, unlike the non-unique
+    # transformation matrices returned by the Smith normal form.
+    hermite_normal_form, multiplier = normal_hnf_row(matrix_)
 
     if check_unimodular:
-        # We require our extension to have determinant 1, which is only possible if the final entry on the leading diagonal
-        # is 1.
-        if smith_normal_form[min(n, m) - 1, min(n, m) - 1] != 1:
+        # Extendable to a determinant +-1 matrix exactly when the row HNF is the identity on top of zeros.
+        if (hermite_normal_form[:m, :] != sympy.eye(m)) or (not hermite_normal_form[m:, :].is_zero_matrix):
             raise ValueError('Unable to extend the matrix\n{}\nto a unimodular matrix.'.format(matrix_))
 
-    # To extend to a unimodular matrix, we can extend matrix_ using the last n-m columns of the row_actions matrix
-    # Since we can extend modulo column operations, put these last few columns in column Hermite normal form
-    extension = hnf_col(_int_inv(row_actions)[:, m:])[0]
+    extension = _int_inv(multiplier)[:, m:]
 
     extended = sympy.Matrix.hstack(matrix_, extension)
 
