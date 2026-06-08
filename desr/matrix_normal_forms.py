@@ -242,7 +242,7 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     # Condition c)
     for i in range(r):
         pivot_val = max(herm_mul_n[i, :])
-        if any(herm_mul_i.row(i).applyfunc(lambda x: abs(x) >= pivot_val)):
+        if any(abs(x) >= pivot_val for x in herm_mul_i.row(i)):
             return False
 
     return True
