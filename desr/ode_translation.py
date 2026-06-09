@@ -1,7 +1,7 @@
 
 import sympy
 
-from desr.matrix_normal_forms import normal_hnf_col, hnf_col, is_hnf_col, smf
+from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
 from sympy.abc import _clash1
@@ -58,15 +58,17 @@ class ODETranslation(object):
         if (variables_domain is not None) and (self.n != len(self.variables_domain)):
             raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
 
-        self._scaling_matrix_hnf, self._herm_mult = normal_hnf_col(scaling_matrix)
-
         if hermite_multiplier is not None:
-            if not is_hnf_col(scaling_matrix * hermite_multiplier):
+            self._scaling_matrix_hnf = scaling_matrix * hermite_multiplier
+            if not is_hnf_col(self._scaling_matrix_hnf):
                 raise ValueError('{}.{}={} is not in HNF'.format(scaling_matrix,
-                                 hermite_multiplier, scaling_matrix * hermite_multiplier))
+                                 hermite_multiplier, self._scaling_matrix_hnf))
             self._herm_mult = hermite_multiplier
+        else:
+            self._scaling_matrix_hnf, self._herm_mult = normal_hnf_col(scaling_matrix)
 
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def set_naming_scheme(self, naming_scheme):
         '''
@@ -245,7 +247,10 @@ class ODETranslation(object):
         [1, 1, 1],
         [1, 0, 0]])
         '''
-        return _int_inv(self.dep_var_herm_mult(indep_var_index=indep_var_index))
+        if indep_var_index not in self._dep_var_inv_herm_mult_cache:
+            self._dep_var_inv_herm_mult_cache[indep_var_index] = \
+                _int_inv(self.dep_var_herm_mult(indep_var_index=indep_var_index))
+        return self._dep_var_inv_herm_mult_cache[indep_var_index].copy()
 
     @property
     def variables_domain(self):
@@ -355,6 +360,7 @@ class ODETranslation(object):
         self._herm_mult.col_swap(i, j)
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def multiplier_add_columns(self, i, j, alpha):
         '''
@@ -445,6 +451,7 @@ class ODETranslation(object):
         self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def multiplier_negate_column(self, i):
         '''
@@ -521,6 +528,7 @@ class ODETranslation(object):
         self._herm_mult.col_op(i, lambda v, index: -v)
         # Blow the cache of the inverse
         self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def translate(self, system, naming_scheme=None, include_aux_vars=True):
         '''
@@ -648,20 +656,12 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
-        if num_inv_var == 1:
-            invariant_variables = [invariant_variables]
-        else:
-            invariant_variables = list(invariant_variables)
+        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
 
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
-        if num_aux_var == 1:
-            auxiliary_variables = [auxiliary_variables]
-        else:
-            auxiliary_variables = list(auxiliary_variables)
+        auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
 
         system_var_no_indep = list(system.variables)
         system_var_no_indep.pop(system.indep_var_index)
@@ -719,22 +719,13 @@ class ODETranslation(object):
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = sympy.var(' '.join(['y{}'.format(i+self._new_indices_start_at) for i in range(num_inv_var)]))
-        if num_inv_var == 1:
-            invariant_variables = [invariant_variables]
-        else:
-            invariant_variables = list(invariant_variables)
-
+        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             num_aux_var = self.herm_mult_i.shape[1]
-            auxiliary_variables = sympy.var(' '.join(['x{}'.format(i+self._new_indices_start_at) for i in range(num_aux_var)]))
-            if num_aux_var == 1:
-                auxiliary_variables = [auxiliary_variables]
-            else:
-                auxiliary_variables = list(auxiliary_variables)
+            auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
 
         to_sub = dict(zip(system.variables, scale_action(invariant_variables, self.inv_herm_mult_d)))
         system_derivatives = system.derivatives
@@ -799,7 +790,7 @@ class ODETranslation(object):
 
         if (isinstance(self._naming_scheme[1], str)):
             new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
-            new_vars = [sympy.sympify(v, _clash1) for v in new_vars]
+            new_vars = [sympy.Symbol(v) for v in new_vars]
         else:
 
             if len(self._naming_scheme[1]) != system.num_nonconstants:
@@ -815,7 +806,7 @@ class ODETranslation(object):
             # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
             new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
 
-        the_map = {system.indep_var: sympy.var(self._naming_scheme[0])}
+        the_map = {system.indep_var: sympy.Symbol(self._naming_scheme[0])}
 
         for v,V in zip(system.non_constant_variables, new_vars):
             the_map[v] = V
@@ -870,8 +861,7 @@ class ODETranslation(object):
 
         variable_map = self.variable_map(system)
         # Form new constants
-        new_consts = ['{}{}'.format(self._naming_scheme[2],i+self._new_indices_start_at) for i in range(system.num_constants - self.r)]
-        new_consts = list(map(sympy.sympify, new_consts))
+        new_consts = [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at)) for i in range(system.num_constants - self.r)]
 
         to_sub = {}
 
@@ -1341,7 +1331,7 @@ class ODETranslation(object):
 
         >>> new_translation = ode_translation.extend_from_invariants(new_inv)
         >>> new_translation.invariants(variables=variables)
-        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y1*y4**2/y5**2]])
+        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y0**3*y2*y5**2/(y3**2*y4**5)]])
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
@@ -1475,9 +1465,9 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     ...                         [5, 6],])
     >>> extend_rectangular_matrix(matrix_)
     Matrix([
-    [ 3, 2, 0],
-    [-2, 1, 1],
-    [ 5, 6, 1]])
+    [ 3, 2, -2],
+    [-2, 1,  0],
+    [ 5, 6, -5]])
     """
     matrix_ = matrix_.copy()
     if len(matrix_.shape) != 2:
@@ -1491,18 +1481,20 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     elif n == m:
         return matrix_
 
-    # First find a Smith normal form decomposition of matrix_
-    smith_normal_form, row_actions, col_actions = smf(matrix_=matrix_)
+    # Compute the unique normal row Hermite multiplier, so that multiplier . matrix_ = [I; 0].
+    # matrix_ extends to a unimodular matrix exactly when this row HNF is [I; 0]; then
+    # [matrix_ | extension] = multiplier^-1, so the canonical extension is the last n - m
+    # columns of multiplier^-1.  Using the *normal* (unique) Hermite multiplier makes the
+    # extension unique and independent of the underlying HNF backend, unlike the non-unique
+    # transformation matrices returned by the Smith normal form.
+    hermite_normal_form, multiplier = normal_hnf_row(matrix_)
 
     if check_unimodular:
-        # We require our extension to have determinant 1, which is only possible if the final entry on the leading diagonal
-        # is 1.
-        if smith_normal_form[min(n, m) - 1, min(n, m) - 1] != 1:
+        # Extendable to a determinant +-1 matrix exactly when the row HNF is the identity on top of zeros.
+        if (hermite_normal_form[:m, :] != sympy.eye(m)) or (not hermite_normal_form[m:, :].is_zero_matrix):
             raise ValueError('Unable to extend the matrix\n{}\nto a unimodular matrix.'.format(matrix_))
 
-    # To extend to a unimodular matrix, we can extend matrix_ using the last n-m columns of the row_actions matrix
-    # Since we can extend modulo column operations, put these last few columns in column Hermite normal form
-    extension = hnf_col(_int_inv(row_actions)[:, m:])[0]
+    extension = _int_inv(multiplier)[:, m:]
 
     extended = sympy.Matrix.hstack(matrix_, extension)
 

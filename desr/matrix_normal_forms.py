@@ -3,7 +3,17 @@
 import sympy
 import itertools
 
-import desr.diophantine as diophantine
+from flint import fmpz_mat as _fmpz_mat
+
+
+def _to_fmpz(m):
+    """sympy.Matrix (integer entries) → fmpz_mat"""
+    return _fmpz_mat([[int(v) for v in row] for row in m.tolist()])
+
+
+def _from_fmpz(m):
+    """fmpz_mat → sympy.Matrix"""
+    return sympy.Matrix(m.tolist())
 
 def get_pivot_row_indices(matrix_):
     ''' Return the pivot indices of the matrix
@@ -94,6 +104,36 @@ def is_hnf_row(matrix_):
                 return False
     return True
 
+def _canonicalise_hnf_row(hnf, unimodular_matrix):
+    '''Canonicalise a row-style Hermite normal form in place.
+
+    Makes every pivot positive and reduces every entry *above* a pivot into the range
+    ``[0, pivot)``, applying the same row operations to ``unimodular_matrix`` so that the
+    relation ``unimodular_matrix * A == hnf`` is preserved.
+
+    Some HNF algorithms return a valid unimodular triangularisation whose above-pivot
+    entries are not fully reduced (e.g. an LLL-based Hermite method whose row sign-
+    normalisation can un-reduce a previously reduced entry, with no final reduction sweep).
+    Canonicalising here makes the output independent of the backend.  It is a no-op on output
+    that is already in canonical HNF, such as FLINT's.
+
+    Args:
+        hnf (sympy.Matrix): A row-style HNF candidate (any zero rows are at the bottom).
+        unimodular_matrix (sympy.Matrix): The accompanying unimodular row-operation matrix.
+    '''
+    num_nonzero_rows = sum(1 for row in hnf.tolist() if any(val != 0 for val in row))
+    for piv_row, piv_col in enumerate(get_pivot_row_indices(hnf[:num_nonzero_rows, :])):
+        if hnf[piv_row, piv_col] < 0:
+            hnf[piv_row, :] *= -1
+            unimodular_matrix[piv_row, :] *= -1
+        pivot = hnf[piv_row, piv_col]
+        for above in range(piv_row):
+            quotient = hnf[above, piv_col] // pivot
+            if quotient != 0:
+                hnf[above, :] -= quotient * hnf[piv_row, :]
+                unimodular_matrix[above, :] -= quotient * unimodular_matrix[piv_row, :]
+
+
 def hnf_row_lll(matrix_):
     '''
     Compute the Hermite normal form, acts on the ROWS of a matrix.
@@ -139,24 +179,17 @@ def hnf_row_lll(matrix_):
     '''
     assert len(matrix_.shape) == 2
 
-    # For some reason diophantine barfs if we only have one row. Work around this.
-    if matrix_.shape[0] == 1:
-        hnf = matrix_.copy()
-        unimodular_matrix = sympy.Matrix([[1]])
-        rank = 1 - int(hnf.is_zero_matrix)
-    else:
-        hnf, unimodular_matrix, rank = diophantine.lllhermite(matrix_, m1=1, n1=1)
+    h, u = _to_fmpz(matrix_).hnf(transform=True)   # H == U * A
+    hnf = _from_fmpz(h)
+    unimodular_matrix = _from_fmpz(u)
 
     if not abs(unimodular_matrix.det()) == 1:
         raise RuntimeError('Row operation matrix {} has determinant {}, not +-1'.format(unimodular_matrix, unimodular_matrix.det()))
 
-    # Rectify any negative entries in the HNF:
-    for row_ind, row in enumerate(hnf.tolist()):
-        nonzero_ind = [_ind for _ind, _val in enumerate(row) if _val != 0]
-        if len(nonzero_ind):
-            if row[nonzero_ind[0]] < 0:
-                hnf[row_ind, :] *= -1
-                unimodular_matrix[row_ind, :] *= -1
+    # Canonicalise into Hermite normal form (positive pivots, above-pivot entries in [0, pivot)).
+    # This is what makes the result unique and independent of the HNF backend; see
+    # _canonicalise_hnf_row for why some backends return a non-canonical triangularisation.
+    _canonicalise_hnf_row(hnf, unimodular_matrix)
 
     if not is_hnf_row(hnf):
         raise ValueError('{} not able to be put into row HNF. Output is:\n{}'.format(matrix_, hnf))
@@ -189,11 +222,11 @@ def hnf_col_lll(matrix_):
     [0, 1, 0, 0, 0]])
     >>> v
     Matrix([
-    [-1,  0,  0, -1, -1],
-    [-3, -1,  6, -1,  0],
-    [ 1,  0,  1,  1,  2],
-    [ 0, -1, -3, -3,  0],
-    [ 0,  1,  0,  2, -2]])
+    [ 1,  -7, -2,  -28,  5],
+    [ 4, -28, -7, -104, 20],
+    [-1,   7,  2,   27, -5],
+    [ 0,   2,  0,    3, -3],
+    [ 0,  -1,  0,    0,  2]])
      >>> A * v == h
      True
     '''
@@ -236,7 +269,7 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     # Condition c)
     for i in range(r):
         pivot_val = max(herm_mul_n[i, :])
-        if any(herm_mul_i.row(i).applyfunc(lambda x: abs(x) >= pivot_val)):
+        if any(abs(x) >= pivot_val for x in herm_mul_i.row(i)):
             return False
 
     return True

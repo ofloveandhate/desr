@@ -28,13 +28,6 @@ desr.matrix_normal_forms module
     :undoc-members:
     :show-inheritance:
 
-desr.diophantine module
------------------------
-
-.. automodule:: desr.diophantine
-    :members:
-    :undoc-members:
-    :show-inheritance:
 
 desr.chemical_reaction_network module
 -------------------------------------

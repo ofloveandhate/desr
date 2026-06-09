@@ -310,7 +310,7 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'c_0': 'k'})
         Traceback (most recent call last):
             ...
-        ValueError: Cannot set initial condition k for variable c_0 with derivative None.
+        ValueError: Cannot set initial condition k for constant variable c_0 with derivative None.
         
         >>> system
         dt/dt = 1
@@ -327,12 +327,12 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'x': '1'})
         Traceback (most recent call last):
             ...
-        ValueError: initial condition `1` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
+        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
         
         >>> system.update_initial_conditions({'x': '0'})
         Traceback (most recent call last):
             ...
-        ValueError: initial condition `0` doesn't appear to be a variable expression.  if you want it to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)
+        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
 
         >>> system
         dt/dt = 1
@@ -456,12 +456,12 @@ class ODESystem(object):
         >>> system.add_constraint('c_2', 'c_0 + x')
         Traceback (most recent call last):
             ...
-        ValueError: Cannot add constraints on non-constant parameters set([x]). This would make an interesting project though...
+        ValueError: Cannot add constraints on non-constant parameters {x}. .  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...
 
         >>> system.add_constraint('c_0', 0)
         Traceback (most recent call last):
             ...
-        ValueError: Cannot express equality with 0.
+        ValueError: Cannot express equality constraint with 0. (c_0 == 0)
         '''
         if isinstance(lhs, str):
             lhs = sympy.sympify(lhs, locals=_clash1)
@@ -1036,16 +1036,13 @@ class ODESystem(object):
             else:
                 variables = tuple(variables)
 
-        # test that the set of variables is the same in the new order.
-        # silvaina suspects the code would be clearer if we just set-ified them.
-        if not sorted(list(map(str, variables))) == sorted(list(map(str, self.variables))):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(list(map(str, self.variables))), sorted(list(map(str, variables)))))
-        
-        column_shuffle = []
-        for new_var in variables:
-            for i, var in enumerate(self.variables):
-                if str(var) == str(new_var):
-                    column_shuffle.append(i)
+        variables = [sympy.Symbol(v) if isinstance(v, str) else v for v in variables]
+
+        if set(variables) != set(self.variables):
+            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(self.variables, key=str), sorted(variables, key=str)))
+
+        var_to_index = {var: i for i, var in enumerate(self.variables)}
+        column_shuffle = [var_to_index[new_var] for new_var in variables]
 
         self._variables = tuple( [self._variables[i] for i in column_shuffle])
         self._derivatives = tuple( [self._derivatives[i] for i in column_shuffle])

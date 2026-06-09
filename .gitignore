@@ -89,3 +89,6 @@ ENV/
 .ropeproject
 
 .DS_Store
+
+# Local notes
+z_notes/

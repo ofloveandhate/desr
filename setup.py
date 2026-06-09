@@ -11,6 +11,7 @@ setup(
     long_description=open('README.md').read(),
     install_requires=[
         'sympy',
+        'python-flint >= 0.7',
     ],
     project_urls={
         "DOI": "https://doi.org/10.5281/zenodo.17671203",

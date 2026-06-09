@@ -37,6 +37,34 @@ class TestHermiteMethods(TestCase):
         # self.assertEqual(H, V * A)
         # self.assertTrue(is_hnf_row(H))
 
+    def test_canonicalise_hnf_row(self):
+        ''' _canonicalise_hnf_row turns a valid but non-canonical row HNF into the unique
+            canonical one (positive pivots; above-pivot entries reduced into [0, pivot)),
+            while preserving U * A == H.  This guards the post-pass that makes hnf_row_lll
+            backend-independent: FLINT output is already canonical, but other HNF algorithms
+            (e.g. an LLL-based Hermite method) can return a non-canonical triangularisation.
+        '''
+        from desr.matrix_normal_forms import _canonicalise_hnf_row
+        A = sympy.Matrix([[3, 1, 4], [1, 5, 9], [2, 6, 5]])
+        H, U = hnf_row_lll(A)
+        self.assertTrue(is_hnf_row(H))
+
+        # Perturb into a valid but non-canonical pair by adding multiples of lower pivot
+        # rows to the rows above them (valid unimodular row ops), pushing above-pivot
+        # entries out of [0, pivot).
+        H_bad, U_bad = H.copy(), U.copy()
+        H_bad[0, :] += 3 * H[2, :]; U_bad[0, :] += 3 * U[2, :]
+        H_bad[1, :] -= 2 * H[2, :]; U_bad[1, :] -= 2 * U[2, :]
+        H_bad[0, :] -= 5 * H[1, :]; U_bad[0, :] -= 5 * U[1, :]
+        self.assertEqual(U_bad * A, H_bad)       # still a valid factorisation
+        self.assertFalse(is_hnf_row(H_bad))      # but no longer canonical
+
+        _canonicalise_hnf_row(H_bad, U_bad)
+        self.assertTrue(is_hnf_row(H_bad))       # now canonical
+        self.assertEqual(H_bad, H)               # equals the unique canonical HNF
+        self.assertEqual(U_bad, U)               # row ops mirrored -> multiplier restored
+        self.assertEqual(U_bad * A, H_bad)       # invariant U * A == H preserved
+
     def test_example1(self):
         ''' Example from Extended gcd and Hermite nomal form via lattice basis reduction '''
 
@@ -76,9 +104,8 @@ class TestHermiteMethods(TestCase):
 
         H, V = hnf_row_lll(A)
         H_nz, H_z = H[:3, :], H[3:, :]
-        self.assertTrue(H_z.is_zero)
+        self.assertTrue(H_z.is_zero_matrix)
         self.assertEqual(H_nz, H_answer_webcalc)
-        self.assertEqual(V, V_answer_webcalc)
         self.assertEqual(H, V * A)
 
     def test_wiki_example(self):
@@ -347,13 +374,13 @@ class TestODESystemScaling(TestCase):
                                         ]).T  # Note the transpose! Each column expresses an invariant
 
         max_scal2 = max_scal.extend_from_invariants(invariant_choice=invariant_choice)
-        self.assertTupleEqual(tuple(max_scal2.invariants()), (t*r, h*p/d, n / d, K/d, h*s/k, r/s))
+        self.assertTupleEqual(tuple(max_scal2.invariants()), (r*t, h*p/d, s*t, n/d, k*p/(d*s), K/d))
 
         # This should work even if we move the time about
         invariant_choice = sympy.Matrix([[0, 0, 1, 0, -1, 1, 0, 0, 0],  # p * h /d
                                         ]).T  # Note the transpose! Each column expresses an invariant
         max_scal3 = max_scal.extend_from_invariants(invariant_choice=invariant_choice)
-        self.assertTupleEqual(tuple(max_scal3.invariants()), (h*p/d, t*s, n / d, K/d, h*s/k, r/s))
+        self.assertTupleEqual(tuple(max_scal3.invariants()), (h*p/d, s*t, n/d, k*p/(d*s), K/d, r/s))
 
 
         reduced_system = max_scal.translate(system=system)
@@ -367,8 +394,7 @@ class TestChemicalReactionNetwork(TestCase):
 
     def test_crn_harrington(self):
         ''' Example 2.8 from Harrington - Joining and decomposing '''
-        species = sympy.var('x1 x2')
-        species = map(ChemicalSpecies, species)
+        species = list(map(ChemicalSpecies, sympy.var('x1 x2')))
         x1, x2 = species
 
         complex0 = Complex()
@@ -392,8 +418,7 @@ class TestChemicalReactionNetwork(TestCase):
 
     def test_crn_harrington2(self):
         ''' Example 1 from Harrington board notes - Joining and decomposing '''
-        species = sympy.var('x1 x2')
-        species = map(ChemicalSpecies, species)
+        species = list(map(ChemicalSpecies, sympy.var('x1 x2')))
         x1, x2 = species
 
         complex0 = Complex({x1: 1, x2: 1})
@@ -432,7 +457,7 @@ class TestInitialConditions(TestCase):
 
         variables = ['t', 's', 'c', 'K', 'k_2', 'k_1', 'e_0']
         original_system.reorder_variables(variables)
-        self.assertEqual(variables, map(str, original_system.variables))
+        self.assertEqual(variables, list(map(str, original_system.variables)))
         self.assertEqual(original_system.exponent_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1],
                                                                        [-1, 0, -1, 0, 0, 1,  1],
                                                                        [ 1, 0,  1, 1, 0, 0, -1],
@@ -449,7 +474,7 @@ class TestInitialConditions(TestCase):
         self.assertSetEqual(set(original_system.initial_conditions.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
                                     (('s', 's_0'),))))
-        self.assertEqual(variables + ['s_0'], map(str, original_system.variables))
+        self.assertEqual(variables + ['s_0'], list(map(str, original_system.variables)))
         self.assertEqual(original_system.exponent_matrix(), sympy.Matrix([[ 1, 1,  1, 1, 1, 1,  1,  0],
                                                                        [-1, 0, -1, 0, 0, 1,  1,  1],
                                                                        [ 1, 0,  1, 1, 0, 0, -1,  0],
@@ -466,12 +491,12 @@ class TestInitialConditions(TestCase):
         reduced_system = max_scal1.translate(original_system)
         self.assertSetEqual(set(reduced_system.derivative_dict.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
-                                    (('c', '-c*c0 - c*s + c2*s'),
-                                     ('s', 'c*c0 - c*c1 + c*s - c2*s'),
-                                     ('t', 1)))))
+                                    (('nu0', 'kappa0*nu1 - kappa1*nu1 - kappa2*nu0 + nu0*nu1'),
+                                     ('nu1', '-kappa0*nu1 + kappa2*nu0 - nu0*nu1'),
+                                     ('tau', 1)))))
         self.assertSetEqual(set(reduced_system.initial_conditions.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
-                                    (('s', 1),))))
+                                    (('nu0', 1),))))
 
 
 if __name__ == '__main__':

@@ -121,7 +121,6 @@ import sympy
 from desr.ode_system import *
 from desr.ode_translation import *
 from desr.matrix_normal_forms import *
-from desr.diophantine import *
 from desr.chemical_reaction_network import *
 from desr.tex_tools import *
 from desr.sympy_helper import *
