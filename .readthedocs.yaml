@@ -16,6 +16,8 @@ build:
     install:
       - pip install .
       - pip install sphinx sphinxcontrib-bibtex sphinx-rtd-theme
+      # numpy and scipy are needed by the doctests in the numerical examples
+      - pip install numpy scipy
     build:
       html:
         - cd docs && sphinx-build -b doctest source/ $READTHEDOCS_OUTPUT/

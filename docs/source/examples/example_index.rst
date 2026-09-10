@@ -8,3 +8,4 @@ Examples
    mm_init_cond
    segel_slemrod
    mm_four_variable
+   mm_numeric_round_trip

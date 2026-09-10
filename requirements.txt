@@ -6,6 +6,11 @@
 sympy >= 1.0
 python-flint >= 0.7
 
+# Optional: needed only for desr.numerics and the numerical examples
+numpy
+scipy
+matplotlib
+
 # Sphinx dependencies
 Sphinx
 sphinxcontrib-bibtex
