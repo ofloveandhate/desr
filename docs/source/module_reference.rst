@@ -38,6 +38,14 @@ desr.chemical_reaction_network module
     :show-inheritance:
 
 
+desr.numerics module
+--------------------
+
+.. automodule:: desr.numerics
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 desr.sympy_helper module
 ------------------------
 

@@ -35,12 +35,17 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
+    'matplotlib.sphinxext.plot_directive',
     'sphinx.ext.viewcode',
     'sphinxcontrib.bibtex',
 ]
 
 
 bibtex_bibfiles = ['desr.bib']
+
+# -- Options for matplotlib figures -----------------------------------
+plot_formats = [('png', 110)]
+plot_html_show_formats = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
