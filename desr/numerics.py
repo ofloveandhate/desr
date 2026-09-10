@@ -338,7 +338,10 @@ class NumericTranslation(object):
         ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var and values.get(self.reduced.indep_var) is not None:
-            result.setdefault(self.system.indep_var, values[self.reduced.indep_var])
+            # Under these schemes the reduced system keeps the original independent
+            # variable, so take it as given rather than reconstructing it -- the monomial
+            # would agree, but only to the accuracy of everything that went into it.
+            result[self.system.indep_var] = values[self.reduced.indep_var]
 
         if not result:
             raise ValueError(
@@ -544,7 +547,7 @@ class NumericTranslation(object):
         ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var:
-            result.setdefault(self.system.indep_var, times)
+            result[self.system.indep_var] = times
         return result
 
     def _integrate_auxiliaries(self, times, sampled, start, rates, invariants_at, options):
