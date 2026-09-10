@@ -175,6 +175,24 @@ since :math:`x_j = 0` is invariant, so it is read once from ``known_values`` and
 magnitude is integrated.
 
 
+The whole workflow, drawn
+-------------------------
+
+``examples/quadrature_recovery.py`` runs all of the above and draws it.
+
+.. plot:: ../../examples/quadrature_recovery.py
+
+The middle panel is the one this page is about.  :math:`x_0` was never solved for -- it is
+absent from the reduced system entirely -- and the line is what
+:meth:`~desr.numerics.NumericTranslation.recover_auxiliaries` produces by integrating its
+equation along the invariants.  The circles are its true value :math:`z_1^4 z_2`, read off
+the direct solution, which the quadrature never sees.  They agree to about
+:math:`3 \times 10^{-11}`.
+
+Given that curve, the right-hand panel is arithmetic: each original variable is a product of
+integer powers of :math:`x_0` and the invariants.
+
+
 When there is nothing to integrate
 ----------------------------------
 

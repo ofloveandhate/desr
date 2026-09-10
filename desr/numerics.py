@@ -514,10 +514,44 @@ class NumericTranslation(object):
             dict: Keyed by the variables of the original system, each an array.
         '''
         values = self._check(values, self.reduced.variables, 'the reduced system')
+        auxiliaries = self.recover_auxiliaries(values, known_values,
+                                               invariants_at=invariants_at,
+                                               **solver_options)
+        times = np.asarray(values[self.reduced.indep_var], dtype=float)
+
+        ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
+        result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
+        if self._shares_indep_var:
+            result[self.system.indep_var] = times
+        return result
+
+    def recover_auxiliaries(self, values, known_values, invariants_at=None,
+                            **solver_options):
+        '''
+        Recover the auxiliary variables that the reduced system does not carry.
+
+        This is the quadrature that :meth:`reverse_solution` performs; call it directly to
+        see the auxiliaries themselves rather than the original system rebuilt from them.
+
+        Args:
+            values (dict): Values of variables of the reduced system: the independent
+                variable as an array of times, and every invariant as an array of the same
+                length.
+            known_values (dict): Values of :attr:`r` variables of the original system at the
+                *first* of those times.
+            invariants_at (callable, optional): ``f(t)`` returning the invariants at time
+                ``t``.  See :meth:`reverse_solution`.
+            **solver_options: Passed to :func:`scipy.integrate.solve_ivp`.
+
+        Returns:
+            list: One array per auxiliary, in the order of the columns of
+            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
+        '''
+        values = self._check(values, self.reduced.variables, 'the reduced system')
         if self.carries_auxiliaries:
             raise ValueError(
                 'The reduced system carries the auxiliary variables {} itself, so there is '
-                'nothing to integrate.  Use reverse().'.format(
+                'nothing to integrate.  Read them from the solution.'.format(
                     ', '.join(map(str, self._auxiliaries))))
 
         times = values.get(self.reduced.indep_var)
@@ -538,17 +572,10 @@ class NumericTranslation(object):
 
         rates = self.auxiliary_growth_rates()
         if all(rate == 0 for rate in rates):
-            auxiliaries = [np.broadcast_to(np.asarray(x, dtype=float), times.shape)
-                           for x in start]
-        else:
-            auxiliaries = self._integrate_auxiliaries(times, sampled, start, rates,
-                                                      invariants_at, solver_options)
-
-        ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
-        result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
-        if self._shares_indep_var:
-            result[self.system.indep_var] = times
-        return result
+            return [np.broadcast_to(np.asarray(x, dtype=float), times.shape)
+                    for x in start]
+        return self._integrate_auxiliaries(times, sampled, start, rates, invariants_at,
+                                           solver_options)
 
     def _integrate_auxiliaries(self, times, sampled, start, rates, invariants_at, options):
         '''Integrate d(log|x|)/dt = H along the solution.  Needs scipy.'''
