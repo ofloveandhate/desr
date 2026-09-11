@@ -121,21 +121,10 @@ Solving then reducing, or reducing then solving
 Before going back, it is worth checking the two routes agree.  There are two ways to get
 from the original system to its solution, and they should give the same answer.
 
-.. code-block:: text
-
-       original values                    forward                     reduced values
-                                 ------------------------->
-       t, s, c, k_1, k_m1,                                            tau, u, v,
-       k_2, e_0, s_0                                                  c0, c1, c2
-
-              |                                                             |
-              |  solve                                                solve |
-              |  (5 parameters)                                (3 parameters)
-              v                                                             v
-
-       original solution                  reverse                   reduced solution
-                                 <-------------------------
-       s(t), c(t)                     + 2 known values                u(tau), v(tau)
+.. image:: ../figures/commuting_square.svg
+   :alt: A commuting square: forward and reverse across the top and bottom, solve down each side.
+   :align: center
+   :width: 100%
 
 Going right-then-down is what we just did: reduce, then solve.  Going down-then-right is the
 other route: solve the original system, then translate its solution.  We have the original

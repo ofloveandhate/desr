@@ -90,5 +90,9 @@ ENV/
 
 .DS_Store
 
+# LaTeX build products for the figures; the .tex source and the .svg output are kept
+docs/source/figures/*.aux
+docs/source/figures/*.pdf
+
 # Local notes
 z_notes/
