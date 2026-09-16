@@ -39,15 +39,15 @@ system.update_initial_conditions({'s': 's_0'})
 system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
 
 translation = ODETranslation.from_ode_system(system, naming_scheme=('tau', ['u', 'v'], 'c'))
-reduced = translation.translate(system)
-numeric = NumericTranslation(system, translation, reduced)
+reduced_system = translation.translate(system)
+numeric = NumericTranslation(system, translation, reduced_system)
 
 t, s, c, k_m1, k_2, k_1, e_0, s_0 = system.variables
-tau, u, v, c0, c1, c2 = reduced.variables
+tau, u, v, c0, c1, c2 = reduced_system.variables
 
 parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
 initial_state = [2.0, 0.0]
-final_time = 8.0
+final_time = 70.0
 
 
 def as_function(a_system, constants):
@@ -59,19 +59,19 @@ def as_function(a_system, constants):
 
 # --------------------------------------------------------- solve both systems
 times = np.linspace(0.0, final_time, 400)
-reference = solve_ivp(as_function(system, parameters), (0.0, final_time), initial_state,
+reference_soln = solve_ivp(as_function(system, parameters), (0.0, final_time), initial_state,
                       t_eval=times, rtol=1e-10, atol=1e-12)
 
 start = numeric.forward({t: 0.0, s: initial_state[0], c: initial_state[1], **parameters})
 reduced_times = numeric.forward({t: times, **parameters})[tau]
 reduced_parameters = {c0: start[c0], c1: start[c1], c2: start[c2]}
 
-solution = solve_ivp(as_function(reduced, reduced_parameters),
+reduced_solution = solve_ivp(as_function(reduced_system, reduced_parameters),
                      (reduced_times[0], reduced_times[-1]),
                      [float(start[u]), float(start[v])],
                      t_eval=reduced_times, rtol=1e-10, atol=1e-12)
 
-recovered = numeric.reverse({tau: solution.t, u: solution.y[0], v: solution.y[1],
+recovered_soln = numeric.reverse({tau: reduced_solution.t, u: reduced_solution.y[0], v: reduced_solution.y[1],
                              **reduced_parameters},
                             known_values={k_1: parameters[k_1], s_0: parameters[s_0]})
 
@@ -98,23 +98,23 @@ def label_end(axes, x, y, text, colour):
 figure, (left, middle, right) = plt.subplots(1, 3, figsize=(13.0, 4.2))
 
 # The reduced system, in its own variables.
-left.plot(solution.t, solution.y[0], color=SUBSTRATE, linewidth=2)
-left.plot(solution.t, solution.y[1], color=COMPLEX, linewidth=2)
-label_end(left, solution.t, solution.y[0], r'$u$', SUBSTRATE)
-label_end(left, solution.t, solution.y[1], r'$v$', COMPLEX)
+left.plot(reduced_solution.t, reduced_solution.y[0], color=SUBSTRATE, linewidth=2)
+left.plot(reduced_solution.t, reduced_solution.y[1], color=COMPLEX, linewidth=2)
+label_end(left, reduced_solution.t, reduced_solution.y[0], r'$u$', SUBSTRATE)
+label_end(left, reduced_solution.t, reduced_solution.y[1], r'$v$', COMPLEX)
 style(left, 'Reduced system\n3 parameters', r'$\tau$', 'invariant')
 
 # The original system: solved directly, and recovered from the reduced solution.
 marks = slice(None, None, 25)
-middle.plot(times, reference.y[0], color=SUBSTRATE, linewidth=2, label='solved directly')
-middle.plot(times, reference.y[1], color=COMPLEX, linewidth=2)
-middle.plot(recovered[t][marks], recovered[s][marks], linestyle='none', marker='o',
+middle.plot(times, reference_soln.y[0], color=SUBSTRATE, linewidth=2, label='solved directly')
+middle.plot(times, reference_soln.y[1], color=COMPLEX, linewidth=2)
+middle.plot(recovered_soln[t][marks], recovered_soln[s][marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6,
-            color=SUBSTRATE, label='recovered from reduced')
-middle.plot(recovered[t][marks], recovered[c][marks], linestyle='none', marker='o',
+            color=SUBSTRATE, label='recovered_soln from reduced')
+middle.plot(recovered_soln[t][marks], recovered_soln[c][marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6, color=COMPLEX)
-label_end(middle, times, reference.y[0], r'$s$', SUBSTRATE)
-label_end(middle, times, reference.y[1], r'$c$', COMPLEX)
+label_end(middle, times, reference_soln.y[0], r'$s$', SUBSTRATE)
+label_end(middle, times, reference_soln.y[1], r'$c$', COMPLEX)
 style(middle, 'Original system\n5 parameters', r'$t$', 'concentration')
 legend = middle.legend(frameon=False, fontsize=9, loc='center right',
                        handler_map={}, labelcolor=INK_SOFT)
@@ -125,8 +125,8 @@ for handle in legend.legend_handles:
 # What the round trip costs: nothing the integrator did not already cost.  The
 # difference sits two orders of magnitude below the tolerance we asked the solver for,
 # so the translation contributes nothing measurable of its own.
-difference_s = np.abs(recovered[s] - reference.y[0])
-difference_c = np.abs(recovered[c] - reference.y[1])
+difference_s = np.abs(recovered_soln[s] - reference_soln.y[0])
+difference_c = np.abs(recovered_soln[c] - reference_soln.y[1])
 right.axhline(1e-10, color=INK_SOFT, linewidth=1, linestyle=(0, (4, 3)))
 right.annotate('tolerance asked of the solver', xy=(0.2, 1e-10), xytext=(0, 5),
                textcoords='offset points', color=INK_SOFT, fontsize=8)
@@ -142,12 +142,12 @@ figure.tight_layout()
 
 
 if __name__ == '__main__':
-    print(reduced)
+    print(reduced_solution)
     print('invariants  :', translation.invariants())
-    print('recovered   :', {str(x): round(float(recovered[x]), 10)
+    print('recovered_soln   :', {str(x): round(float(recovered_soln[x]), 10)
                             for x in (k_m1, k_2, e_0)})
     print('largest difference in s: {:.2e}'.format(
-        np.abs(recovered[s] - reference.y[0]).max()))
+        np.abs(recovered_soln[s] - reference_soln.y[0]).max()))
     print('largest difference in c: {:.2e}'.format(
-        np.abs(recovered[c] - reference.y[1]).max()))
+        np.abs(recovered_soln[c] - reference_soln.y[1]).max()))
     plt.show()
