@@ -7,9 +7,8 @@ thousands of times -- fitting parameters, say -- wants the smallest system it ca
 ``include_aux_vars=False`` for exactly that: it returns the invariants alone and throws the
 auxiliary variables away.
 
-This page shows why that is safe, and how to get the original system back afterwards
-anyway.  The previous example recovered a solution by arithmetic; here there is an
-integration to do first.
+This page discusses this reduction, and how to get the original system back afterwards
+anyway.  Here there is an, integration to do first.
 
 
 When can the auxiliaries be dropped?
@@ -17,10 +16,10 @@ When can the auxiliaries be dropped?
 
 The general reduction produces two blocks of equations: the invariants :math:`y`, which are
 what the reduction is for, and the auxiliaries :math:`x`, which carry the scaling
-information that the invariants discard.  Dropping the second block is only legitimate if
-the first does not depend on it.
+information that the invariants discard (we're using notation compatible with :cite:`Hubert2013c`).  Dropping the :math:`x` block is only legitimate if
+the :math:`y` block does not depend on it.
 
-It does not.  Every auxiliary satisfies an equation of the form
+Fortunately, it does not.  Every auxiliary variable satisfies an equation of the form
 
 .. math::
     :nowrap:
@@ -35,19 +34,31 @@ invariants rather than part of the system, and solving without them loses nothin
 cannot be recomputed.  :mod:`desr` checks this rather than assuming it.
 
 
-A system whose auxiliaries move
--------------------------------
+Example: a system whose auxiliaries move
+-----------------------------------------
 
-We use example 6.6 of :cite:`Hubert2013c`, which has the independent variable in its
-right-hand side.
+Check out example 6.6 of :cite:`Hubert2013c` (starts very bottom of page 503).  The system is originally given as
 
 .. math::
     :nowrap:
 
     \begin{align}
-    \frac{dz_1}{dt} &= \frac{z_1 \left(z_1^5 z_2 - 2 \right)}{3t} \\
-    \frac{dz_2}{dt} &= \frac{z_2 \left(10 - 2 z_1^5 z_2 + \frac{3 z_1^2 z_2}{t} \right)}{3t}
+    t \frac{dz_1}{dt} &= z_1 \left(-\frac{2}{3} + \frac{1}{3} z_1^5 z_2 \right) \\
+    t \frac{dz_2}{dt} &= z_2 \left( \frac{10}{3} - \frac{2}{3} z_1^5 z_2 + \frac{z_1^2 z_2}{t} \right)
     \end{align}
+
+But desr expects the derivative only on the right hand side:
+
+.. math::
+    :nowrap:
+
+    \begin{align}
+    \frac{dz_1}{dt} &= \frac{z_1}{t} \left(-\frac{2}{3} + \frac{1}{3} z_1^5 z_2 \right) \\
+    \frac{dz_2}{dt} &= \frac{z_2}{t} \left( \frac{10}{3} - \frac{2}{3} z_1^5 z_2 + \frac{z_1^2}{t} \right)
+    \end{align}
+
+which has the independent variable in its
+right-hand side.
 
 Build it, and reduce.
 
@@ -55,9 +66,10 @@ Build it, and reduce.
     >>> from scipy.integrate import solve_ivp
     >>> from desr.numerics import NumericTranslation
 
-    >>> equations = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
-    ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
-    >>> system = ODESystem.from_equations(equations)
+    >>> eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
+    >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
+    >>> eqns = [eq1, eq2]
+    >>> system = ODESystem.from_equations(eqns)
     >>> system.reorder_variables(['t', 'z1', 'z2'])
     >>> translation = ODETranslation.from_ode_system(system)
     >>> translation.invariants()
