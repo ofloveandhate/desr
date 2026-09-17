@@ -366,11 +366,17 @@ class ODETranslation(object):
         '''
         Add column j alpha times to the ith column of the Hermite multiplier:
         C_i <- C_i + alpha * C_j
-        Check that we are only operating with 0 columns of the scaling matrix.
+
+        Column j must be an invariant column -- one that :attr:`~scaling_matrix` sends to
+        zero -- since then :math:`AV` is unchanged by the operation and :math:`V` stays
+        unimodular.  Column i may be anything: adding an invariant to another invariant
+        changes the basis of invariants, and adding an invariant to an auxiliary column
+        changes the choice of auxiliary, which is just as free.  Adding an *auxiliary*
+        column anywhere would change :math:`AV`, and is refused.
 
         Args:
-            i (int): Column index
-            j (int): Column index
+            i (int): Column index of the column to change.
+            j (int): Column index of the invariant column to add.
             alpha (int): Coefficient for addition
 
         >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1],
@@ -413,15 +419,43 @@ class ODETranslation(object):
         [-1, 1, 0,  0,  0],
         [ 0, 0, 0,  1,  0]])
 
+        An invariant column may be added to an auxiliary column too; that changes which
+        auxiliary is used, and leaves :math:`AV` alone.
+
         >>> translation.multiplier_add_columns(1, 3, 1)
+        >>> translation.herm_mult.col(1).T
+        Matrix([[0, 1, 0, 0, 0]])
+        >>> translation.scaling_matrix * translation.herm_mult == translation.herm_form
+        True
+
+        But an auxiliary column cannot be added to anything, since that would change
+        :math:`AV`.
+
+        >>> translation.multiplier_add_columns(3, 1, 1)
         Traceback (most recent call last):
             ...
-        ValueError: Cannot swap non-zero column 1
+        ValueError: Cannot add column 1: it is an auxiliary column, not an invariant column, so adding it would change the Hermite form.
 
         >>> translation.multiplier_add_columns(3, 3, 1)
         Traceback (most recent call last):
             ...
         ValueError: Cannot add column 3 to itself
+
+        This is how a particular choice of auxiliary is reached.  Example 6.6 of
+        :cite:`Hubert2013c` uses the auxiliary :math:`t z_1^2` where desr's normal form
+        picks :math:`z_1^4 z_2`; the two differ by an invariant.
+
+        >>> equations = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> system.reorder_variables(['t', 'z1', 'z2'])
+        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation.auxiliaries(), translation.invariants()
+        (Matrix([[z1**4*z2]]), Matrix([[t*z1**3, z1**5*z2]]))
+        >>> translation.multiplier_add_columns(2, 1, -1)   # the paper's second invariant
+        >>> translation.multiplier_add_columns(0, 2, -1)   # and its auxiliary
+        >>> translation.auxiliaries(), translation.invariants()
+        (Matrix([[t*z1**2]]), Matrix([[t*z1**3, z1**2*z2/t]]))
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
@@ -444,10 +478,10 @@ class ODETranslation(object):
         if j < 0: j += self.herm_mult.cols
         if i == j:
             raise ValueError('Cannot add column {} to itself'.format(i))
-        if not self.herm_form.col(i).is_zero_matrix:
-            raise ValueError('Cannot swap non-zero column {}'.format(i))
         if not self.herm_form.col(j).is_zero_matrix:
-            raise ValueError('Cannot swap non-zero column {}'.format(j))
+            raise ValueError('Cannot add column {}: it is an auxiliary column, not an '
+                             'invariant column, so adding it would change the Hermite '
+                             'form.'.format(j))
         self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
         # Blow the cache of the inverse
         self._inv_herm_mult = None

@@ -35,14 +35,32 @@ EQUATIONS = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
 system = ODESystem.from_equations(EQUATIONS)
 system.reorder_variables(['t', 'z1', 'z2'])
 translation = ODETranslation.from_ode_system(system)
+# Move onto the basis Hubert & Labahn use on p. 504, so the figure matches the paper.
+translation.multiplier_add_columns(2, 1, -1)
+translation.multiplier_add_columns(0, 2, -1)
+with_aux = translation.translate_general(system)
 reduced = translation.translate_general(system, include_aux_vars=False)
 numeric = NumericTranslation(system, translation, reduced)
 
 t, z1, z2 = system.variables
+x0 = with_aux.variables[1]
 y0, y1 = numeric.invariant_variables
 
 start_time, final_time = 1.0, 2.0
 initial_state = [0.5, 0.2]
+
+# The paper's exact solution of the reduced system, with the constants that match the
+# starting point above.  Everything numerical below is held to this, not to another solve.
+c1, c2, c3 = sympy.symbols('c1 c2 c3')
+L = sympy.log(c1 - t) - sympy.log(t) + c2
+exact = {x0: c3 / (t ** sympy.Rational(1, 3) * L ** sympy.Rational(2, 3)),
+         y0: c1 / (t * L),
+         y1: t / (c1 - t)}
+constants = {c1: 21, c2: 168 - sympy.log(20), c3: 21 ** sympy.Rational(2, 3)}
+z1_exact, z2_exact = translation.reverse_translate_general((t, exact[x0], exact[y0], exact[y1]))
+exact_z1 = sympy.lambdify(t, z1_exact.subs(constants), modules='numpy')
+exact_z2 = sympy.lambdify(t, z2_exact.subs(constants), modules='numpy')
+exact_x0 = sympy.lambdify(t, exact[x0].subs(constants), modules='numpy')
 
 
 def as_function(a_system):
@@ -52,8 +70,6 @@ def as_function(a_system):
 
 
 times = np.linspace(start_time, final_time, 300)
-reference = solve_ivp(as_function(system), (start_time, final_time), initial_state,
-                      t_eval=times, rtol=1e-11, atol=1e-13)
 
 start = numeric.forward({t: start_time, z1: initial_state[0], z2: initial_state[1]})
 solution = solve_ivp(as_function(reduced), (start_time, final_time),
@@ -69,11 +85,10 @@ reduced_values = {reduced.indep_var: solution.t, y0: solution.y[0], y1: solution
 recovered = numeric.reverse(reduced_values, auxiliaries=at_start, invariants_at=solution.sol)
 
 # The auxiliary was never solved for.  This is the quadrature that reverse() runs
-# internally, asked for on its own so it can be drawn, against what it should have been --
-# the auxiliary of this reduction is x0 = z1**4 * z2, read off the direct solution.
+# internally, asked for on its own so it can be drawn, against the paper's exact x.
 quadrature_auxiliary = numeric.recover_auxiliaries(
     reduced_values, auxiliaries=at_start, invariants_at=solution.sol)[0]
-true_auxiliary = reference.y[0] ** 4 * reference.y[1]
+true_auxiliary = exact_x0(times)
 
 
 def style(axes, title, xlabel, ylabel):
@@ -97,8 +112,8 @@ def label_end(axes, x, y, text, colour):
 figure, (left, middle, right) = plt.subplots(1, 3, figsize=(13.0, 4.2))
 
 # What is actually solved: two equations instead of three.
-left.semilogy(solution.t, solution.y[0], color=FIRST, linewidth=2)
-left.semilogy(solution.t, solution.y[1], color=SECOND, linewidth=2)
+left.plot(solution.t, solution.y[0], color=FIRST, linewidth=2)
+left.plot(solution.t, solution.y[1], color=SECOND, linewidth=2)
 label_end(left, solution.t, solution.y[0], r'$y_0$', FIRST)
 label_end(left, solution.t, solution.y[1], r'$y_1$', SECOND)
 style(left, 'What is solved\ntwo invariants, no auxiliary', r'$t$', 'invariant')
@@ -109,19 +124,19 @@ middle.plot(times, quadrature_auxiliary, color=AUXILIARY, linewidth=2)
 middle.plot(times[marks], true_auxiliary[marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6, color=AUXILIARY)
 label_end(middle, times, quadrature_auxiliary, r'$x_0$', AUXILIARY)
-style(middle, 'What was dropped, put back\n$x_0$ by quadrature; circles are its true value',
+style(middle, 'What was dropped, put back\n$x_0$ by quadrature; circles are its exact value',
       r'$t$', 'auxiliary')
 
-# The original system, reconstructed from both.
-right.plot(times, reference.y[0], color=FIRST, linewidth=2, label='solved directly')
-right.plot(times, reference.y[1], color=SECOND, linewidth=2)
+# The original system, reconstructed from both, against the paper's exact solution.
+right.plot(times, exact_z1(times), color=FIRST, linewidth=2, label='exact (Hubert & Labahn)')
+right.plot(times, exact_z2(times), color=SECOND, linewidth=2)
 right.plot(times[marks], recovered[z1][marks], linestyle='none', marker='o', markersize=8,
            markerfacecolor='none', markeredgewidth=1.6, color=FIRST,
            label='recovered from reduced')
 right.plot(times[marks], recovered[z2][marks], linestyle='none', marker='o', markersize=8,
            markerfacecolor='none', markeredgewidth=1.6, color=SECOND)
-label_end(right, times, reference.y[0], r'$z_1$', FIRST)
-label_end(right, times, reference.y[1], r'$z_2$', SECOND)
+label_end(right, times, exact_z1(times), r'$z_1$', FIRST)
+label_end(right, times, exact_z2(times), r'$z_2$', SECOND)
 style(right, 'The original system\nrebuilt from the invariants and $x_0$', r'$t$', 'value')
 legend = right.legend(frameon=False, fontsize=9, loc='upper left', labelcolor=INK_SOFT)
 for handle in legend.legend_handles:
@@ -135,10 +150,8 @@ if __name__ == '__main__':
     print('reduced system:')
     print(reduced)
     print('growth rate of the auxiliary:', numeric.auxiliary_growth_rates())
-    print('largest difference in z1: {:.2e}'.format(
-        np.abs(recovered[z1] - reference.y[0]).max()))
-    print('largest difference in z2: {:.2e}'.format(
-        np.abs(recovered[z2] - reference.y[1]).max()))
-    print('largest difference in x0: {:.2e}'.format(
-        np.abs(quadrature_auxiliary - true_auxiliary).max()))
+    print('largest difference from the exact solution:')
+    print('  z1: {:.2e}'.format(np.abs(recovered[z1] - exact_z1(times)).max()))
+    print('  z2: {:.2e}'.format(np.abs(recovered[z2] - exact_z2(times)).max()))
+    print('  x0: {:.2e}'.format(np.abs(quadrature_auxiliary - true_auxiliary).max()))
     plt.show()
