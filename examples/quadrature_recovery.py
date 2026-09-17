@@ -116,7 +116,7 @@ left.plot(solution.t, solution.y[0], color=FIRST, linewidth=2)
 left.plot(solution.t, solution.y[1], color=SECOND, linewidth=2)
 label_end(left, solution.t, solution.y[0], r'$y_0$', FIRST)
 label_end(left, solution.t, solution.y[1], r'$y_1$', SECOND)
-style(left, 'What is solved\ntwo invariants, no auxiliary', r'$t$', 'invariant')
+style(left, 'Numerical solution of reduced system', r'$t$', r'$y_0, y_1$')
 
 # What was dropped, put back.
 marks = slice(None, None, 20)
@@ -124,20 +124,20 @@ middle.plot(times, quadrature_auxiliary, color=AUXILIARY, linewidth=2)
 middle.plot(times[marks], true_auxiliary[marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6, color=AUXILIARY)
 label_end(middle, times, quadrature_auxiliary, r'$x_0$', AUXILIARY)
-style(middle, 'What was dropped, put back\n$x_0$ by quadrature; circles are its exact value',
-      r'$t$', 'auxiliary')
+style(middle, 'Auxiliary variable $x_0$ by quadrature',
+      r'$t$', '$x_0$')
 
 # The original system, reconstructed from both, against the paper's exact solution.
-right.plot(times, exact_z1(times), color=FIRST, linewidth=2, label='exact (Hubert & Labahn)')
+right.plot(times, exact_z1(times), color=FIRST, linewidth=2, label='exact')
 right.plot(times, exact_z2(times), color=SECOND, linewidth=2)
 right.plot(times[marks], recovered[z1][marks], linestyle='none', marker='o', markersize=8,
            markerfacecolor='none', markeredgewidth=1.6, color=FIRST,
-           label='recovered from reduced')
+           label='numerical, reverse translated from reduced')
 right.plot(times[marks], recovered[z2][marks], linestyle='none', marker='o', markersize=8,
            markerfacecolor='none', markeredgewidth=1.6, color=SECOND)
 label_end(right, times, exact_z1(times), r'$z_1$', FIRST)
 label_end(right, times, exact_z2(times), r'$z_2$', SECOND)
-style(right, 'The original system\nrebuilt from the invariants and $x_0$', r'$t$', 'value')
+style(right, 'Reverse-translated original system', r'$t$', 'value')
 legend = right.legend(frameon=False, fontsize=9, loc='upper left', labelcolor=INK_SOFT)
 for handle in legend.legend_handles:
     handle.set_color(INK_SOFT)
