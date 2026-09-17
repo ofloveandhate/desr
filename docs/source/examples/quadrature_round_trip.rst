@@ -78,8 +78,8 @@ And nondimensionalize.
     Matrix([[z1**4*z2]])
 
 Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
-:math:`t z_1^2`.  Those span the same lattice as desr's -- the paper's :math:`y_2` is desr's
-:math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
+:math:`t z_1^2`.  Those are products of integer powers of desr's, and desr's of theirs --
+the paper's :math:`y_2` is desr's :math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
 desr onto the paper's basis, so that everything below can be compared with p. 504 directly.
 
     >>> translation.multiplier_add_columns(2, 1, -1)   # y2  <-  y2 / y1

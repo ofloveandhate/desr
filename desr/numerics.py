@@ -542,10 +542,18 @@ class NumericTranslation(object):
         square = coefficients.extract(independent, range(self.r))
         exponents = square.inv()
         if not all(entry.is_integer for entry in exponents):
+            # The scaling acts on the chosen variables only through powers sharing a common
+            # factor, so they fix the scale only up to a root of unity: unique over the
+            # reals for odd degree, a sign choice for even.  Resolving that is not implemented.
+            index = abs(square.det())
             raise NotImplementedError(
-                'Determining the auxiliaries from {} needs fractional powers, which are not '
-                'yet supported.  Choose a different set of known values.'.format(
-                    ', '.join(map(str, known_values))))
+                'Recovering the original system from the known values {} would need roots '
+                'of degree {}, which is not yet supported.  The scaling acts on these '
+                'variables only through powers with a common factor of {}, so between them '
+                'they fix the scale of the original system only up to such a root{}.  Supply '
+                'instead a known value of a variable that the scaling acts on with power '
+                '1.'.format(', '.join(map(str, known_values)), index, index,
+                            ', whose sign would be undetermined' if index % 2 == 0 else ''))
         auxiliaries = [_monomial([residuals[row] for row in independent], exponents.T, j)
                        for j in range(self.r)]
 

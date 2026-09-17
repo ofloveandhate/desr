@@ -46,6 +46,22 @@ class ODETranslation(object):
             Since we don't know how many constants there will be, only a pattern is usable, so the 2th element of the naming_scheme must be a single string.
         new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
             Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
+
+    A user-defined Hermite multiplier must be unimodular.  Then every invariant is a product
+    of integer powers of its invariant columns, and the reduction and its reverse are
+    rational.  A multiplier that is not -- here with :math:`y_0^2` in place of :math:`y_0`,
+    so the determinant is :math:`-2` -- is refused at once, rather than failing later when
+    its inverse is first needed:
+
+    >>> ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1], [0, 1, 0, -1, 1]]),
+    ...                hermite_multiplier=sympy.Matrix([[0, 0, 2,  0, 0],
+    ...                                                 [0, 0, 0,  1, 0],
+    ...                                                 [1, 1, -2, -1, 0],
+    ...                                                 [0, 0, 0,  0, 1],
+    ...                                                 [0, 1, 0, -1, 1]]))
+    Traceback (most recent call last):
+        ...
+    ValueError: The Hermite multiplier has determinant -2, so it is not unimodular.  Some invariants are then not products of integer powers of its invariant columns, and reversing the reduction would need roots of degree 2.  Choose invariants from which every invariant can be built with integer powers; see extend_from_invariants.
     '''
     def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
         scaling_matrix = scaling_matrix.copy()
@@ -59,6 +75,15 @@ class ODETranslation(object):
             raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
 
         if hermite_multiplier is not None:
+            determinant = hermite_multiplier.det()
+            if abs(determinant) != 1:
+                raise ValueError(
+                    'The Hermite multiplier has determinant {d}, so it is not unimodular.  '
+                    'Some invariants are then not products of integer powers of its invariant '
+                    'columns, and reversing the reduction would need roots of degree {index}.  '
+                    'Choose invariants from which every invariant can be built with integer '
+                    'powers; see extend_from_invariants.'.format(
+                        d=determinant, index=abs(determinant)))
             self._scaling_matrix_hnf = scaling_matrix * hermite_multiplier
             if not is_hnf_col(self._scaling_matrix_hnf):
                 raise ValueError('{}.{}={} is not in HNF'.format(scaling_matrix,
@@ -917,7 +942,7 @@ class ODETranslation(object):
         return to_sub
 
 
-    def reverse_translate(self, variables):
+    def reverse_translate(self, variables, indep_var_index=0):
         """
         Given the solutions of a reduced system, reverse translate them into solutions of the original system.
 
@@ -925,7 +950,10 @@ class ODETranslation(object):
             This *doesn't* reverse translate the parameter reduction scheme.
 
             It *only* guesses between :meth:`~desr.ode_translation.ODETranslation.reverse_translate_general`
-            and :meth:`~desr.ode_translation.ODETranslation.reverse_translate_dep_var`
+            and :meth:`~desr.ode_translation.ODETranslation.reverse_translate_dep_var`,
+            by the number of variables given: :math:`n + 1` of them, the independent variable
+            first, means the general scheme; :math:`n` or :math:`n - 1` means the dependent
+            variable scheme.
 
         Args:
             variables (iter of sympy.Expression): The solution auxiliary variables :math:`x(t)` and solution invariants
@@ -934,13 +962,42 @@ class ODETranslation(object):
             indep_var_index (int): The location of the independent variable.
 
         :rtype: tuple
+
+        The dependent variable scheme, on example 6.4 of :cite:`Hubert2013c`:
+
+        >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
+        >>> system = ODESystem.from_equations(equations)
+        >>> system.reorder_variables(['t', 'z1', 'z2'])
+        >>> translation = ODETranslation(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+        ...                              hermite_multiplier=sympy.Matrix([[0, 1, 0],
+        ...                                                               [1, 0, 1],
+        ...                                                               [0, 0, 1]]))
+        >>> x0, y0 = sympy.var('x0 y0')
+        >>> translation.reverse_translate((x0, y0), system.indep_var_index)
+        (x0, y0/x0)
+
+        The general scheme, on example 6.6, dispatched on the independent variable coming
+        first.  This branch needs genuine solutions rather than bare symbols, since it
+        checks that the reconstructed independent variable is a constant multiple of the
+        reduced one; the paper's exact solution serves.
+
+        >>> translation = ODETranslation(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
+        ...                              hermite_multiplier=sympy.Matrix([[1, 1, -1],
+        ...                                                               [2, 3, 2],
+        ...                                                               [0, 0, 1]]))
+        >>> exact = (sympy.var('t'),
+        ...          sympy.sympify('c3/(t**(1/3)*(ln(t-c1)-ln(t)+c2)**(2/3))'),
+        ...          sympy.sympify('c1/(t*(ln(t-c1)-ln(t)+c2))'),
+        ...          sympy.sympify('t/(c1 - t)'))
+        >>> translation.reverse_translate(exact) == translation.reverse_translate_general(exact)
+        True
         """
         if len(variables) == self.scaling_matrix.shape[1]:
-            return self.reverse_translate_dep_var(variables=variables)
+            return self.reverse_translate_dep_var(variables=variables, indep_var_index=indep_var_index)
         elif len(variables) == self.scaling_matrix.shape[1] - 1:
-            return self.reverse_translate_dep_var(variables=variables)
+            return self.reverse_translate_dep_var(variables=variables, indep_var_index=indep_var_index)
         elif len(variables) == self.scaling_matrix.shape[1] + 1:
-            return self.reverse_translate_general(variables=variables)
+            return self.reverse_translate_general(variables=variables, system_indep_var_index=indep_var_index)
         else:
             raise ValueError('Incorrect number of variables for reverse translation')
 
@@ -1044,9 +1101,18 @@ class ODETranslation(object):
         True
         >>> original_soln
         (c2*exp(c1*(1 - t)*exp(t) + t), c1*t*exp(t)*exp(-c1*(1 - t)*exp(t) - t)/c2)
+
+        Giving all three reduced variables -- the auxiliary, then the invariants, of which
+        the first is :math:`t` itself -- rebuilds all three originals:
+
+        >>> x0, y0 = sympy.var('x0 y0')
+        >>> translation.reverse_translate_dep_var((x0, t_var, y0), system.indep_var_index)
+        (t, x0, y0/x0)
         '''
         if len(variables) == self.scaling_matrix.shape[1]:
-            return type(variables)(scale_action(variables, self.inv_herm_mult(indep_var_index=indep_var_index)))
+            # All n reduced variables, the independent variable's invariant among them: the
+            # full inverse multiplier rebuilds all n originals, independent variable included.
+            return type(variables)(scale_action(variables, self.inv_herm_mult))
         elif len(variables) == self.scaling_matrix.shape[1] - 1:
             return type(variables)(scale_action(variables, self.dep_var_inv_herm_mult(indep_var_index=indep_var_index)))
         else:
@@ -1326,8 +1392,7 @@ class ODETranslation(object):
         vin = self.herm_mult_i
         vin = vin.applyfunc(lambda x: x if x < 0 else 0)
 
-        rational_section = scale_action(variables, vip) - scale_action(variables, vin)
-        print(rational_section)
+        return scale_action(variables, vip) - scale_action(variables, vin)
 
     ## Choosing invariants
     def extend_from_invariants(self, invariant_choice):

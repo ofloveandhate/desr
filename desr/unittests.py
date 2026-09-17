@@ -504,6 +504,47 @@ class TestInitialConditions(TestCase):
                                     (('nu0', 1),))))
 
 
+class TestODETranslationTraps(TestCase):
+    ''' Things that used to fail silently, or somewhere other than where the mistake was. '''
+
+    def test_non_unimodular_multiplier_is_refused_at_construction(self):
+        scaling = sympy.Matrix([[1, 0, 1, 1, -1], [0, 1, 0, -1, 1]])
+        doubled = sympy.Matrix([[0, 0, 2, 0, 0], [0, 0, 0, 1, 0], [1, 1, -2, -1, 0],
+                                [0, 0, 0, 0, 1], [0, 1, 0, -1, 1]])
+        with self.assertRaises(ValueError) as caught:
+            ODETranslation(scaling, hermite_multiplier=doubled)
+        self.assertIn('not unimodular', str(caught.exception))
+        self.assertIn('roots of degree 2', str(caught.exception))
+
+    def test_rational_section_returns_its_result(self):
+        equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
+        system = ODESystem.from_equations(equations)
+        translation = ODETranslation.from_ode_system(system)
+        section = translation.rational_section()
+        self.assertIsNotNone(section)
+        self.assertEqual(section.shape, (1, translation.r))
+
+    def test_reverse_translate_dispatches_by_count(self):
+        translation = ODETranslation(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+                                     hermite_multiplier=sympy.Matrix([[0, 1, 0],
+                                                                      [1, 0, 1],
+                                                                      [0, 0, 1]]))
+        t, x0, y0 = sympy.symbols('t x0 y0')
+        self.assertEqual(translation.reverse_translate((x0, y0), 0), (x0, y0 / x0))
+        self.assertEqual(translation.reverse_translate((x0, t, y0), 0), (t, x0, y0 / x0))
+        # The general branch checks its inputs are genuine solutions, so use the exact one.
+        general = ODETranslation(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
+                                 hermite_multiplier=sympy.Matrix([[1, 1, -1],
+                                                                  [2, 3, 2],
+                                                                  [0, 0, 1]]))
+        exact = (t,
+                 sympy.sympify('c3/(t**(1/3)*(ln(t-c1)-ln(t)+c2)**(2/3))'),
+                 sympy.sympify('c1/(t*(ln(t-c1)-ln(t)+c2))'),
+                 sympy.sympify('t/(c1 - t)'))
+        self.assertEqual(general.reverse_translate(exact),
+                         general.reverse_translate_general(exact))
+
+
 class TestNumericTranslation(TestCase):
     '''
     Carrying numbers across the Michaelis-Menten reduction, and the ways of getting it wrong.
@@ -720,6 +761,22 @@ class TestNumericTranslation(TestCase):
     def test_wrong_number_of_auxiliaries(self):
         with self.assertRaises(ValueError):
             self.numeric.reverse(self.later, auxiliaries=[1.0])
+
+    def test_known_values_that_fix_the_scale_only_through_a_square(self):
+        # dz/dt = a z - b z**3 is odd in z, and b scales as 1/lambda**2: knowing a and b
+        # fixes the size of z0 but not its sign, and that is refused rather than guessed.
+        system = ODESystem.from_equations(['dz/dt = a*z - b*z**3'])
+        system.update_initial_conditions({'z': 'z0'})
+        system.reorder_variables(['t', 'z', 'a', 'b', 'z0'])
+        numeric = NumericTranslation(system, ODETranslation.from_ode_system(system))
+        t, z, a, b, z0 = system.variables
+        point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
+        with self.assertRaises(NotImplementedError) as caught:
+            numeric.reverse(point, known_values={a: 2.0, b: 0.5})
+        self.assertIn('roots of degree 2', str(caught.exception))
+        # A variable the scaling acts on with power 1 fixes it outright.
+        recovered = numeric.reverse(point, known_values={a: 2.0, z0: 1.5})
+        numpy.testing.assert_allclose(float(recovered[b]), 0.5, rtol=1e-12)
 
     def test_known_values_refused_when_reduced_system_carries_auxiliaries(self):
         equations = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
