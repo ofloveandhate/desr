@@ -205,9 +205,6 @@ you read off the original rates.
 Visualization
 -------------------------
 
-``examples/michaelis_menten_numeric.py`` runs everything on this page end to end and draws
-the result.  
-
 The reduced system on the left and the original on the right are the same
 curves on rescaled axes, which is what the commuting square above says they must be.  The
 circles are the recovered solution sitting on the directly computed one.
