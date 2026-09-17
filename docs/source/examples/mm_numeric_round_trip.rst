@@ -247,13 +247,36 @@ among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
     The reduced system is shared by an entire 2-parameter family of original systems, and this does not choose between them.
     Supply the value of one of: s, k_1, e_0, s_0.
 
-Values that contradict each other are an error too, rather than a silent choice of one of
-them.  Here :math:`s_0` and :math:`s(0)` are the same quantity, given different values.
+Only *constants* may be known values when a series is translated.  :math:`s` is a function
+of time, and the series -- :math:`u(\tau)`, which is :math:`s/s_0` -- already says how it
+varies; a single number for it is a different kind of statement, and mixing the two is
+refused rather than resolved by some convention.  The constant that stands for its initial
+value is :math:`s_0`, and the message says so.
 
-    >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={s_0: 2.0, s: 3.0})
+    >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5, s: 2.0})
     Traceback (most recent call last):
         ...
-    desr.numerics.ConflictingKnownValues: The known values s_0, s cannot all hold at once given the reduced values: they constrain the same scale and disagree about it.  The disagreement is largest at s.
+    ValueError: s is a function of time, but a series is being translated, and the series already says how s varies.  A single value for it mixes point translation with series translation.  If you know its initial value, supply s_0, which stands for s(0).
+
+At a single point, by contrast, :math:`s` *is* a number, and may be known.  Here the point
+is the start, where :math:`u = 1` and so :math:`s = s_0`:
+
+    >>> at_start = {x: reduced_soln_as_dict[x][0] for x in (tau, u, v)}
+    >>> at_start.update({x: reduced_soln_as_dict[x] for x in (c0, c1, c2)})
+    >>> point = numeric_translation.reverse(at_start, known_values={k_1: 1.5, s: 2.0})
+    >>> [round(float(point[x]), 10) for x in (s_0, k_m1, k_2, e_0)]
+    [2.0, 0.9, 0.4, 0.3]
+
+Values that contradict each other are an error too, rather than a silent choice of one of
+them.
+
+    >>> numeric_translation.reverse(reduced_soln_as_dict,
+    ...                             known_values={k_1: 1.5, s_0: 2.0, k_2: 99.0})
+    Traceback (most recent call last):
+        ...
+    desr.numerics.ConflictingKnownValues: The known values disagree with each other given the reduced values.
+        k_2 was given as 99, but the others imply 0.4.
+    Check the values, or supply fewer of them: 2 independent values determine the original system.
 
 More values than needed are fine, so long as they agree.
 

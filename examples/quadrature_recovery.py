@@ -60,15 +60,19 @@ solution = solve_ivp(as_function(reduced), (start_time, final_time),
                      [float(start[y0]), float(start[y1])],
                      t_eval=times, rtol=1e-11, atol=1e-13, dense_output=True)
 
-reduced_values = {reduced.indep_var: solution.t, y0: solution.y[0], y1: solution.y[1]}
-recovered = numeric.reverse_solution(reduced_values, known_values={z1: initial_state[0]},
-                                     invariants_at=solution.sol)
+# This system has no constants, so the only thing we can know is a point value: z1 at the
+# start.  That determines the auxiliary at that one point ...
+at_start = numeric.auxiliaries_from(start, known_values={z1: initial_state[0]})
 
-# The auxiliary was never solved for.  This is the quadrature that reverse_solution runs
+# ... and from there the series is rebuilt, integrating the auxiliary along the way.
+reduced_values = {reduced.indep_var: solution.t, y0: solution.y[0], y1: solution.y[1]}
+recovered = numeric.reverse(reduced_values, auxiliaries=at_start, invariants_at=solution.sol)
+
+# The auxiliary was never solved for.  This is the quadrature that reverse() runs
 # internally, asked for on its own so it can be drawn, against what it should have been --
 # the auxiliary of this reduction is x0 = z1**4 * z2, read off the direct solution.
 quadrature_auxiliary = numeric.recover_auxiliaries(
-    reduced_values, known_values={z1: initial_state[0]}, invariants_at=solution.sol)[0]
+    reduced_values, auxiliaries=at_start, invariants_at=solution.sol)[0]
 true_auxiliary = reference.y[0] ** 4 * reference.y[1]
 
 

@@ -133,24 +133,38 @@ Solving the reduced system
 Translating back
 ----------------
 
-:meth:`~desr.numerics.NumericTranslation.reverse` would refuse here, because arithmetic
-alone cannot recover an auxiliary that moves.
+Translating a series back needs the auxiliary at its first sample, from which its own
+equation carries it forward.  For a system with constants, the known values that fix it
+would be constants.  This system has none -- its variables are :math:`t`, :math:`z_1` and
+:math:`z_2`, and that is all -- so the only thing we can know is a *point* value: where the
+solution started.
+
+A point value of a dependent variable is not something a series can be told directly.  The
+series already says how :math:`z_1` varies, so a single number for it mixes two different
+kinds of statement, and :meth:`~desr.numerics.NumericTranslation.reverse` says so.
 
     >>> reduced_values = {reduced.indep_var: solution.t,
     ...                   y0: solution.y[0], y1: solution.y[1]}
     >>> numeric.reverse(reduced_values, known_values={z1: 0.5})
     Traceback (most recent call last):
         ...
-    ValueError: The auxiliary variables of this reduction vary along the solution, so they cannot be recovered by arithmetic alone. Use reverse_solution(), which integrates them, or reduce with include_aux_vars=True so that the reduced system carries them.
+    ValueError: z1 is a function of time, but a series is being translated, and the series already says how z1 varies.  A single value for it mixes point translation with series translation.  To use a value of it at one point, compute the auxiliaries there with auxiliaries_from() and pass them as auxiliaries=.
 
-:meth:`~desr.numerics.NumericTranslation.reverse_solution` does the integration.  It still
-needs :attr:`~desr.numerics.NumericTranslation.r` known values, but only at the *first* time
-point: the auxiliary is pinned there and its equation carries it from then on.  Passing the
-solver's dense output lets the quadrature evaluate the invariants wherever it likes.
+So it is done in two steps that say out loud they are two different facts.  First, at the
+one point where :math:`z_1 = 0.5` is known -- the start, whose reduced values are the
+scalars in ``start`` -- determine the auxiliary:
 
-    >>> recovered = numeric.reverse_solution(reduced_values,
-    ...                                      known_values={z1: 0.5},
-    ...                                      invariants_at=solution.sol)
+    >>> at_start = numeric.auxiliaries_from(start, known_values={z1: 0.5})
+    >>> [round(float(x), 6) for x in at_start]
+    [0.0125]
+
+That is :math:`z_1^4 z_2` at :math:`t = 1`, as it should be.  Then hand it to
+:meth:`~desr.numerics.NumericTranslation.reverse` for the series, which integrates it
+along the solution.  Passing the solver's dense output lets that integration evaluate the
+invariants wherever it likes.
+
+    >>> recovered = numeric.reverse(reduced_values, auxiliaries=at_start,
+    ...                             invariants_at=solution.sol)
 
 Compare against solving the original system directly.
 
@@ -171,7 +185,7 @@ is paid once at the end rather than on every solve.
 Internally the integration is done on :math:`\log |x_j|`, where the equation
 :math:`dx_j/dt = x_j H_j` is exactly linear.  The auxiliaries are monomials and can span a
 wide range of magnitudes, which logarithms handle comfortably.  Their sign cannot change,
-since :math:`x_j = 0` is invariant, so it is read once from ``known_values`` and only the
+since :math:`x_j = 0` is invariant, so it is read once from the starting value and only the
 magnitude is integrated.
 
 
@@ -212,6 +226,6 @@ constant auxiliaries even under the general scheme.
     >>> numeric.auxiliaries_are_constant
     True
 
-:meth:`~desr.numerics.NumericTranslation.reverse_solution` notices and skips the integration
+:meth:`~desr.numerics.NumericTranslation.reverse` notices and skips the integration
 entirely, so nothing is lost to it and :mod:`scipy` is never called.  Michaelis-Menten,
 Lotka-Volterra and the chemical reaction networks all land here.

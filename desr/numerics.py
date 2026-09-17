@@ -312,50 +312,64 @@ class NumericTranslation(object):
                 '{}.'.format(', '.join(map(str, self._acted))))
         return result
 
-    def reverse(self, values, known_values=None):
+    def reverse(self, values, known_values=None, auxiliaries=None, invariants_at=None,
+                tolerance=CONSISTENCY_TOLERANCE, **solver_options):
         '''
         Translate values of the reduced system back into values of the original system.
+
+        There are two situations, told apart by the shape of ``values``.
+
+        **A single point** -- every value a scalar.  Any variable of the original system may
+        be given in ``known_values``, since at one point a dependent variable is just a
+        number.  Purely arithmetic.
+
+        **A series** -- some value an array, such as a solution over time.  Then
+        ``known_values`` may name only *constants* of the original system.  A dependent
+        variable is a function of time, not a number, and the series already says how it
+        varies; giving it a single value would mix point translation with series
+        translation.  If the reduced system does not carry its auxiliary variables and
+        they vary along the solution, they are recovered by integrating their equations
+        -- see :meth:`recover_auxiliaries` -- which needs :mod:`scipy`.
 
         Args:
             values (dict): Values of variables of the reduced system.  A partial dictionary
                 is fine; anything it determines is returned.
-            known_values (dict, optional): Values of :attr:`r` variables of the *original*
-                system that you already know.  Required when the reduced system does not
-                carry the auxiliary variables -- see :attr:`carries_auxiliaries` -- and
-                rejected when it does, since then they are already determined.
+            known_values (dict, optional): Values of variables of the original system that
+                you already know.  Needed when the reduced system does not carry the
+                auxiliary variables -- see :attr:`carries_auxiliaries` -- and rejected when
+                it does, since then the original system is already determined.  In a series,
+                constants only.
+            auxiliaries (iter, optional): The :attr:`r` auxiliary values themselves, in the
+                order of :attr:`auxiliary_variables`, as an alternative to ``known_values``.
+                Obtain them from :meth:`auxiliaries_from` at a single point.  This is how a
+                point value of a dependent variable is used to translate a series.
+            invariants_at (callable, optional): Series only, and only when the auxiliaries
+                have to be integrated: ``f(t)`` returning the invariants at time ``t``.  See
+                :meth:`recover_auxiliaries`.
+            tolerance (float): Relative tolerance for the known values to agree with each
+                other and with the reduced values.
+            **solver_options: Series only: passed to :func:`scipy.integrate.solve_ivp` if
+                the auxiliaries have to be integrated.
 
         Returns:
             dict: Keyed by the variables of the original system.
 
         Raises:
-            InsufficientKnownValues: If ``known_values`` is needed and is missing, of the
-                wrong size, or fails to pin down a unique original system.
+            InsufficientKnownValues: If the auxiliaries are needed and neither
+                ``known_values`` nor ``auxiliaries`` pins them down.
+            ConflictingKnownValues: If the known values contradict each other.
         '''
         values = self._check(values, self.reduced.variables, 'the reduced system')
+        if known_values is not None and auxiliaries is not None:
+            raise ValueError('Give known_values or auxiliaries, not both.')
 
-        if self.carries_auxiliaries:
-            if known_values:
-                raise ValueError(
-                    'known_values is not needed here: the reduced system carries the '
-                    'auxiliary variables {} itself, so the original system is already '
-                    'determined.'.format(', '.join(map(str, self._auxiliaries))))
-            missing = [x for x in self._auxiliaries if values.get(x) is None]
-            if missing:
-                raise InsufficientKnownValues(
-                    'No value given for the auxiliary variable{} {}, which the original '
-                    'system cannot be recovered without.'.format(
-                        '' if len(missing) == 1 else 's', ', '.join(map(str, missing))))
-            auxiliaries = [values[x] for x in self._auxiliaries]
+        if any(np.ndim(v) for v in values.values()):
+            found = self._reverse_series(values, known_values, auxiliaries, invariants_at,
+                                         tolerance, solver_options)
         else:
-            if not self.auxiliaries_are_constant:
-                raise ValueError(
-                    'The auxiliary variables of this reduction vary along the solution, so '
-                    'they cannot be recovered by arithmetic alone.  Use reverse_solution(), '
-                    'which integrates them, or reduce with include_aux_vars=True so that '
-                    'the reduced system carries them.')
-            auxiliaries = self.auxiliaries_from(values, known_values or {})
+            found = self._reverse_point(values, known_values, auxiliaries, tolerance)
 
-        ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
+        ordered = list(found) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var and values.get(self.reduced.indep_var) is not None:
             # Under these schemes the reduced system keeps the original independent
@@ -369,9 +383,76 @@ class NumericTranslation(object):
                 '{}.'.format(', '.join(map(str, self._invariants))))
         return result
 
-    def auxiliaries_from(self, values, known_values, tolerance=CONSISTENCY_TOLERANCE):
+    def _carried_auxiliaries(self, values, known_values, auxiliaries):
+        '''Read the auxiliaries from the reduced values when the reduced system has them.'''
+        if known_values or auxiliaries is not None:
+            raise ValueError(
+                'Neither known_values nor auxiliaries is needed here: the reduced system '
+                'carries the auxiliary variables {} itself, so the original system is '
+                'already determined.'.format(', '.join(map(str, self._auxiliaries))))
+        missing = [x for x in self._auxiliaries if values.get(x) is None]
+        if missing:
+            raise InsufficientKnownValues(
+                'No value given for the auxiliary variable{} {}, which the original system '
+                'cannot be recovered without.'.format(
+                    '' if len(missing) == 1 else 's', ', '.join(map(str, missing))))
+        return [values[x] for x in self._auxiliaries]
+
+    def _given_auxiliaries(self, auxiliaries):
+        auxiliaries = list(auxiliaries)
+        if len(auxiliaries) != self.r:
+            raise ValueError('Expected {} auxiliary value{}, not {}.'.format(
+                self.r, '' if self.r == 1 else 's', len(auxiliaries)))
+        if any(np.ndim(x) for x in auxiliaries):
+            raise ValueError('The auxiliaries must be single numbers: their values at one '
+                             'point, from which a series is rebuilt.')
+        return auxiliaries
+
+    def _reverse_point(self, values, known_values, auxiliaries, tolerance):
         '''
-        Solve for the auxiliary variables implied by ``known_values``.
+        One point.  The auxiliaries need not be constant along a solution to have a value
+        here, so this works under every scheme, and any variable may be a known value.
+        '''
+        if self.carries_auxiliaries:
+            return self._carried_auxiliaries(values, known_values, auxiliaries)
+        if auxiliaries is not None:
+            return self._given_auxiliaries(auxiliaries)
+        return self.auxiliaries_from(values, known_values or {}, tolerance)
+
+    def _reverse_series(self, values, known_values, auxiliaries, invariants_at, tolerance,
+                        solver_options):
+        '''
+        A series.  Known values must be constants; a dependent variable given a single
+        value is the caller mixing the two situations up.
+        '''
+        if self.carries_auxiliaries:
+            return self._carried_auxiliaries(values, known_values, auxiliaries)
+        return self.recover_auxiliaries(values, known_values, auxiliaries,
+                                        invariants_at=invariants_at, tolerance=tolerance,
+                                        **solver_options)
+
+    def _reject_time_varying(self, known_values):
+        '''In a series, a known value of anything but a constant is a category error.'''
+        constants = set(self.system.constant_variables)
+        for variable in known_values:
+            if variable in constants:
+                continue
+            hint = self.system.initial_conditions.get(variable)
+            if hint is not None:
+                remedy = ('If you know its initial value, supply {}, which stands for '
+                          '{}(0).'.format(hint, variable))
+            else:
+                remedy = ('To use a value of it at one point, compute the auxiliaries there '
+                          'with auxiliaries_from() and pass them as auxiliaries=.')
+            raise ValueError(
+                '{} is a function of time, but a series is being translated, and the series '
+                'already says how {} varies.  A single value for it mixes point translation '
+                'with series translation.  {}'.format(variable, variable, remedy))
+
+    def auxiliaries_from(self, values, known_values, tolerance=CONSISTENCY_TOLERANCE,
+                         allowed=None):
+        '''
+        Solve for the auxiliary variables at one point, from values you already know there.
 
         Each original variable is a monomial in the auxiliaries and the invariants, so every
         known value gives one equation in the :attr:`r` auxiliaries.  Any number of known
@@ -380,34 +461,37 @@ class NumericTranslation(object):
         complete it; more than :attr:`r` is fine provided they agree, and
         :class:`ConflictingKnownValues` is raised if they do not.
 
-        The auxiliaries are constant along a solution wherever this method applies, so they
-        are determined at a single point: known values of variables that change in time, such
-        as a dependent variable or the independent variable, refer to the *first* sample of
-        the reduced values.
+        This is the point situation of :meth:`reverse`: ``values`` should be scalars, the
+        reduced values at the one point where the known values hold, and any variable of the
+        original system may be known there.  The result can then be handed to
+        :meth:`reverse` as ``auxiliaries=`` to translate a whole series.
 
         Args:
-            values (dict): Values of variables of the reduced system.
-            known_values (dict): Values of variables of the original system, each a single
-                number.
+            values (dict): Values of variables of the reduced system at one point.
+            known_values (dict): Values of variables of the original system at that point,
+                each a single number.
             tolerance (float): Relative tolerance for the known values to agree with each
                 other and with the reduced values.
+            allowed (iter, optional): Restrict which variables may be known.  Used by the
+                series situation, where only constants may.
 
         Returns:
             list: The auxiliary values, in the order of the columns of
             :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
         '''
         known_values = {sympy.sympify(k): v for k, v in known_values.items()}
-        unusable = set(known_values) - set(self._acted)
+        allowed = list(self._acted) if allowed is None else list(allowed)
+        unusable = set(known_values) - set(allowed)
         if unusable:
             raise InsufficientKnownValues(
                 'Cannot use {} to determine the original system.  Expected some of: '
                 '{}.'.format(', '.join(sorted(map(str, unusable))),
-                             ', '.join(map(str, self._acted))))
+                             ', '.join(map(str, allowed))))
         for variable, known in known_values.items():
             if np.ndim(known):
                 raise ValueError(
-                    'The known value of {} must be a single number, not an array.  Known '
-                    'values refer to the first sample of the reduced values.'.format(variable))
+                    'The known value of {} must be a single number, not an array: its value '
+                    'at the one point being translated.'.format(variable))
 
         W = self._inv_herm_mult
         columns = [self._acted.index(k) for k in known_values]
@@ -415,8 +499,8 @@ class NumericTranslation(object):
         coefficients = sympy.Matrix(len(columns), self.r,
                                     lambda row, j: W[j, columns[row]])
 
-        # Divide out of each known value the part the invariants contribute, at the first
-        # sample.  What is left is a monomial in the auxiliaries alone.
+        # Divide out of each known value the part the invariants contribute.  What is left
+        # is a monomial in the auxiliaries alone.
         invariants = [None if values.get(y) is None else _first(values[y])
                       for y in self._invariants]
         residuals = []
@@ -433,14 +517,14 @@ class NumericTranslation(object):
                     'The known value of {} is zero, and a zero cannot determine a scale.  '
                     'Every variable of the original system is a product of powers of the '
                     'reduced ones, so no rescaling turns a nonzero value into zero or back.  '
-                    'Supply a value that is nonzero at the first sample.'.format(variable))
+                    'Supply the value of a variable that is nonzero here.'.format(variable))
             invariant_part = _monomial(invariants, W[self.r:, :], i)
             if invariant_part == 0:
                 zero = [y for y in needed if _first(values[y]) == 0]
                 raise ValueError(
-                    'The known value of {} cannot be used: at the first sample the reduced '
+                    'The known value of {} cannot be used: at this point the reduced '
                     'value{} of {} {} zero, and a zero cannot determine a scale.  Supply the '
-                    'value of a variable that is nonzero there instead.'.format(
+                    'value of a variable that is nonzero here instead.'.format(
                         variable, '' if len(zero) == 1 else 's', ', '.join(map(str, zero)),
                         'is' if len(zero) == 1 else 'are'))
             residuals.append(known / invariant_part)
@@ -451,7 +535,7 @@ class NumericTranslation(object):
             # contradict each other -- that is the more useful thing to report.
             self._check_consistent(coefficients, residuals, known_values, tolerance)
             raise InsufficientKnownValues(
-                self._shortfall(coefficients, known_values, invariants))
+                self._shortfall(coefficients, known_values, invariants, allowed))
 
         # Solve on an independent subset, then hold every known value to the answer.
         independent = list(coefficients.T.rref()[1])
@@ -481,7 +565,8 @@ class NumericTranslation(object):
         bool: Whether the auxiliary variables are constant along a solution.
 
         When they are, recovering the original system is arithmetic.  When they are not,
-        they satisfy :math:`dx_j/dt = x_j H_j`, which :meth:`reverse_solution` integrates.
+        they satisfy :math:`dx_j/dt = x_j H_j`, which :meth:`recover_auxiliaries` integrates
+        when a series is translated.
 
         The auxiliaries are always constant under the parameter scheme, and they are
         constant under the general scheme whenever the original system is autonomous -- so
@@ -562,74 +647,58 @@ class NumericTranslation(object):
                 self._growth_rates = rates
         return list(self._growth_rates)
 
-    def reverse_solution(self, values, known_values, invariants_at=None, **solver_options):
+    def recover_auxiliaries(self, values, known_values=None, auxiliaries=None,
+                            invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,
+                            **solver_options):
         '''
-        Translate a whole solution back when the reduced system does not carry the
-        auxiliary variables.
+        Recover the auxiliary variables along a series, when the reduced system does not
+        carry them.
+
+        This is what :meth:`reverse` does for a series; call it directly to see the
+        auxiliaries themselves rather than the original system rebuilt from them.
 
         The auxiliaries obey :math:`dx_j / dt = x_j H_j`, driven by the invariants and
         uncoupled from each other, so they are recovered by integrating
-        :math:`d(\\log|x_j|)/dt = H_j` once along the solution.  Their sign cannot change,
-        since :math:`x_j = 0` is invariant, so it is fixed by ``known_values`` at the first
-        time point.  When the auxiliaries turn out to be constant no integration happens at
-        all.
+        :math:`d(\\log|x_j|)/dt = H_j` once along the solution from their values at the
+        first sample.  Their sign cannot change, since :math:`x_j = 0` is invariant, so it
+        is fixed at the start and only the magnitude is integrated.  When the auxiliaries
+        turn out to be constant no integration happens at all.
+
+        The values at the first sample come from one of two places: from ``known_values``,
+        which in a series may name only *constants* of the original system; or from
+        ``auxiliaries`` directly, as computed by :meth:`auxiliaries_from` at a point -- the
+        way to use a point value of a dependent variable, such as an initial condition for
+        a system that has no constant standing for it.
 
         Args:
             values (dict): Values of variables of the reduced system: the independent
                 variable as an array of times, and every invariant as an array of the same
-                length.
-            known_values (dict): Values of :attr:`r` variables of the original system at the
-                *first* of those times.
+                length or a scalar.
+            known_values (dict, optional): Values of constants of the original system.
+            auxiliaries (iter, optional): The :attr:`r` auxiliary values at the first
+                sample, as an alternative to ``known_values``.
             invariants_at (callable, optional): ``f(t)`` returning the invariants at time
                 ``t``, in the order of :attr:`invariant_variables`.  Pass the ``sol``
                 attribute of a :func:`scipy.integrate.solve_ivp` result computed with
                 ``dense_output=True`` for the most accurate integration.  Without it the
                 sampled values are interpolated.
+            tolerance (float): Relative tolerance for the known values to agree with each
+                other and with the reduced values.
             **solver_options: Passed to :func:`scipy.integrate.solve_ivp`.
 
         Returns:
-            dict: Keyed by the variables of the original system, each an array.
-        '''
-        values = self._check(values, self.reduced.variables, 'the reduced system')
-        auxiliaries = self.recover_auxiliaries(values, known_values,
-                                               invariants_at=invariants_at,
-                                               **solver_options)
-        times = np.asarray(values[self.reduced.indep_var], dtype=float)
-
-        ordered = list(auxiliaries) + [values.get(v) for v in self._invariants]
-        result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
-        if self._shares_indep_var:
-            result[self.system.indep_var] = times
-        return result
-
-    def recover_auxiliaries(self, values, known_values, invariants_at=None,
-                            **solver_options):
-        '''
-        Recover the auxiliary variables that the reduced system does not carry.
-
-        This is the quadrature that :meth:`reverse_solution` performs; call it directly to
-        see the auxiliaries themselves rather than the original system rebuilt from them.
-
-        Args:
-            values (dict): Values of variables of the reduced system: the independent
-                variable as an array of times, and every invariant as an array of the same
-                length.
-            known_values (dict): Values of :attr:`r` variables of the original system at the
-                *first* of those times.
-            invariants_at (callable, optional): ``f(t)`` returning the invariants at time
-                ``t``.  See :meth:`reverse_solution`.
-            **solver_options: Passed to :func:`scipy.integrate.solve_ivp`.
-
-        Returns:
-            list: One array per auxiliary, in the order of the columns of
-            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
+            list: One value per auxiliary, in the order of the columns of
+            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`: an array along the
+            series if it moves, a scalar if it is constant.
         '''
         values = self._check(values, self.reduced.variables, 'the reduced system')
         if self.carries_auxiliaries:
             raise ValueError(
                 'The reduced system carries the auxiliary variables {} itself, so there is '
-                'nothing to integrate.  Read them from the solution.'.format(
+                'nothing to recover.  Read them from the solution.'.format(
                     ', '.join(map(str, self._auxiliaries))))
+        if known_values is not None and auxiliaries is not None:
+            raise ValueError('Give known_values or auxiliaries, not both.')
 
         times = values.get(self.reduced.indep_var)
         if times is None:
@@ -643,14 +712,22 @@ class NumericTranslation(object):
         sampled = np.array([np.broadcast_to(np.asarray(values[y], dtype=float), times.shape)
                             for y in self._invariants])
 
-        at_first = {self.reduced.indep_var: times[0]}
-        at_first.update(dict(zip(self._invariants, sampled[:, 0])))
-        start = self.auxiliaries_from(at_first, known_values)
+        if auxiliaries is not None:
+            start = self._given_auxiliaries(auxiliaries)
+        else:
+            known_values = {sympy.sympify(k): v for k, v in (known_values or {}).items()}
+            self._reject_time_varying(known_values)
+            at_first = {self.reduced.indep_var: times[0]}
+            at_first.update(dict(zip(self._invariants, sampled[:, 0])))
+            constants = [v for v in self._acted if v in self.system.constant_variables]
+            start = self.auxiliaries_from(at_first, known_values, tolerance,
+                                          allowed=constants)
 
         rates = self.auxiliary_growth_rates()
         if all(rate == 0 for rate in rates):
-            return [np.broadcast_to(np.asarray(x, dtype=float), times.shape)
-                    for x in start]
+            # Constant along the series, so they stay scalars; anything rebuilt from them
+            # and a constant invariant is then a scalar too, as a constant should be.
+            return list(start)
         return self._integrate_auxiliaries(times, sampled, start, rates, invariants_at,
                                            solver_options)
 
@@ -731,15 +808,15 @@ class NumericTranslation(object):
                      'determine the original system.'.format(self.r, '' if self.r == 1 else 's'))
         return '\n'.join(lines)
 
-    def _shortfall(self, coefficients, known_values, invariants):
+    def _shortfall(self, coefficients, known_values, invariants, allowed):
         '''
         Explain what is still free after the given known values, and what would fix it.
 
         The kernel of the coefficient matrix is the set of rescalings of the auxiliaries that
         leave every known value unchanged.  Mapped through W, each kernel direction is a
         rescaling of the original system; the variables it moves are exactly the ones whose
-        values would help -- provided they can be used at the first sample, which a variable
-        whose reduced value is zero there cannot.
+        values would help -- provided they may be known here, and can be used, which a
+        variable whose reduced value is zero at this point cannot.
         '''
         W = self._inv_herm_mult
         kernel = coefficients.nullspace() if coefficients.rows else [
@@ -748,7 +825,7 @@ class NumericTranslation(object):
 
         candidates = []
         for i, variable in enumerate(self._acted):
-            if variable in known_values:
+            if variable in known_values or variable not in allowed:
                 continue
             moved = any(sum(W[j, i] * direction[j] for j in range(self.r)) != 0
                         for direction in kernel)
