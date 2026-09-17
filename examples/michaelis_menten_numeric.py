@@ -110,7 +110,7 @@ middle.plot(times, reference_soln.y[0], color=SUBSTRATE, linewidth=2, label='sol
 middle.plot(times, reference_soln.y[1], color=COMPLEX, linewidth=2)
 middle.plot(recovered_soln[t][marks], recovered_soln[s][marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6,
-            color=SUBSTRATE, label='recovered_soln from reduced')
+            color=SUBSTRATE, label='solution translation')
 middle.plot(recovered_soln[t][marks], recovered_soln[c][marks], linestyle='none', marker='o',
             markersize=8, markerfacecolor='none', markeredgewidth=1.6, color=COMPLEX)
 label_end(middle, times, reference_soln.y[0], r'$s$', SUBSTRATE)
@@ -133,7 +133,7 @@ right.annotate('tolerance asked of the solver', xy=(0.2, 1e-10), xytext=(0, 5),
 right.semilogy(times, difference_s, color=SUBSTRATE, linewidth=1.2, label=r'$s$')
 right.semilogy(times, difference_c, color=COMPLEX, linewidth=1.2, label=r'$c$')
 right.set_ylim(1e-15, 3e-10)
-style(right, 'Difference between the two\nnowhere larger than $10^{-11}$',
+style(right, 'Difference between solutions to nondimensionalized model',
       r'$t$', 'absolute difference')
 error_legend = right.legend(frameon=False, fontsize=9, loc='lower right',
                             labelcolor=INK_SOFT, ncols=2)
