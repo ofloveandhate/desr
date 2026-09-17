@@ -209,7 +209,7 @@ The reduced system on the left and the original on the right are the same
 curves on rescaled axes, which is what the commuting square above says they must be.  The
 circles are the recovered solution sitting on the directly computed one.
 
-.. plot:: ../../examples/michaelis_menten_numeric.py
+.. plot:: _examples/michaelis_menten_numeric.py
 
 The right-hand panel is worth dwelling on.  The disagreement between the two routes
 never exceeds :math:`10^{-11}`, two orders of magnitude below the tolerance the integrator

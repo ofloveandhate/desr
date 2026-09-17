@@ -60,8 +60,9 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
+# Sphinx documentation (the Makefile builds into docs/build; sphinx's default is docs/_build)
 docs/_build/
+docs/build/
 
 # PyBuilder
 target/

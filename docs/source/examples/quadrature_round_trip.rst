@@ -194,7 +194,7 @@ The whole workflow, drawn
 
 ``examples/quadrature_recovery.py`` runs all of the above and draws it.
 
-.. plot:: ../../examples/quadrature_recovery.py
+.. plot:: _examples/quadrature_recovery.py
 
 The middle panel is the one this page is about.  :math:`x_0` was never solved for -- it is
 absent from the reduced system entirely -- and the line is what

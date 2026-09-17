@@ -47,6 +47,24 @@ bibtex_bibfiles = ['desr.bib']
 plot_formats = [('png', 110)]
 plot_html_show_formats = False
 
+# Sphinx re-reads a page only when the page's own source changes, and the plot directive
+# only regenerates a figure when its page is re-read -- so editing the script behind a
+# `.. plot:: path` did nothing until `make clean`.  The directive never declares the script
+# as a dependency of the page; do it here, and Sphinx's own bookkeeping does the rest.
+import re
+
+_PLOT_FILE = re.compile(r'^\s*\.\.\s+plot::\s+(\S+)', re.MULTILINE)
+
+
+def _note_plot_dependencies(app, docname, source):
+    for path in _PLOT_FILE.findall(source[0]):
+        # The directive resolves a relative path against the source directory.
+        app.env.note_dependency(os.path.normpath(os.path.join(app.srcdir, path)))
+
+
+def setup(app):
+    app.connect('source-read', _note_plot_dependencies)
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
