@@ -40,13 +40,13 @@
       $u(\tau),\; v(\tau)$
     \end{tabular}};
 
-  \draw[->] (NW) -- node[above]        {\texttt{forward}}
+  \draw[->] (NW) -- node[above]        {Translate: \texttt{forward}}
                   node[below, font=\footnotesize] {$\tau = k_1 s_0 t$,\; $u = s/s_0$,\; $v = c/s_0$}
             (NE);
 
-  \draw[->] (SE) -- node[above]        {\texttt{reverse}}
-                  node[below, font=\footnotesize] {$+$ 2 known values}
-            (SW);
+  \draw[->] (SW) -- node[above]        {}
+                  node[below, font=\footnotesize] {\texttt{reverse} requires $+$ 2 known values}
+            (SE);
 
   \draw[->] (NW) -- node[left, align=right] {solve \\[1pt] {\footnotesize 5 parameters}} (SW);
   \draw[->] (NE) -- node[right, align=left] {solve \\[1pt] {\footnotesize 3 parameters}} (SE);
