@@ -222,22 +222,43 @@ Without enough known parameter values, reverse-translation is impossible
 -------------------------------------------------------------------------
 
 Asking for the original system without enough known parameter values supplied raises an exception.
+The message says what is still undetermined -- the rescaling that the values given do not
+rule out -- and which variables would settle it.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5})
     Traceback (most recent call last):
         ...
-    desr.numerics.InsufficientKnownValues: Need 2 known values of the original system, but 1 (k_1) was supplied.
-    The reduced system is shared by an entire 2-parameter family of original systems, so this is not enough to choose between them.
-    Supply values for 2 of: s, c, k_m1, k_2, k_1, e_0, s_0.
+    desr.numerics.InsufficientKnownValues: k_1 does not determine the original system: 1 more value is needed.
+    The rescaling s, c, k_m1, k_2, e_0, s_0 by lambda and t by 1/lambda leaves k_1 unchanged.
+    The reduced system is shared by an entire 2-parameter family of original systems, and this does not choose between them.
+    Supply the value of one of: s, k_m1, k_2, e_0, s_0.
 
 Even though :math:`r = 2`, two values are not always sufficient.  For example, knowing :math:`k_{-1}` and :math:`k_2` tells us
 only about :math:`c_0` and :math:`c_1`, which between them pin down the single combination
-:math:`k_1 s_0` rather than both factors.
+:math:`k_1 s_0` rather than both factors.  The message names the rescaling that both values
+are blind to, and offers only variables that would actually break it -- :math:`c` is not
+among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_m1: 0.9, k_2: 0.4})
     Traceback (most recent call last):
         ...
-    desr.numerics.InsufficientKnownValues: The 2 known values supplied (k_m1, k_2) do not determine the original system: they overlap, and leave some of it free.
-    The reduced system is shared by an entire 2-parameter family of original systems, so this is not enough to choose between them.
-    Supply values for 2 of: s, c, k_m1, k_2, k_1, e_0, s_0.
+    desr.numerics.InsufficientKnownValues: k_m1, k_2 do not determine the original system: 1 more value is needed.
+    The rescaling s, c, e_0, s_0 by lambda and k_1 by 1/lambda leaves k_m1, k_2 unchanged.
+    The reduced system is shared by an entire 2-parameter family of original systems, and this does not choose between them.
+    Supply the value of one of: s, k_1, e_0, s_0.
+
+Values that contradict each other are an error too, rather than a silent choice of one of
+them.  Here :math:`s_0` and :math:`s(0)` are the same quantity, given different values.
+
+    >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={s_0: 2.0, s: 3.0})
+    Traceback (most recent call last):
+        ...
+    desr.numerics.ConflictingKnownValues: The known values s_0, s cannot all hold at once given the reduced values: they constrain the same scale and disagree about it.  The disagreement is largest at s.
+
+More values than needed are fine, so long as they agree.
+
+    >>> extra = numeric_translation.reverse(reduced_soln_as_dict,
+    ...                                     known_values={k_1: 1.5, s_0: 2.0, k_2: 0.4})
+    >>> [round(float(extra[x]), 10) for x in (k_m1, k_2, e_0)]
+    [0.9, 0.4, 0.3]
 

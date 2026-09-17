@@ -31,8 +31,8 @@ except ImportError:  # pragma: no cover
 from .ode_translation import ODETranslation
 from .ode_system import ODESystem
 
-__all__ = ['NumericTranslation', 'InsufficientKnownValues',
-           'PARAMETER_SCHEME', 'DEP_VAR_SCHEME', 'GENERAL_SCHEME']
+__all__ = ['NumericTranslation', 'InsufficientKnownValues', 'ConflictingKnownValues',
+           'CONSISTENCY_TOLERANCE', 'PARAMETER_SCHEME', 'DEP_VAR_SCHEME', 'GENERAL_SCHEME']
 
 PARAMETER_SCHEME = 'parameter'
 DEP_VAR_SCHEME = 'dep_var'
@@ -42,9 +42,29 @@ GENERAL_SCHEME = 'general'
 class InsufficientKnownValues(ValueError):
     '''
     Raised when the values supplied to :meth:`NumericTranslation.reverse` do not pin down a
-    unique original system.
+    unique original system.  The message says which values would.
     '''
     pass
+
+
+class ConflictingKnownValues(ValueError):
+    '''
+    Raised when the values supplied to :meth:`NumericTranslation.reverse` cannot all hold at
+    once given the reduced values: they determine the same scale, and disagree about it.
+    '''
+    pass
+
+
+# Relative tolerance within which known values must agree with each other and with the
+# reduced values.  Known values are measurements and reduced values are numerical solutions,
+# so this is looser than machine precision but far tighter than any real disagreement.
+CONSISTENCY_TOLERANCE = 1e-6
+
+
+def _first(value):
+    '''The first sample of an array, or the value itself if it is a scalar.'''
+    value = np.asarray(value)
+    return value.reshape(-1)[0] if value.ndim else value[()]
 
 
 def _monomial(values, exponents, column):
@@ -349,17 +369,28 @@ class NumericTranslation(object):
                 '{}.'.format(', '.join(map(str, self._invariants))))
         return result
 
-    def auxiliaries_from(self, values, known_values):
+    def auxiliaries_from(self, values, known_values, tolerance=CONSISTENCY_TOLERANCE):
         '''
         Solve for the auxiliary variables implied by ``known_values``.
 
-        Each original variable is a monomial in the auxiliaries and the invariants.  The
-        :attr:`r` variables named in ``known_values`` therefore give :attr:`r` equations in
-        the :attr:`r` auxiliaries, solved here exactly over the rationals.
+        Each original variable is a monomial in the auxiliaries and the invariants, so every
+        known value gives one equation in the :attr:`r` auxiliaries.  Any number of known
+        values may be supplied: too few, or a set that happens to constrain the same scale
+        twice, raises :class:`InsufficientKnownValues` with a message saying what would
+        complete it; more than :attr:`r` is fine provided they agree, and
+        :class:`ConflictingKnownValues` is raised if they do not.
+
+        The auxiliaries are constant along a solution wherever this method applies, so they
+        are determined at a single point: known values of variables that change in time, such
+        as a dependent variable or the independent variable, refer to the *first* sample of
+        the reduced values.
 
         Args:
             values (dict): Values of variables of the reduced system.
-            known_values (dict): Values of :attr:`r` variables of the original system.
+            known_values (dict): Values of variables of the original system, each a single
+                number.
+            tolerance (float): Relative tolerance for the known values to agree with each
+                other and with the reduced values.
 
         Returns:
             list: The auxiliary values, in the order of the columns of
@@ -372,31 +403,77 @@ class NumericTranslation(object):
                 'Cannot use {} to determine the original system.  Expected some of: '
                 '{}.'.format(', '.join(sorted(map(str, unusable))),
                              ', '.join(map(str, self._acted))))
-        if len(known_values) != self.r:
-            raise InsufficientKnownValues(self._shortfall(known_values))
+        for variable, known in known_values.items():
+            if np.ndim(known):
+                raise ValueError(
+                    'The known value of {} must be a single number, not an array.  Known '
+                    'values refer to the first sample of the reduced values.'.format(variable))
 
         W = self._inv_herm_mult
         columns = [self._acted.index(k) for k in known_values]
+        # One row per known value: its exponents in the auxiliaries.
+        coefficients = sympy.Matrix(len(columns), self.r,
+                                    lambda row, j: W[j, columns[row]])
 
-        coefficients = sympy.Matrix([[W[j, i] for j in range(self.r)] for i in columns])
-        if coefficients.det() == 0:
-            raise InsufficientKnownValues(self._shortfall(known_values, degenerate=True))
-
-        # Divide out the part of each known value that the invariants contribute.
-        invariants = [values.get(v) for v in self._invariants]
+        # Divide out of each known value the part the invariants contribute, at the first
+        # sample.  What is left is a monomial in the auxiliaries alone.
+        invariants = [None if values.get(y) is None else _first(values[y])
+                      for y in self._invariants]
         residuals = []
-        for known, i in zip(known_values.values(), columns):
+        for (variable, known), i in zip(known_values.items(), columns):
             needed = [self._invariants[j] for j in range(len(self._invariants))
                       if W[self.r + j, i] != 0]
-            absent = [n for n in needed if values.get(n) is None]
+            absent = [y for y in needed if values.get(y) is None]
             if absent:
                 raise InsufficientKnownValues(
                     'Cannot use the known value of {} without values for {} from the '
-                    'reduced system.'.format(self._acted[i], ', '.join(map(str, absent))))
-            residuals.append(known / _monomial(invariants, W[self.r:, :], i))
+                    'reduced system.'.format(variable, ', '.join(map(str, absent))))
+            if known == 0:
+                raise ValueError(
+                    'The known value of {} is zero, and a zero cannot determine a scale.  '
+                    'Every variable of the original system is a product of powers of the '
+                    'reduced ones, so no rescaling turns a nonzero value into zero or back.  '
+                    'Supply a value that is nonzero at the first sample.'.format(variable))
+            invariant_part = _monomial(invariants, W[self.r:, :], i)
+            if invariant_part == 0:
+                zero = [y for y in needed if _first(values[y]) == 0]
+                raise ValueError(
+                    'The known value of {} cannot be used: at the first sample the reduced '
+                    'value{} of {} {} zero, and a zero cannot determine a scale.  Supply the '
+                    'value of a variable that is nonzero there instead.'.format(
+                        variable, '' if len(zero) == 1 else 's', ', '.join(map(str, zero)),
+                        'is' if len(zero) == 1 else 'are'))
+            residuals.append(known / invariant_part)
 
-        exponents = coefficients.inv().T
-        return [_monomial(residuals, exponents, j) for j in range(self.r)]
+        rank = coefficients.rank()
+        if rank < self.r:
+            # Before saying more are needed, make sure the ones given do not already
+            # contradict each other -- that is the more useful thing to report.
+            self._check_consistent(coefficients, residuals, known_values, tolerance)
+            raise InsufficientKnownValues(
+                self._shortfall(coefficients, known_values, invariants))
+
+        # Solve on an independent subset, then hold every known value to the answer.
+        independent = list(coefficients.T.rref()[1])
+        square = coefficients.extract(independent, range(self.r))
+        exponents = square.inv()
+        if not all(entry.is_integer for entry in exponents):
+            raise NotImplementedError(
+                'Determining the auxiliaries from {} needs fractional powers, which are not '
+                'yet supported.  Choose a different set of known values.'.format(
+                    ', '.join(map(str, known_values))))
+        auxiliaries = [_monomial([residuals[row] for row in independent], exponents.T, j)
+                       for j in range(self.r)]
+
+        disagreements = []
+        for row, ((variable, known), residual) in enumerate(zip(known_values.items(),
+                                                                residuals)):
+            implied = _monomial(auxiliaries, coefficients.T, row)
+            if not np.isclose(implied, residual, rtol=tolerance, atol=0):
+                disagreements.append((variable, known, known * implied / residual))
+        if disagreements:
+            raise ConflictingKnownValues(self._conflict(known_values, disagreements))
+        return auxiliaries
 
     @property
     def auxiliaries_are_constant(self):
@@ -625,19 +702,97 @@ class NumericTranslation(object):
                     ', '.join(map(str, variables))))
         return values
 
-    def _shortfall(self, known_values, degenerate=False):
-        given = ', '.join(map(str, known_values)) or 'nothing'
-        if degenerate:
-            opening = ('The {n} known value{s} supplied ({given}) do not determine the '
-                       'original system: they overlap, and leave some of it free.')
+    def _check_consistent(self, coefficients, residuals, known_values, tolerance):
+        '''
+        With too few independent equations to solve, the known values can still contradict
+        each other -- two that constrain the same scale but disagree about it.  Check in
+        log-magnitude space, where the equations are linear.
+        '''
+        if coefficients.rows < 2:
+            return
+        magnitudes = np.log(np.abs(np.array(residuals, dtype=float)))
+        matrix = np.array(coefficients.tolist(), dtype=float)
+        fit = np.linalg.lstsq(matrix, magnitudes, rcond=None)[0]
+        misfit = np.abs(matrix @ fit - magnitudes)
+        if misfit.max() > tolerance:
+            worst = int(misfit.argmax())
+            variables = list(known_values)
+            raise ConflictingKnownValues(
+                'The known values {} cannot all hold at once given the reduced values: they '
+                'constrain the same scale and disagree about it.  The disagreement is largest '
+                'at {}.'.format(', '.join(map(str, variables)), variables[worst]))
+
+    def _conflict(self, known_values, disagreements):
+        lines = ['The known values disagree with each other given the reduced values.']
+        for variable, given, implied in disagreements:
+            lines.append('    {} was given as {:g}, but the others imply {:g}.'.format(
+                variable, float(given), float(implied)))
+        lines.append('Check the values, or supply fewer of them: {} independent value{} '
+                     'determine the original system.'.format(self.r, '' if self.r == 1 else 's'))
+        return '\n'.join(lines)
+
+    def _shortfall(self, coefficients, known_values, invariants):
+        '''
+        Explain what is still free after the given known values, and what would fix it.
+
+        The kernel of the coefficient matrix is the set of rescalings of the auxiliaries that
+        leave every known value unchanged.  Mapped through W, each kernel direction is a
+        rescaling of the original system; the variables it moves are exactly the ones whose
+        values would help -- provided they can be used at the first sample, which a variable
+        whose reduced value is zero there cannot.
+        '''
+        W = self._inv_herm_mult
+        kernel = coefficients.nullspace() if coefficients.rows else [
+            sympy.eye(self.r).col(j) for j in range(self.r)]
+        missing = len(kernel)
+
+        candidates = []
+        for i, variable in enumerate(self._acted):
+            if variable in known_values:
+                continue
+            moved = any(sum(W[j, i] * direction[j] for j in range(self.r)) != 0
+                        for direction in kernel)
+            needed = [j for j in range(len(self._invariants)) if W[self.r + j, i] != 0]
+            usable = all(invariants[j] is not None and invariants[j] != 0 for j in needed)
+            if moved and usable:
+                candidates.append(variable)
+
+        given = ', '.join(map(str, known_values))
+        if not known_values:
+            opening = 'No known values were supplied, and {} {} needed.'.format(
+                self.r, 'is' if self.r == 1 else 'are')
         else:
-            opening = ('Need {r} known value{plural} of the original system, but {n} '
-                       '({given}) {were} supplied.')
-        return (opening + '\nThe reduced system is shared by an entire {r}-parameter family '
-                'of original systems, so this is not enough to choose between them.\n'
-                'Supply values for {r} of: {candidates}.').format(
-            r=self.r, n=len(known_values), given=given,
-            s='' if len(known_values) == 1 else 's',
-            plural='' if self.r == 1 else 's',
-            were='was' if len(known_values) == 1 else 'were',
-            candidates=', '.join(str(v) for v in self._acted if v != self.system.indep_var))
+            opening = '{} {} not determine the original system: {} more value{} {} needed.'.format(
+                given, 'does' if len(known_values) == 1 else 'do',
+                missing, '' if missing == 1 else 's', 'is' if missing == 1 else 'are')
+
+        lines = [opening]
+        if missing == 1 and known_values:
+            lines.append('The rescaling {} leaves {} unchanged.'.format(
+                self._describe_rescaling(kernel[0]), given))
+        lines.append('The reduced system is shared by an entire {}-parameter family of '
+                     'original systems, and this does not choose between them.'.format(
+                         self.r))
+        if missing == 1:
+            lines.append('Supply the value of one of: {}.'.format(
+                ', '.join(map(str, candidates))))
+        else:
+            lines.append('Supply values for {} of: {}.  Not every choice works; if yours '
+                         'does not, this message will say what is still free.'.format(
+                             missing, ', '.join(map(str, candidates))))
+        return '\n'.join(lines)
+
+    def _describe_rescaling(self, direction):
+        '''Render one kernel direction as the rescaling of original variables it induces.'''
+        W = self._inv_herm_mult
+        by_power = {}
+        for i, variable in enumerate(self._acted):
+            power = sum(W[j, i] * direction[j] for j in range(self.r))
+            if power != 0:
+                by_power.setdefault(power, []).append(str(variable))
+        parts = []
+        for power in sorted(by_power, key=lambda p: (-sympy.sign(p), abs(p))):
+            factor = 'lambda' if abs(power) == 1 else 'lambda^{}'.format(abs(power))
+            parts.append('{} by {}'.format(', '.join(by_power[power]),
+                                           factor if power > 0 else '1/' + factor))
+        return ' and '.join(parts)
