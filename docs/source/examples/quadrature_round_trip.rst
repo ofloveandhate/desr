@@ -1,14 +1,12 @@
 Recovering auxiliary variables by quadrature
 ============================================
 
-One reason to do a scaling symmetry reduction is to produce a system fewer symbols.  An application that solves a system
-thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
+One reason to do a scaling symmetry reduction is to produce a system with fewer symbols.  An application that solves a system thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
 :meth:`~desr.ode_translation.ODETranslation.translate_general` offers
 ``include_aux_vars=False`` for exactly that: it returns the invariants and reduced equations, and throws
 auxiliary variables away.
 
-This page discusses this reduction, and how to get the original system back afterwards
-anyway.
+This page discusses this reduction, and how to get the original system back afterwards.
 
 
 What are auxiliaries?
@@ -29,8 +27,9 @@ Fortunately, :math:`x` does not.  Every auxiliary variable satisfies an equation
     \end{align}
 
 where :math:`H_j` involves the invariants and the independent variable but never the
-auxiliaries themselves.  The auxiliaries are therefore a *quadrature* sitting on top of the
-invariants, rather than part of the system.  So, solving the :math:`y` equations without them loses nothing that
+auxiliaries themselves.  The auxiliaries are therefore a *quadrature* along side the
+invariant.  A reduced system can be written without them.  
+So, solving the :math:`y` equations without the :math:`x` loses nothing that
 cannot be recomputed. 
 
 
@@ -57,7 +56,7 @@ But desr expects only the formal name of the derivative on the left hand side:
     \frac{dz_2}{dt} &= \frac{z_2}{t} \left( \frac{10}{3} - \frac{2}{3} z_1^5 z_2 + \frac{z_1^2 z_2}{t} \right)
     \end{align}
 
-Build it in Python with desr.
+Build the system in Python with desr.  I'll use the `from_equations` form, this time, which expects sympy-compatible strings.
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
@@ -67,10 +66,10 @@ Build it in Python with desr.
     >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
     >>> eqns = [eq1, eq2]
     >>> system = ODESystem.from_equations(eqns)
+    >>> system.reorder_variables(['t', 'z1', 'z2'])
 
 And nondimensionalize.
 
-    >>> system.reorder_variables(['t', 'z1', 'z2'])
     >>> translation = ODETranslation.from_ode_system(system)
     >>> translation.invariants()
     Matrix([[t*z1**3, z1**5*z2]])
@@ -78,8 +77,8 @@ And nondimensionalize.
     Matrix([[z1**4*z2]])
 
 Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
-:math:`t z_1^2`.  Those are products of integer powers of desr's, and desr's of theirs --
-the paper's :math:`y_2` is desr's :math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
+:math:`t z_1^2`.  Those are products of integer powers of desr's invariants, and correspondingly, desr's of theirs.  
+HL's :math:`y_2` is desr's :math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
 desr onto the paper's basis, so that everything below can be compared with p. 504 directly.
 
     >>> translation.multiplier_add_columns(2, 1, -1)   # y2  <-  y2 / y1
@@ -90,7 +89,7 @@ desr onto the paper's basis, so that everything below can be compared with p. 50
     Matrix([[t*z1**2]])
 
 Reducing the usual way keeps the auxiliary :math:`x_0` as a variable of the reduced system,
-and gives exactly the paper's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
+and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
 
     >>> translation.translate_general(system)
     dt/dt = 1
@@ -98,8 +97,8 @@ and gives exactly the paper's equations (6.6) for :math:`x`, :math:`y_1` and :ma
     dy0/dt = y0*(y0*y1 - 1)/t
     dy1/dt = y1*(y1 + 1)/t
 
-Notably, :math:`x_0` appears nowhere but in its own equation.  Asking for the invariants
-alone drops it, leaving one fewer equation to integrate:
+Notably for this page's teaching mission, :math:`x_0` appears nowhere but in its own equation -- it's an auxiliary.
+Asking for the invariants alone drops it, leaving one fewer equation to integrate:
 
     >>> reduced_system = translation.translate_general(system, include_aux_vars=False)
     >>> reduced_system
@@ -108,11 +107,11 @@ alone drops it, leaving one fewer equation to integrate:
     dy1/dt = y1*(y1 + 1)/t
 
 
-Construct `NumericTranslation`
+Construct a `NumericTranslation`
 ----------------------------------
 
-:class:`~desr.numerics.NumericTranslation` is down with a reduction with its auxiliaries
-dropped.  Pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
+:class:`~desr.numerics.NumericTranslation` is happy to work with a reduction with its auxiliaries
+dropped.  We do need to pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
 
     >>> numeric_translation = NumericTranslation(system, translation, reduced_system)
     >>> numeric_translation.scheme
@@ -130,10 +129,10 @@ and it mentions :math:`y_0`, :math:`y_1` and :math:`t` -- but no :math:`x`.
     >>> numeric_translation.auxiliaries_are_constant
     False
 
-Because such auxiliaries are not constant, they will have to be integrated.
+Because such auxiliaries are not constant, they will have to be integrated.  (If they were all constant, then the parameter reduction method would have been used.)
 
 
-The paper's exact solution
+Exact solution
 --------------------------
 
 Hubert and Labahn solve the reduced system in closed form (p. 504).  With their
@@ -185,16 +184,19 @@ and whose auxiliary is :math:`t z_1^2 = 0.25`.
     >>> y0_exact = sympy.lambdify(t, exact[y0].subs(constants), modules='numpy')
     >>> y1_exact = sympy.lambdify(t, exact[y1].subs(constants), modules='numpy')
 
+We do note that we cannot start time at :math:`t = 0`, because of the division by :math:`t` in the differential equations.  This also presents difficulties for the scale reduction of initial conditions in the general reduction scheme, which is why that is not currently supported by desr.
 
 Solving the reduced system
 --------------------------
 
-Now solve the two-equation system numerically.
+Solve the two-equation system numerically.  We use sympy to turn the symbolic differential equations into numpy callables, so that scipy can integrate.
 
     >>> def as_function(a_system):
     ...     variables = list(a_system.non_constant_variables)
     ...     rhs = [a_system.derivative_dict[x] for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
+
+Do the integration.
 
     >>> times = np.linspace(1.0, 2.0, 200)
     >>> solution = solve_ivp(as_function(reduced_system), (1.0, 2.0),
@@ -209,13 +211,14 @@ The numerical solution is very close to the exact:
     >>> bool(np.max(np.abs(solution.y[1] - y1_exact(times))) < 1e-9)
     True
 
+Huzzah.
 
 Reverse translation
 ---------------------
 
-Translating a series back to original variables needs the auxiliary at its first sample, from which its own
-equation carries it forward.  For a system with constants, the known values that fix it
-would be constants.  This system has none -- its variables are :math:`t`, :math:`z_1` and
+Translating a series back to original variables needs the auxiliary at its first sample, from which the auxiliary's own
+differential equation carries it forward.  For a system with parameters, the known values that fix it
+would be those parameter values.  This particular system has none -- its variables are :math:`t`, :math:`z_1` and
 :math:`z_2`, and that is all -- so the only thing we can know is a *point* value: where the
 solution started.
 
@@ -285,7 +288,7 @@ equations along the invariants.  The circles are this example's exact values.
 The right-hand panel is each original variable, obtained from reverse translation.
 
 
-When there is nothing to integrate
+When is this necessary?
 ----------------------------------
 
 The quadrature above is needed only when the general reduction scheme was needed and auxiliaries were omitted when computing the reduced system.  Auxiliaries only appear when the
