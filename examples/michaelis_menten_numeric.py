@@ -133,7 +133,7 @@ right.annotate('tolerance asked of the solver', xy=(0.2, 1e-10), xytext=(0, 5),
 right.semilogy(times, difference_s, color=SUBSTRATE, linewidth=1.2, label=r'$s$')
 right.semilogy(times, difference_c, color=COMPLEX, linewidth=1.2, label=r'$c$')
 right.set_ylim(1e-15, 3e-10)
-style(right, 'Difference between solutions to nondimensionalized model',
+style(right, '|original-reduced|',
       r'$t$', 'absolute difference')
 error_legend = right.legend(frameon=False, fontsize=9, loc='lower right',
                             labelcolor=INK_SOFT, ncols=2)
