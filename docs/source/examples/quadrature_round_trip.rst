@@ -108,8 +108,8 @@ alone drops it, leaving one fewer equation to integrate:
     dy1/dt = y1*(y1 + 1)/t
 
 
-What was dropped
-----------------
+Construct `NumericTranslation`
+----------------------------------
 
 :class:`~desr.numerics.NumericTranslation` is down with a reduction with its auxiliaries
 dropped.  Pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
