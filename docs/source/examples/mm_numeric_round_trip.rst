@@ -1,16 +1,15 @@
-Un-translating a numerical solution
+Numerical solution and reverse translation
 ========================================================
 
-The nondimensionalization algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model.
+The nondimensionalization algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original.
+That is, having solved a nondimensionalized system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalization.  
 
-
-Having solved a nondimensionalized system, we might want the answer back in the original units.  Let's walk
-through that round trip using the Michaelis-Menten equations: we solve the *reduced* system
+Let's demonstrate using the Michaelis-Menten equations: we solve the *reduced* system
 numerically, and recover the solution of the *original* one, then check the two agree.
 
 :mod:`desr` provides some tools in :mod:`desr.numerics`, which needs :mod:`numpy`.  Due to this dependence, is not imported by
 ``desr``.  The numerics submodule optional, so users who only work symbolically are free of this dependency.  This example 
-uses :mod:`scipy` to do the integrating, but a user is of course free to use any solver, or provide numeric data from any source.
+uses :mod:`scipy` to do the integrating, but a user is, of course, free to use any solver, or provide numeric data from any source.
 
 The system and its reduction
 ----------------------------
