@@ -25,10 +25,16 @@ cd docs && make doctest
 
 **Run unit tests:**
 ```bash
-python -m pytest desr/unittests.py
-# or
-python desr/unittests.py
+python -m pytest tests/
 ```
+Tests live in the top-level `tests/` directory, split by subject, and are not shipped in
+the wheel (`setup.py` packages `desr` only). `tests/test_edge_cases.py` holds adversarial
+systems; anything marked `unittest.expectedFailure` there is a known, unfixed bug and will
+turn into a failure when it is fixed.
+
+numpy and scipy are optional for *using* desr but required for *testing* it: the suite
+imports them unconditionally rather than skipping, since a suite that skips a module when
+its dependency is missing reports a success it has not earned.
 
 **Run an example:**
 ```bash
