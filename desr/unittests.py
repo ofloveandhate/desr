@@ -516,6 +516,31 @@ class TestODETranslationTraps(TestCase):
         self.assertIn('not unimodular', str(caught.exception))
         self.assertIn('roots of degree 2', str(caught.exception))
 
+    def test_a_conserved_variable_does_not_depend_on_its_name(self):
+        # A catalyst gets a derivative of identically zero straight from the stoichiometry.
+        # That expression has no monomials, so it used to contribute a 0x0 block to the
+        # exponent matrix; sympy's hstack absorbs such a block on the left but raises on
+        # the right, so the same network reduced or crashed according to where the catalyst
+        # fell in the variable ordering -- that is, according to what it was called.
+        scalings = {}
+        for catalyst in ('e', 'z'):
+            network = ChemicalReactionNetwork.from_diagram(
+                'x + {c} -> y + {c}'.format(c=catalyst))
+            system = network.to_ode_system()
+            self.assertEqual(system.derivative_dict[sympy.Symbol(catalyst)],
+                             sympy.sympify(0))
+            scalings[catalyst] = (list(system.variables), system.maximal_scaling_matrix())
+
+        # The two differ only by the name of the catalyst, so permuting the columns of one
+        # into the other's variable order must give the same scaling action.
+        first_variables, first = scalings['e']
+        other_variables, other = scalings['z']
+        renamed = [sympy.Symbol('z') if v == sympy.Symbol('e') else v
+                   for v in first_variables]
+        order = [other_variables.index(v) for v in renamed]
+        permuted = other[:, order]
+        self.assertEqual(first.rref()[0], permuted.rref()[0])
+
     def test_invariant_constant_that_cancels_is_still_a_variable(self):
         # Hubert & Labahn 6.6, with initial-condition constants adjoined so that each z_i0
         # scales like its z_i.  kappa0 = t0*z10**3 is the reduced initial time: it appears

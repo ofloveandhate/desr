@@ -1125,6 +1125,13 @@ def rational_expr_to_exponent_matrix(expr, variables):
     [ 2, 1],
     [ 0, 0],
     [ 1, 1]])
+
+    A zero expression -- the equation of a conserved variable, such as a catalyst in a
+    reaction network -- has no monomials, and so constrains no scaling.  It contributes a
+    column of zeros, one entry per variable, rather than nothing at all:
+
+    >>> rational_expr_to_exponent_matrix(sympy.sympify(0), variables).T
+    Matrix([[0, 0, 0, 0, 0, 0, 0, 0]])
     '''
     expr = expr.cancel()
     num, denom = expr.as_numer_denom()
@@ -1153,6 +1160,15 @@ def rational_expr_to_exponent_matrix(expr, variables):
     powers = []
     for mon in itertools.chain(num_terms, denom_terms):
         powers.append(monomial_to_powers(mon / ref_power, variables))
+
+    if not powers:
+        # A zero expression has no monomials.  It constrains no scaling, so the honest
+        # answer is a column of zeros.  Building a matrix from the empty list instead would
+        # give a 0x0 one, which ignores `variables` and cannot be glued to the others:
+        # sympy's hstack absorbs a zero-row block on the left but raises on the right, so
+        # whether a system reduced at all would depend on where its conserved variables
+        # fell in the ordering -- that is, on what they were named.
+        return sympy.zeros(len(variables), 1)
 
     powers = sympy.Matrix(powers).T
     return powers
