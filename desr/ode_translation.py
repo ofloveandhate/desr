@@ -622,11 +622,6 @@ class ODETranslation(object):
     def translate_parameter(self, system):
         ''' Translate according to parameter scheme '''
 
-        reduced_system = system.copy()
-        reduced_system._is_reduced = True
-        assert reduced_system.is_reduced
-
-        
         # make the substitutions
         to_sub = self.translate_parameter_substitutions(system=system)
 
@@ -635,7 +630,7 @@ class ODETranslation(object):
 
         new_deriv_dict = {}
         for var, deriv in system.derivative_dict.items():
-            
+
             # skip the derivatives of constants, since they are `None`.
             if var in system.constant_variables:
                 continue
@@ -646,7 +641,22 @@ class ODETranslation(object):
 
             new_deriv_dict[Var] = (deriv.subs(to_sub) / derivative_factor).expand()
 
-        reduced_system = ODESystem.from_dict(new_deriv_dict, indep_var=new_indep, is_reduced=True)
+        # Build the reduced system from the variables the reduction is known to produce,
+        # rather than from the symbols that happen to survive into the right-hand sides.
+        # An invariant constant that cancels out of every equation is still a variable of
+        # the reduced system -- it is one of the n - r coordinates, and the substitutions
+        # returned by translate_parameter_substitutions refer to it -- but inferring the
+        # variables from the expressions, as ODESystem.from_dict does, would lose it.
+        dependent_variables = [variable_map[var] for var in system.non_constant_variables]
+        new_constants = self._new_constants(system)
+        new_variables = [new_indep] + dependent_variables + new_constants
+        new_derivatives = ([new_deriv_dict[new_indep]]
+                           + [new_deriv_dict[var] for var in dependent_variables]
+                           + [None] * len(new_constants))
+
+        reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
+                                   is_reduced=True)
+        reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
         if system.initial_conditions:
@@ -872,6 +882,23 @@ class ODETranslation(object):
 
         return the_map
 
+    def _new_constants(self, system):
+        '''
+        The invariant constants of the reduced system, named by the naming scheme.
+
+        There are :math:`k - r` of them, where :math:`k` is the number of constants of the
+        original system: the reduction normalises :math:`r` of them away.  This is the one
+        place the list is built, so that :meth:`translate_parameter` and
+        :meth:`translate_parameter_substitutions` cannot disagree about what exists.
+
+        Args:
+            system (ODESystem): The system being reduced.
+
+        :rtype: list of sympy.Symbol
+        '''
+        return [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at))
+                for i in range(system.num_constants - self.r)]
+
     def translate_parameter_substitutions(self, system):
         '''
         Given a system, determine the substitutions made in the parameter reduction.
@@ -920,7 +947,7 @@ class ODETranslation(object):
 
         variable_map = self.variable_map(system)
         # Form new constants
-        new_consts = [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at)) for i in range(system.num_constants - self.r)]
+        new_consts = self._new_constants(system)
 
         to_sub = {}
 

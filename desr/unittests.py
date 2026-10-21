@@ -516,6 +516,32 @@ class TestODETranslationTraps(TestCase):
         self.assertIn('not unimodular', str(caught.exception))
         self.assertIn('roots of degree 2', str(caught.exception))
 
+    def test_invariant_constant_that_cancels_is_still_a_variable(self):
+        # Hubert & Labahn 6.6, with initial-condition constants adjoined so that each z_i0
+        # scales like its z_i.  kappa0 = t0*z10**3 is the reduced initial time: it appears
+        # in no right-hand side, but it is one of the n - r coordinates of the reduced
+        # system, and translate_parameter_substitutions names it.  Building the reduced
+        # system from the symbols surviving into the equations used to lose it.
+        eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
+        eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
+        system = ODESystem.from_equations([eq1, eq2])
+        t0, z10, z20 = sympy.symbols('t0 z10 z20')
+        extended = ODESystem(list(system.variables) + [t0, z10, z20],
+                             list(system.derivatives) + [None, None, None],
+                             indep_var=system.indep_var)
+        extended.reorder_variables(['t', 'z1', 'z2', 't0', 'z10', 'z20'])
+        translation = ODETranslation(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
+                                     variables_domain=extended.variables)
+        reduced = translation.translate(extended)
+
+        self.assertEqual(len(reduced.variables),
+                         len(extended.variables) - translation.r)
+        # Every symbol the substitutions mention must exist in the reduced system.
+        mentioned = set()
+        for value in translation.translate_parameter_substitutions(extended).values():
+            mentioned |= value.free_symbols
+        self.assertFalse(mentioned - set(reduced.variables))
+
     def test_rational_section_returns_its_result(self):
         equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         system = ODESystem.from_equations(equations)

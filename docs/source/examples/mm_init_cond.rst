@@ -95,10 +95,10 @@ Just for curiosity, here's what we get if we translate the system at this point:
     dt/dt = 1
     dc/dt = -c*c1 - c*c2 - c*s + c3*s
     ds/dt = c*c1 + c*s - c3*s
+    dc0/dt = 0
     dc1/dt = 0
     dc2/dt = 0
     dc3/dt = 0
-    dc0/dt = 0
     s(0) = 1
     c0 == c1 + c2
 
@@ -143,10 +143,10 @@ Translate
     dtau/dtau = 1
     du/dtau = c1*v + u*v - u
     dv/dtau = -c1*v/c3 - c2*v/c3 - u*v/c3 + u/c3
+    dc0/dtau = 0
     dc1/dtau = 0
     dc2/dtau = 0
     dc3/dtau = 0
-    dc0/dtau = 0
     u(0) = 1
     c0 == c1 + c2
 
