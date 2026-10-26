@@ -33,6 +33,7 @@ except ImportError:  # pragma: no cover
 
 from .ode_translation import ODETranslation
 from .ode_system import ODESystem
+from .sympy_helper import to_symbol
 
 __all__ = ['NumericTranslation', 'InsufficientKnownValues', 'ConflictingKnownValues',
            'CONSISTENCY_TOLERANCE', 'Scheme']
@@ -503,7 +504,7 @@ class NumericTranslation(object):
             list: The auxiliary values, in the order of the columns of
             :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
         '''
-        known_values = {sympy.sympify(k): v for k, v in known_values.items()}
+        known_values = {to_symbol(k): v for k, v in known_values.items()}
         allowed = list(self._acted) if allowed is None else list(allowed)
         unusable = set(known_values) - set(allowed)
         if unusable:
@@ -747,7 +748,7 @@ class NumericTranslation(object):
         if auxiliaries is not None:
             start = self._given_auxiliaries(auxiliaries)
         else:
-            known_values = {sympy.sympify(k): v for k, v in (known_values or {}).items()}
+            known_values = {to_symbol(k): v for k, v in (known_values or {}).items()}
             self._reject_time_varying(known_values)
             at_first = {self.reduced.indep_var: times[0]}
             at_first.update(dict(zip(self._invariants, sampled[:, 0])))
@@ -802,7 +803,7 @@ class NumericTranslation(object):
         return result
 
     def _check(self, values, variables, description):
-        values = {sympy.sympify(k): v for k, v in values.items()}
+        values = {to_symbol(k): v for k, v in values.items()}
         unknown = set(values) - set(variables)
         if unknown:
             raise ValueError(

@@ -204,35 +204,36 @@ class TestAdversarialNames(TestCase):
         system = ODESystem.from_equations(['dz/dt = lamda*z'])
         self.assertIn(sympy.Symbol('lamda'), system.variables)
 
-    @unittest.expectedFailure
     def test_a_plain_sir_model(self):
-        # beta and gamma are sympy functions, so this raises
-        #   TypeError: bad operand type for unary -: 'FunctionClass'
         system = ODESystem.from_equations(['dS/dt = -beta*S*I',
                                            'dI/dt = beta*S*I - gamma*I',
                                            'dR/dt = gamma*I'])
         for name in ('S', 'I', 'R', 'beta', 'gamma'):
             self.assertIn(sympy.Symbol(name), system.variables)
 
-    @unittest.expectedFailure
     def test_a_parameter_called_pi_is_not_swallowed(self):
-        # `pi` sympifies to the number, so the parameter vanishes without a word and the
-        # system reduced is not the system written down.
+        # Left to sympy `pi` is the number, and the parameter would vanish without a word,
+        # so the system reduced would not be the system written down.
         system = ODESystem.from_equations(['dx/dt = pi*x'])
         self.assertIn(sympy.Symbol('pi'), system.variables)
 
-    @unittest.expectedFailure
+    def test_pi_can_still_be_asked_for_as_a_number(self):
+        from desr.sympy_helper import sympify_expression
+        self.assertIn(sympy.Symbol('pi'), sympify_expression('pi*x').free_symbols)
+        self.assertNotIn(sympy.Symbol('pi'),
+                         sympify_expression('pi*x', numeric=['pi']).free_symbols)
+
     def test_a_name_resolves_the_same_way_whichever_door_it_comes_in(self):
-        # `from_equations` reads 'S' as a symbol, via _clash1.  desr.numerics sympifies
-        # user-supplied names without it, so the same string is sympy's singleton registry
-        # there.  One convention, or the same name means two things.
+        # Both `from_equations` and desr.numerics go through sympy_helper, so 'S' is the
+        # same symbol in each.  It used to be sympy's singleton registry in numerics, so
+        # naming a variable by its own string did not find it.
         from desr.numerics import NumericTranslation
         system = ODESystem.from_equations(['dS/dt = -k*S'])
         system.reorder_variables(['t', 'S', 'k'])
         self.assertIn(sympy.Symbol('S'), system.variables)
-        translation = ODETranslation.from_ode_system(system)
-        numeric = NumericTranslation(system, translation)
-        point = numeric.forward({sympy.Symbol('t'): 1.0, sympy.Symbol('S'): 2.0,
-                                 sympy.Symbol('k'): 0.5})
-        # Naming the same variable by its string should work here too.
-        numeric.reverse(point, known_values={'S': 2.0})
+        numeric = NumericTranslation(system, ODETranslation.from_ode_system(system))
+
+        by_symbol = numeric.forward({sympy.Symbol('t'): 1.0, sympy.Symbol('S'): 2.0,
+                                     sympy.Symbol('k'): 0.5})
+        by_name = numeric.forward({'t': 1.0, 'S': 2.0, 'k': 0.5})
+        self.assertEqual(by_symbol, by_name)

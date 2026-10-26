@@ -6,7 +6,8 @@ Author: Richard Tanburn (richard.tanburn@gmail.com)
 
 import re
 import sympy
-from sympy.abc import _clash1
+
+from desr.sympy_helper import sympify_expression
 
 VAR_RE = r'[A-Za-z*][\d_]*'
 
@@ -155,8 +156,9 @@ def _tex_to_sympy_one_line(tex):
     # Change minuses in the subscripts to m's
     tex = re.sub(r'([a-zA-Z]+)_{(.*)\-(.+)}', '\\1_\\2m\\3 ', tex)
 
-    # We want to use all available variables, so sympify with the _clash local dictionary
-    return sympy.sympify(tex, _clash1)
+    # Read every name as a symbol: a species called S, E, I, beta or pi is an ordinary
+    # variable, not one of sympy's own objects.
+    return sympify_expression(tex)
 
 if __name__ == '__main__':
     import doctest
