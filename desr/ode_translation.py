@@ -6,6 +6,32 @@ from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
 from sympy.abc import _clash1
 
+def _scaled_rates(variables, factors, divide_by=None):
+    '''
+    Multiply each new variable by its rate factor, elementwise.
+
+    Args:
+        variables (list of sympy.Symbol): The new variables, one per column of ``factors``.
+        factors (sympy.Matrix): A row of rate factors.
+        divide_by: Optional expression to divide the result through by.
+
+    Returns:
+        list: One derivative per variable, empty when there are no variables.
+
+    A reduction can legitimately produce no invariants, or no auxiliaries.  ``dz/dt = z``
+    is the smallest example: it reduces completely, leaving only the independent variable
+    and one auxiliary.  sympy builds a 0x0 matrix from the empty list and then refuses to
+    multiply it elementwise against the 1x0 row of factors, so the empty case is taken
+    here rather than left to raise.
+    '''
+    if not variables:
+        return []
+    scaled = sympy.Matrix(variables).T.multiply_elementwise(factors)
+    if divide_by is not None:
+        scaled = scaled / divide_by
+    return list(scaled)
+
+
 def _int_inv(matrix_):
     ''' Given an integer matrix, return the inverse, ensuring we do it right in the integers
 
@@ -740,8 +766,8 @@ class ODETranslation(object):
         fywd = sympy.Matrix([(f / v).subs(to_sub, simultaneous=True).expand() for v, f in
                             zip(system.variables, system_derivatives)]).T
         fywd.col_del(system.indep_var_index)
-        dydt = sympy.Matrix(invariant_variables).T.multiply_elementwise(fywd * reduced_scaling.herm_mult_n)
-        dxdt = sympy.Matrix(auxiliary_variables).T.multiply_elementwise(fywd * reduced_scaling.herm_mult_i)
+        dydt = _scaled_rates(invariant_variables, fywd * reduced_scaling.herm_mult_n)
+        dxdt = _scaled_rates(auxiliary_variables, fywd * reduced_scaling.herm_mult_i)
 
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
@@ -802,10 +828,12 @@ class ODETranslation(object):
         # fywd = F(y^(W_d)) in Hubert Labahn
         fywd = sympy.Matrix([(system.indep_var * f / v).subs(to_sub, simultaneous=True).expand() for v, f in
                             zip(system.variables, system_derivatives)]).T
-        dydt = sympy.Matrix(invariant_variables).T.multiply_elementwise(fywd * self.herm_mult_n) / system.indep_var
+        dydt = _scaled_rates(invariant_variables, fywd * self.herm_mult_n,
+                             divide_by=system.indep_var)
 
         if include_aux_vars:
-            dxdt = sympy.Matrix(auxiliary_variables).T.multiply_elementwise(fywd * self.herm_mult_i) / system.indep_var
+            dxdt = _scaled_rates(auxiliary_variables, fywd * self.herm_mult_i,
+                                 divide_by=system.indep_var)
 
         if include_aux_vars:
             new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)

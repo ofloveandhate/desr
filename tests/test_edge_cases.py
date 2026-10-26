@@ -23,7 +23,7 @@ def parameters_of(system):
     return system.constant_variables
 
 
-def expected_variable_count(system, translation, include_aux_vars=True):
+def expected_variable_count(system, translation, scheme=None, include_aux_vars=True):
     '''
     How many variables the reduced system should have.
 
@@ -35,11 +35,23 @@ def expected_variable_count(system, translation, include_aux_vars=True):
         invariants of the remaining n - 1 variables, so n in total
       - general scheme: as above but the independent variable is outside the count, n + 1,
         or n - r + 1 when the auxiliaries are dropped
+
+    `scheme` says which one, for a caller who picked it rather than letting `translate`
+    choose.  Inferring it is only right when `translate` did the choosing -- calling
+    `translate_general` on a system that `translate` would have given to another scheme is
+    perfectly legal and gives a different count.
     '''
     n = len(system.variables)
-    if translation._is_translate_parameter_compatible(system):
+    if scheme is None:
+        if translation._is_translate_parameter_compatible(system):
+            scheme = 'parameter'
+        elif translation.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
+            scheme = 'dep_var'
+        else:
+            scheme = 'general'
+    if scheme == 'parameter':
         return n - translation.r
-    if translation.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
+    if scheme == 'dep_var':
         return n
     return n + 1 if include_aux_vars else n - translation.r + 1
 
@@ -86,18 +98,30 @@ class TestDisconnectedSymbols(TestCase):
 class TestDegenerateSystems(TestCase):
     ''' Systems at the edges of what counts as a system. '''
 
-    @unittest.expectedFailure
     def test_a_system_with_no_invariants(self):
         # `dz/dt = z` reduces completely: r = 1, the only invariant is t, and z is the
-        # auxiliary.  A total reduction is a perfectly good answer, but translate_dep_var
-        # multiplies empty matrices and raises
+        # auxiliary.  A total reduction is a perfectly good answer; it used to raise
         #   ShapeError: Matrix shapes must agree (0, 0) != (1, 0)
+        # from multiplying empty matrices.
         system = ODESystem.from_equations(['dz/dt = z'])
         translation = ODETranslation.from_ode_system(system)
         self.assertEqual(translation.r, 1)
         reduced = translation.translate(system)
         self.assertEqual(len(reduced.variables),
                          expected_variable_count(system, translation))
+        # Nothing is left but the independent variable and the one auxiliary.
+        self.assertEqual([str(v) for v in reduced.variables], ['t', 'x0'])
+
+    def test_a_system_with_no_invariants_under_the_general_scheme(self):
+        system = ODESystem.from_equations(['dz/dt = z'])
+        translation = ODETranslation.from_ode_system(system)
+        reduced = translation.translate_general(system)
+        self.assertEqual(len(reduced.variables),
+                         expected_variable_count(system, translation, scheme='general'))
+        dropped = translation.translate_general(system, include_aux_vars=False)
+        self.assertEqual(len(dropped.variables),
+                         expected_variable_count(system, translation, scheme='general',
+                                                 include_aux_vars=False))
 
     def test_single_dependent_variable_with_one_parameter(self):
         system = ODESystem.from_equations(['dz/dt = a*z'])
