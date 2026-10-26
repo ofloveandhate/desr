@@ -1,5 +1,5 @@
 '''
-Which variables are parameters and which are dependents.
+Classifying a system's variables: which are parameters and which are dependents.
 
 A variable with no equation is a parameter.  A variable with an equation is a dependent,
 *including* when that equation says zero: writing `dw/dt = 0` is a deliberate statement
