@@ -44,6 +44,13 @@ extensions = [
 bibtex_bibfiles = ['desr.bib']
 
 # -- Options for matplotlib figures -----------------------------------
+
+# A documentation build must never try to open a window: it runs headless in CI, and under
+# `-b doctest` an example that imports pyplot would otherwise pick whatever interactive
+# backend happens to be installed.  Set before pyplot is first imported, so it sticks.
+import matplotlib
+matplotlib.use('Agg')
+
 plot_formats = [('png', 110)]
 plot_html_show_formats = False
 
