@@ -4,7 +4,7 @@ import sympy
 
 from desr.matrix_normal_forms import hnf_row
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 
 class TestODESystemScaling(TestCase):
@@ -62,7 +62,7 @@ class TestODESystemScaling(TestCase):
                                                    [1, 0, 1],
                                                    [0, 0, 1]])
 
-        translation = ODETranslation(max_scal, hermite_multiplier=hermite_multiplier_example)
+        translation = ODETranslator(max_scal, hermite_multiplier=hermite_multiplier_example)
 
         translated = translation.translate_dep_var(system)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0 + 1)\ndy0/dt = y0*(1 + 1/t)')
@@ -81,7 +81,7 @@ class TestODESystemScaling(TestCase):
         self.assertTupleEqual(orig_soln, (reduced_soln[0], reduced_soln[1] / reduced_soln[0]))
 
         ## Check our answer hasn't changed, using our own Hermite multiplier
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         translated = translation.translate_dep_var(system)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0 - 1/t)\ndy0/dt = y0*(1 + 1/t)')
         self.assertEqual(translated, answer)
@@ -107,7 +107,7 @@ class TestODESystemScaling(TestCase):
                                                [2, 3, 2],
                                                [0, 0, 1]])
 
-        translation = ODETranslation(max_scal_ans, hermite_multiplier=hermite_multiplier_ans)
+        translation = ODETranslator(max_scal_ans, hermite_multiplier=hermite_multiplier_ans)
 
         translated = translation.translate(system)
         answer = ODESystem.from_equations('dx0/dt = x0*(2*y0*y1/3 - 1/3)/t\ndy0/dt = y0*(y0*y1 - 1)/t\ndy1/dt = y1*(y1 + 1)/t')
@@ -131,7 +131,7 @@ class TestODESystemScaling(TestCase):
             self.assertEqual(sol1, sol2)
 
         ## Check our answer hasn't changed, using our own Hermite multiplier
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         translated = translation.translate(system)
         answer = ODESystem.from_equations('dx0/dt = x0*(2*y1/3 + 2/3 + y1/y0)/t\ndy0/dt = y0*(y1 - 1)/t\ndy1/dt = y1*(5*y1/3 - 10/3 + (2*y0*(-y1 + 5)/3 + y1)/y0)/t')
         self.assertEqual(translated, answer)
@@ -157,7 +157,7 @@ class TestODESystemScaling(TestCase):
                                        [0, 1, 0, -1],
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]])
-        translator = ODETranslation(max_scal,
+        translator = ODETranslator(max_scal,
                                     variables_domain=system.variables,
                                     hermite_multiplier=herm_mult_paper)
         translated = translator.translate(system)
@@ -177,7 +177,7 @@ class TestODESystemScaling(TestCase):
 
         ## Now do it with our own Hermite multiplier, except we need the variables in a different order
         system.reorder_variables('tnrk')
-        translator = ODETranslation.from_ode_system(system)
+        translator = ODETranslator.from_ode_system(system)
         translated = translator.translate_general(system)
         self.assertEqual(translated, answer)
         general_soln = translator.reverse_translate_general(reduced_solutions, system_indep_var_index=0)
@@ -195,7 +195,7 @@ class TestODESystemScaling(TestCase):
         system = ODESystem.from_equations(equations)
 
         # Take the maximal scaling matrix
-        max_scal = ODETranslation.from_ode_system(system)
+        max_scal = ODETranslator.from_ode_system(system)
 
         t, n, p, K, d, h, k, r, s = max_scal.variables_domain
 
@@ -247,7 +247,7 @@ class TestInitialConditions(TestCase):
                                                                        [ 1, 0,  0, 0, 0, 0,  0],
                                                                        [ 0, 1,  0, 1, 0, 1,  1],
                                                                        [ 0, 1,  0, 0, 0, 0,  1]]))
-        max_scal1 = ODETranslation.from_ode_system(original_system)
+        max_scal1 = ODETranslator.from_ode_system(original_system)
         self.assertEqual(max_scal1.scaling_matrix, sympy.Matrix([[1, 0, 0, -1, -1, -1, 0],
                                                                  [0, 1, 1,  0,  0, -1, 1]]))
 
@@ -266,7 +266,7 @@ class TestInitialConditions(TestCase):
                                                                        [ 0, 1,  0, 0, 0, 0,  1,  0],
                                                                        [ 0, 0,  0, 0, 0, 0,  0, -1]]))
 
-        max_scal1 = ODETranslation.from_ode_system(original_system)
+        max_scal1 = ODETranslator.from_ode_system(original_system)
         self.assertEqual(max_scal1.scaling_matrix, sympy.Matrix([[1, 0, 0, -1, -1, -1, 0, 0],
                                                                  [0, 1, 1,  0,  0, -1, 1, 1]]))
 

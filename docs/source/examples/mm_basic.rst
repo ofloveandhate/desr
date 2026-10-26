@@ -57,9 +57,9 @@ We can see the system's properties
     [1, 1,  0, 1, 0, 0,  1],
     [1, 0,  0, 0, 0, 0,  1]])
 
-One reduces by first making a `ODETranslation`.  One can query the properties/results of the translation, like `scaling_matrix` and `invariants`.
+One reduces by first making a `ODETranslator`.  One can query the properties/results of the translation, like `scaling_matrix` and `invariants`.
 
-    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
+    >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
     >>> translation.scaling_matrix
     Matrix([
     [1, 0, 0, -1, -1, -1, 0],
@@ -67,7 +67,7 @@ One reduces by first making a `ODETranslation`.  One can query the properties/re
     >>> translation.invariants()
     Matrix([[e_0*k_1*t, s/e_0, c/e_0, k_m1/(e_0*k_1), k_2/(e_0*k_1)]])
 
-Actually do the reduction by calling the `translate` function on the `ODETranslation` instance.
+Actually do the reduction by calling the `translate` function on the `ODETranslator` instance.
 
     >>> translation.translate(system)
     dtau/dtau = 1

@@ -1,7 +1,7 @@
 
 import sympy
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation, scale_action
+from desr.ode_translation import ODETranslator, scale_action
 
 
 def example_two_step_phosphorelay():
@@ -192,7 +192,7 @@ def main():
         print('Original system:\n{}\n'.format(system))
         print('Scaling action:\n{}\n{}\n'.format(system.variables, max_scal))
 
-        translation = ODETranslation(max_scal)
+        translation = ODETranslator(max_scal)
         print('Hermite multiplier:\n{}\n'.format(translation.herm_mult))
         print('Invariants of the system:\n{}\n'.format(translation.invariants(system.variables)))
         print('Substitutions:',translation.translate_parameter_substitutions(system))

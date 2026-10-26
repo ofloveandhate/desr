@@ -3,7 +3,7 @@ from unittest import TestCase
 import sympy
 
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 # numpy is optional for using desr, but not for testing it: a test suite that quietly skips
 # a module when its dependency is missing reports success it has not earned.
@@ -25,7 +25,7 @@ class TestNumericTranslation(TestCase):
         self.system = ODESystem.from_tex(system_tex)
         self.system.update_initial_conditions({'s': 's_0'})
         self.system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
-        self.translation = ODETranslation.from_ode_system(
+        self.translation = ODETranslator.from_ode_system(
             self.system, naming_scheme=('tau', ['u', 'v'], 'c'))
         self.numeric = NumericTranslation(self.system, self.translation)
 
@@ -234,7 +234,7 @@ class TestNumericTranslation(TestCase):
         system = ODESystem.from_equations(['dz/dt = a*z - b*z**3'])
         system.update_initial_conditions({'z': 'z0'})
         system.reorder_variables(['t', 'z', 'a', 'b', 'z0'])
-        numeric = NumericTranslation(system, ODETranslation.from_ode_system(system))
+        numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
         t, z, a, b, z0 = system.variables
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
         with self.assertRaises(NotImplementedError) as caught:
@@ -248,7 +248,7 @@ class TestNumericTranslation(TestCase):
         equations = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
         system = ODESystem.from_equations(equations)
         system.reorder_variables(['t', 'z1', 'z2'])
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         numeric = NumericTranslation(system, translation)
         self.assertTrue(numeric.carries_auxiliaries)
         t, z1, z2 = system.variables

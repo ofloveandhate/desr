@@ -2,7 +2,7 @@ Recovering auxiliary variables by quadrature
 ============================================
 
 One reason to do a scaling symmetry reduction is to produce a system with fewer symbols.  An application that solves a system thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
-:meth:`~desr.ode_translation.ODETranslation.translate_general` offers
+:meth:`~desr.ode_translation.ODETranslator.translate_general` offers
 ``include_aux_vars=False`` for exactly that: it returns the invariants and reduced equations, and throws
 auxiliary variables away.
 
@@ -70,7 +70,7 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
 And nondimensionalize.
 
-    >>> translation = ODETranslation.from_ode_system(system)
+    >>> translation = ODETranslator.from_ode_system(system)
     >>> translation.invariants()
     Matrix([[t*z1**3, z1**5*z2]])
     >>> translation.auxiliaries()
@@ -251,7 +251,7 @@ invariants wherever it likes.)
     ...                             invariants_at=solution.sol)
 
 Hubert-Labahn reverse-translates the exact solution, and desr's symbolic
-:meth:`~desr.ode_translation.ODETranslation.reverse_translate_general` does the same
+:meth:`~desr.ode_translation.ODETranslator.reverse_translate_general` does the same
 computation: it rebuilds :math:`z_1` and :math:`z_2` from :math:`x`, :math:`y_1` and
 :math:`y_2`, then rescales time by a constant that the arbitrary :math:`c_i` leave free --
 here :math:`c_3^3 / c_1^2`.  With the constants fixed by our starting point that factor is

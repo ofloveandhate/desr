@@ -40,7 +40,7 @@ The variable order matters: the reduction algorithm tends to reduce away the var
 
 Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
 
-    >>> translation = ODETranslation.from_ode_system(system,
+    >>> translation = ODETranslator.from_ode_system(system,
     ...                                              naming_scheme=('tau', ['u', 'v'], 'c'))
     >>> translation.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
@@ -86,7 +86,7 @@ Translate parameter values
 
 Let's translate the values of our original parameters, into the dimensionless parameters.  To this end,  
 :class:`~desr.numerics.NumericTranslation` translates numeric values for parameters and variables across the same reduction that
-:class:`~desr.ode_translation.ODETranslation` applies to symbols.
+:class:`~desr.ode_translation.ODETranslator` applies to symbols.
 
     >>> numeric_translation = NumericTranslation(system, translation, reduced_system)
 

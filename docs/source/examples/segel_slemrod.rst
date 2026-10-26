@@ -58,7 +58,7 @@ Choose a variable order, with initial conditions at end so the algorithm will no
 
     >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
 
-    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
+    >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
     >>> translation.multiplier_add_columns(2, -1, 1)  # Multiply time by epsilon
     >>> translation.multiplier_add_columns(4, -1, -1)  # divide column 4 by epsilon
 
@@ -122,9 +122,9 @@ A sanity check
     >>> system.variables
     (t, s, c, epsilon, k_m1, k_2, k_1, K_m, e_0, s_0)
 
-Now we can construct the `ODETranslation`
+Now we can construct the `ODETranslator`
 
-    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
+    >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
     >>> translation.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, -1, 0, 0, 0],
@@ -284,7 +284,7 @@ We can work with the expression :math:`s_0 + K_m` systematically by adding a new
 Check that if we keep :math:`L` near the end, we have the same reduced system as before
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
-    >>> translation = ODETranslation.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
+    >>> translation = ODETranslator.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
     >>> translation.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, 0, 0, 0],
@@ -302,7 +302,7 @@ Check that if we keep :math:`L` near the end, we have the same reduced system as
 Putting :math:`K_m` at the end, we have
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
-    >>> translation = ODETranslation.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
+    >>> translation = ODETranslator.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
     >>> # Scale t correctly to t/t_C = k_1 L t
     >>> translation.multiplier_add_columns(2, -1, 1)
     >>> # Scale s correctly to s / s_0

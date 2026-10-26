@@ -70,11 +70,11 @@ def _int_inv(matrix_):
     sympy_inverse = sympy.Matrix(matrix_).inv()
     return sympy_inverse
 
-class ODETranslation(object):
+class ODETranslator(object):
     '''
     An object used for translating between systems of ODEs according to a scaling matrix.
-    The key data are :attr:`~desr.ode_translation.ODETranslation.scaling_matrix` and
-    :attr:`~desr.ode_translation.ODETranslation.herm_mult`, which together contain all the information needed
+    The key data are :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` and
+    :attr:`~desr.ode_translation.ODETranslator.herm_mult`, which together contain all the information needed
     (along with a variable order) to reduce an :class:`~desr.ode_system.ODESystem`.
 
     Args:
@@ -83,7 +83,7 @@ class ODETranslation(object):
             If this is not given, we will act on a system according to the position of the variables in
             :attr:`~desr.ode_system.ODESystem.variables`, as long as there is the correct number of variables.
         hermite_multiplier (sympy.Matrix, optional): User-defined Hermite multiplier, that puts
-            :attr:`~desr.ode_translation.ODETranslation.scaling_matrix` into
+            :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
         naming_scheme (tuple): A tuple of strings giving the names of the variables after reduction.  Default is `('tau', 'nu', 'kappa')`
@@ -100,7 +100,7 @@ class ODETranslation(object):
     so the determinant is :math:`-2` -- is refused at once, rather than failing later when
     its inverse is first needed:
 
-    >>> ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1], [0, 1, 0, -1, 1]]),
+    >>> ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1], [0, 1, 0, -1, 1]]),
     ...                hermite_multiplier=sympy.Matrix([[0, 0, 2,  0, 0],
     ...                                                 [0, 0, 0,  1, 0],
     ...                                                 [1, 1, -2, -1, 0],
@@ -144,7 +144,7 @@ class ODETranslation(object):
 
     def set_naming_scheme(self, naming_scheme):
         '''
-        Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslation`.
+        Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslator`.
         '''
 
         # we start with some validation.
@@ -163,7 +163,7 @@ class ODETranslation(object):
         Returns:
             str: The scaling matrix :math:`A`, the Hermite multiplier :math:`V` and :math:`W = V^{-1}`, in beautiful LaTeX.
 
-        >>> print(ODETranslation(sympy.Matrix(range(12)).reshape(3, 4)).to_tex())
+        >>> print(ODETranslator(sympy.Matrix(range(12)).reshape(3, 4)).to_tex())
         A=
         0 & 1 & 2 & 3 \\\\
         4 & 5 & 6 & 7 \\\\
@@ -276,7 +276,7 @@ class ODETranslation(object):
             sympy.Matrix: The Hermite multiplier :math:`V`, ignoring the independent variable.
 
 
-        >>> translation = ODETranslation(sympy.Matrix(range(12)).reshape(3, 4))
+        >>> translation = ODETranslator(sympy.Matrix(range(12)).reshape(3, 4))
         >>> translation.herm_mult
         Matrix([
         [ 0,  0,  1,  0],
@@ -306,7 +306,7 @@ class ODETranslation(object):
             sympy.Matrix:
                 The inverse Hermite multiplier :math:`W`, ignoring the independent variable.
 
-        >>> translation = ODETranslation(sympy.Matrix(range(12)).reshape(3, 4))
+        >>> translation = ODETranslator(sympy.Matrix(range(12)).reshape(3, 4))
         >>> translation.inv_herm_mult
         Matrix([
         [0, 1, 2, 3],
@@ -335,12 +335,12 @@ class ODETranslation(object):
     @classmethod
     def from_ode_system(cls, ode_system, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
         '''
-        Create a :class:`ODETranslation` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
+        Create a :class:`ODETranslator` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
 
         Args:
             ode_system (ODESystem)
 
-        :rtype: ODETranslation
+        :rtype: ODETranslator
         '''
         return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
 
@@ -353,7 +353,7 @@ class ODETranslation(object):
             i (int): Column index
             j (int): Column index
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1],
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
         >>> translation.herm_form
         Matrix([
@@ -406,7 +406,7 @@ class ODETranslation(object):
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
         >>> translation.herm_mult
         Matrix([
         [0, 0,  1,  0],
@@ -451,7 +451,7 @@ class ODETranslation(object):
             j (int): Column index of the invariant column to add.
             alpha (int): Coefficient for addition
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1],
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
         >>> translation.herm_form
         Matrix([
@@ -521,7 +521,7 @@ class ODETranslation(object):
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.auxiliaries(), translation.invariants()
         (Matrix([[z1**4*z2]]), Matrix([[t*z1**3, z1**5*z2]]))
         >>> translation.multiplier_add_columns(2, 1, -1)   # the paper's second invariant
@@ -531,7 +531,7 @@ class ODETranslation(object):
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
         >>> translation.herm_mult
         Matrix([
         [0, 0,  1,  0],
@@ -568,7 +568,7 @@ class ODETranslation(object):
         Args:
             i (int): Column index
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1, 1, -1],
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
         >>> translation.herm_form
         Matrix([
@@ -615,7 +615,7 @@ class ODETranslation(object):
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
-        >>> translation = ODETranslation(sympy.Matrix([[1, 0, 1], [0, 1, 0]]))
+        >>> translation = ODETranslator(sympy.Matrix([[1, 0, 1], [0, 1, 0]]))
         >>> translation.herm_mult
         Matrix([
         [0, 0,  1],
@@ -732,7 +732,7 @@ class ODETranslation(object):
 
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.translate_dep_var(system=system)
         dt/dt = 1
         dx0/dt = x0*(y0 - 1/t)
@@ -761,8 +761,8 @@ class ODETranslation(object):
         else:
             variables_domain = None
 
-        # silviana says: i think it is weird that an ODETranslation is made here.  we're already in one.  why make another one?
-        reduced_scaling = ODETranslation(scaling_matrix=scaling_matrix,
+        # silviana says: i think it is weird that an ODETranslator is made here.  we're already in one.  why make another one?
+        reduced_scaling = ODETranslator(scaling_matrix=scaling_matrix,
                                          variables_domain=variables_domain,
                                          hermite_multiplier=new_herm_mult)
 
@@ -805,7 +805,7 @@ class ODETranslation(object):
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.translate_general(system=system)
         dt/dt = 1
         dx0/dt = 0
@@ -959,16 +959,16 @@ class ODETranslation(object):
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.translate_parameter_substitutions(system=system)
         {t: tau, n: nu0, p: nu1, K: kappa0, d: 1, h: kappa1, k: 1, r: kappa2, s: 1}
 
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
+        >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
         >>> translation.translate_parameter_substitutions(system=system)
         {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
 
-        >>> translation = ODETranslation.from_ode_system(system, new_indices_start_at=1)
+        >>> translation = ODETranslator.from_ode_system(system, new_indices_start_at=1)
         >>> translation.translate_parameter_substitutions(system=system)
         {t: tau, n: nu1, p: nu2, K: kappa1, d: 1, h: kappa2, k: 1, r: kappa3, s: 1}
         '''
@@ -1024,8 +1024,8 @@ class ODETranslation(object):
         Note:
             This *doesn't* reverse translate the parameter reduction scheme.
 
-            It *only* guesses between :meth:`~desr.ode_translation.ODETranslation.reverse_translate_general`
-            and :meth:`~desr.ode_translation.ODETranslation.reverse_translate_dep_var`,
+            It *only* guesses between :meth:`~desr.ode_translation.ODETranslator.reverse_translate_general`
+            and :meth:`~desr.ode_translation.ODETranslator.reverse_translate_dep_var`,
             by the number of variables given: :math:`n + 1` of them, the independent variable
             first, means the general scheme; :math:`n` or :math:`n - 1` means the dependent
             variable scheme.
@@ -1043,7 +1043,7 @@ class ODETranslation(object):
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
-        >>> translation = ODETranslation(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+        >>> translation = ODETranslator(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
         ...                              hermite_multiplier=sympy.Matrix([[0, 1, 0],
         ...                                                               [1, 0, 1],
         ...                                                               [0, 0, 1]]))
@@ -1056,7 +1056,7 @@ class ODETranslation(object):
         checks that the reconstructed independent variable is a constant multiple of the
         reduced one; the paper's exact solution serves.
 
-        >>> translation = ODETranslation(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
+        >>> translation = ODETranslator(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
         ...                              hermite_multiplier=sympy.Matrix([[1, 1, -1],
         ...                                                               [2, 3, 2],
         ...                                                               [0, 0, 1]]))
@@ -1110,7 +1110,7 @@ class ODETranslation(object):
         ...                           [ 0, 0,  0,  0,  0,  0,  0,  1,  0],  # k
         ...                           [-1, 0,  0,  1,  0,  0,  0, -1, -1],  # r
         ...                           [ 0, 0,  0,  0,  0,  0,  0,  0,  1]])  # s
-        >>> translation = ODETranslation(maximal_scaling_matrix,
+        >>> translation = ODETranslator(maximal_scaling_matrix,
         ...                              variables_domain=system.variables,
         ...                              hermite_multiplier=herm_mult, naming_scheme=('t',['n','p'], 'c'))
         >>> translation.translate_parameter(system)
@@ -1155,7 +1155,7 @@ class ODETranslation(object):
         >>> hermite_multiplier = sympy.Matrix([[0, 1, 0],
         ...                                    [1, 0, 1],
         ...                                    [0, 0, 1]])
-        >>> translation = ODETranslation(scaling_matrix=scaling_matrix,
+        >>> translation = ODETranslator(scaling_matrix=scaling_matrix,
         ...                              hermite_multiplier=hermite_multiplier)
         >>> reduced = translation.translate_dep_var(system)
         >>> # Check reduction
@@ -1227,7 +1227,7 @@ class ODETranslation(object):
         >>> hermite_multiplier = sympy.Matrix([[1, 1, -1],
         ...                                    [2, 3, 2],
         ...                                    [0, 0, 1]])
-        >>> translation = ODETranslation(scaling_matrix=scaling_matrix,
+        >>> translation = ODETranslator(scaling_matrix=scaling_matrix,
         ...                              hermite_multiplier=hermite_multiplier)
         >>> reduced = translation.translate_general(system)
         >>> # Quickly check the reduction
@@ -1300,15 +1300,15 @@ class ODETranslation(object):
 
     def invariants(self, variables=None):
         '''
-        The invariants of the system, as determined by :attr:`~desr.ode_translation.ODETranslation.herm_mult_n`.
+        The invariants of the system, as determined by :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`.
 
         Returns:
-            tuple: The invariants of the system, in terms of :attr:`~desr.ode_translation.ODETranslation.variables_domain` if not :code:`None`.
+            tuple: The invariants of the system, in terms of :attr:`~desr.ode_translation.ODETranslator.variables_domain` if not :code:`None`.
                 Otherwise, use :code:`variables` and failing that use :math:`y_i`.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.invariants()
         Matrix([[s*t, n/d, k*p/(d*s), K/d, h*s/k, r/s]])
         '''
@@ -1317,16 +1317,16 @@ class ODETranslation(object):
 
     def auxiliaries(self, variables=None):
         '''
-        The auxiliary variables of the system, as determined by :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
+        The auxiliary variables of the system, as determined by :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.
 
         Returns:
             tuple: The auxiliary variables of the system,
-                in terms of :attr:`~desr.ode_translation.ODETranslation.variables_domain` if not :code:`None`.
+                in terms of :attr:`~desr.ode_translation.ODETranslator.variables_domain` if not :code:`None`.
                 Otherwise, use :code:`variables` and failing that use :math:`x_i`.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.auxiliaries()
         Matrix([[1/s, d, d*s/k]])
         '''
@@ -1337,7 +1337,7 @@ class ODETranslation(object):
         '''
         Given a set of variables, print the rewrite rules.
         These are the rules that allow you to write any rational invariant in terms of the
-        :attr:`~desr.ode_translation.ODETranslation.invariants`.
+        :attr:`~desr.ode_translation.ODETranslator.invariants`.
 
         Args:
             variables (iter of sympy.Symbol):
@@ -1349,7 +1349,7 @@ class ODETranslation(object):
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.rewrite_rules()
         {t: s*t, n: n/d, p: k*p/(d*s), K: K/d, d: 1, h: h*s/k, k: 1, r: r/s, s: 1}
 
@@ -1381,7 +1381,7 @@ class ODETranslation(object):
 
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> moving_frame = translation.moving_frame()
         >>> moving_frame
         (z2,)
@@ -1401,7 +1401,7 @@ class ODETranslation(object):
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> moving_frame = translation.moving_frame()
         >>> moving_frame
         (s, 1/d, k/(d*s))
@@ -1440,14 +1440,14 @@ class ODETranslation(object):
 
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.rational_section()
         Matrix([[1 - 1/z2]])
 
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> translation.rational_section()
         Matrix([[1 - 1/s, d - 1, d*s - 1/k]])
 
@@ -1483,12 +1483,12 @@ class ODETranslation(object):
 
         Returns
         -------
-        ODETranslation
-            An ODETranslation representing the rewrite rules in terms of the given invariants.
+        ODETranslator
+            An ODETranslator representing the rewrite rules in terms of the given invariants.
 
 
         >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in range(6)]))
-        >>> ode_translation = ODETranslation(sympy.Matrix([[1, 0, 3, 0, 2, 2],
+        >>> ode_translation = ODETranslator(sympy.Matrix([[1, 0, 3, 0, 2, 2],
         ...                                                [0, 2, 0, 1, 0, 1],
         ...                                                [2, 0, 0, 3, 0, 0]]))
         >>> ode_translation.invariants(variables=variables)
@@ -1517,7 +1517,7 @@ class ODETranslation(object):
         # Step 2b: Apply these column operations to the current Hermite multiplier
         hermite_multiplier = self.herm_mult.copy()
         hermite_multiplier[:, self.r:] = self.herm_mult_n * column_operations
-        max_scal = ODETranslation(scaling_matrix=self.scaling_matrix, variables_domain=self.variables_domain,
+        max_scal = ODETranslator(scaling_matrix=self.scaling_matrix, variables_domain=self.variables_domain,
                                   hermite_multiplier=hermite_multiplier)
 
         return max_scal
@@ -1677,7 +1677,7 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
 
     return extended
 
-__all__ = ['ODETranslation', 'scale_action', 'extend_rectangular_matrix']
+__all__ = ['ODETranslator', 'scale_action', 'extend_rectangular_matrix']
 
 if __name__ == '__main__':
     import doctest

@@ -18,7 +18,7 @@ from scipy.integrate import solve_ivp
 
 from desr.numerics import NumericTranslation
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 # Slots 1, 2 and 3 of the reference palette.  Identity is carried by hue and repeated as a
 # direct label, never by colour alone.
@@ -34,7 +34,7 @@ EQUATIONS = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
 
 system = ODESystem.from_equations(EQUATIONS)
 system.reorder_variables(['t', 'z1', 'z2'])
-translation = ODETranslation.from_ode_system(system)
+translation = ODETranslator.from_ode_system(system)
 # Move onto the basis Hubert & Labahn use on p. 504, so the figure matches the paper.
 translation.multiplier_add_columns(2, 1, -1)
 translation.multiplier_add_columns(0, 2, -1)

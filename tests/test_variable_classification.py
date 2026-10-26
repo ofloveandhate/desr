@@ -17,7 +17,7 @@ from unittest import TestCase
 import sympy
 
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 t, z, w, a = sympy.symbols('t z w a')
 
@@ -66,7 +66,7 @@ class TestParametersAndDependents(TestCase):
 
     def test_a_dependent_variable_with_derivative_one_survives_reduction(self):
         system = ODESystem.from_equations(['dx/dt = 1'])
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         reduced = translation.translate(system)
         self.assertTrue(reduced.variables)
 
@@ -222,12 +222,12 @@ class TestConservedVariablesAndReduction(TestCase):
         # eligible for a scheme it does not satisfy.
         system = with_conserved_w()
         system.reorder_variables(['t', 'z', 'a', 'w'])
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         self.assertFalse(translation._is_translate_parameter_compatible(system))
 
     def test_a_conserved_variable_keeps_an_equation_in_the_reduced_system(self):
         conserved = with_conserved_w()
-        translation = ODETranslation.from_ode_system(conserved)
+        translation = ODETranslator.from_ode_system(conserved)
         reduced = translation.translate(conserved)
         # Whatever the scheme chose, the reduction must not have silently dropped it.
         self.assertTrue(reduced.variables)

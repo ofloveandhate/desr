@@ -31,7 +31,7 @@ try:
 except ImportError:  # pragma: no cover
     raise ImportError('desr.numerics requires numpy.  Install it.')
 
-from .ode_translation import ODETranslation
+from .ode_translation import ODETranslator
 from .ode_system import ODESystem
 from .sympy_helper import to_symbol
 
@@ -131,7 +131,7 @@ def _eval_monomial(values, exponents, column):
 
 def _dep_var_translation(system, translation):
     '''
-    Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslation.translate_dep_var`
+    Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`
     works with internally: the same scaling action, with the independent variable removed.
     '''
     index = system.indep_var_index
@@ -142,7 +142,7 @@ def _dep_var_translation(system, translation):
     else:
         hermite_multiplier.col_del(index)
         hermite_multiplier.row_del(index)
-    return ODETranslation(scaling_matrix=scaling_matrix,
+    return ODETranslator(scaling_matrix=scaling_matrix,
                           hermite_multiplier=hermite_multiplier)
 
 
@@ -152,9 +152,9 @@ class NumericTranslation(object):
 
     Args:
         system (ODESystem): The original system.
-        translation (ODETranslation): The reduction of that system.
+        translation (ODETranslator): The reduction of that system.
         reduced (ODESystem, optional): The reduced system.  Computed with
-            :meth:`~desr.ode_translation.ODETranslation.translate` if not given.  Pass it
+            :meth:`~desr.ode_translation.ODETranslator.translate` if not given.  Pass it
             explicitly when it was produced with non-default options, such as
             ``include_aux_vars=False``.
 
@@ -171,7 +171,7 @@ class NumericTranslation(object):
     >>> from desr.numerics import NumericTranslation
     >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
     >>> system = ODESystem.from_equations(equations)
-    >>> translation = ODETranslation.from_ode_system(system)
+    >>> translation = ODETranslator.from_ode_system(system)
     >>> numeric = NumericTranslation(system, translation)
     >>> numeric.scheme
     Scheme.PARAMETER
@@ -502,7 +502,7 @@ class NumericTranslation(object):
 
         Returns:
             list: The auxiliary values, in the order of the columns of
-            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
+            :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.
         '''
         known_values = {to_symbol(k): v for k, v in known_values.items()}
         allowed = list(self._acted) if allowed is None else list(allowed)
@@ -626,7 +626,7 @@ class NumericTranslation(object):
         >>> from desr.numerics import NumericTranslation
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> autonomous = NumericTranslation(system, translation,
         ...                                 translation.translate_general(system))
         >>> autonomous.scheme
@@ -642,7 +642,7 @@ class NumericTranslation(object):
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translation = ODETranslator.from_ode_system(system)
         >>> moving = NumericTranslation(
         ...     system, translation,
         ...     translation.translate_general(system, include_aux_vars=False))
@@ -721,7 +721,7 @@ class NumericTranslation(object):
 
         Returns:
             list: One value per auxiliary, in the order of the columns of
-            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`: an array along the
+            :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`: an array along the
             series if it moves, a scalar if it is constant.
         '''
         values = self._check(values, self.reduced.variables, 'the reduced system')

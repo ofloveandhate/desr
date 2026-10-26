@@ -19,7 +19,7 @@ from scipy.integrate import solve_ivp
 
 from desr.numerics import NumericTranslation
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 # Categorical slots 1 and 2 of the reference palette; identity is carried by hue and
 # repeated as a direct label, never by colour alone.
@@ -38,7 +38,7 @@ system = ODESystem.from_tex(SYSTEM_TEX)
 system.update_initial_conditions({'s': 's_0'})
 system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
 
-translation = ODETranslation.from_ode_system(system, naming_scheme=('tau', ['u', 'v'], 'c'))
+translation = ODETranslator.from_ode_system(system, naming_scheme=('tau', ['u', 'v'], 'c'))
 reduced_system = translation.translate(system)
 numeric = NumericTranslation(system, translation, reduced_system)
 

@@ -18,7 +18,7 @@ from desr.matrix_normal_forms import smf
 from desr.ode_system import ODESystem
 from desr.ode_system import maximal_scaling_matrix, rational_expr_to_exponent_matrix, hnf_col, hnf_row, normal_hnf_col
 from desr.matrix_normal_forms import normal_hnf_row
-from desr.ode_translation import ODETranslation, scale_action
+from desr.ode_translation import ODETranslator, scale_action
 from desr.tex_tools import expr_to_tex, matrix_to_tex
 
 
@@ -78,7 +78,7 @@ def michaelis_menten_four_variables():
         print('system\n',system)
 
 
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
 
 
         print('variable order:', translation.variables_domain)
@@ -110,7 +110,7 @@ def michaelis_menten_four_variables():
         print('New variable order:',variable_order)
         
         
-        system_from_ode = ODETranslation.from_ode_system(system)
+        system_from_ode = ODETranslator.from_ode_system(system)
         print('Invariants:', ', '.join(map(str, system_from_ode.invariants())))
         
         # Now do the reduction
@@ -174,7 +174,7 @@ def michaelis_menten_four_variables():
         
         # We need to add on Vi - the original will do.
         hermite_mult = sympy.Matrix.hstack(system_from_ode.herm_mult_i, hermite_mult)
-        translation = ODETranslation(system_from_ode.scaling_matrix, hermite_multiplier=hermite_mult)
+        translation = ODETranslator(system_from_ode.scaling_matrix, hermite_multiplier=hermite_mult)
 
         print('Reduced system:')
         print(translation.translate(system))
@@ -213,7 +213,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
         
         # Print scaling matrices
-        max_scal1 = ODETranslation.from_ode_system(reduced_system_km1)
+        max_scal1 = ODETranslator.from_ode_system(reduced_system_km1)
         print('Scaling matrix:')
         print(max_scal1.scaling_matrix.__repr__())
         
@@ -228,7 +228,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Adding in the initial condition for s')
         print('-------------------------------------')
         reduced_system_km1.update_initial_conditions({'s': 's_0'})
-        max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)
+        max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
         
         print('Invariants: ', max_scal2.invariants())
         print('Hermite multiplier', max_scal2.herm_mult.__repr__())
@@ -278,7 +278,7 @@ def michaelis_menten_two_variable(verbose=True):
 
         
         # # Print scaling matrices
-        # max_scal1 = ODETranslation.from_ode_system(system)
+        # max_scal1 = ODETranslator.from_ode_system(system)
         # print('Scaling matrix:')
         # print(max_scal1.scaling_matrix.__repr__())
         
@@ -299,7 +299,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Variable order: ', system.variables)
         
         print('Power Matrix:', system.exponent_matrix().__repr__())
-        translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
+        translation = ODETranslator.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
         
         
         print('Scaling matrix:',translation.scaling_matrix.__repr__())
@@ -370,7 +370,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
         print('parameters: ',reduced_system_km1.parameters)
 
-        max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)
+        max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
         
         print('Scaling matrix:',max_scal2.scaling_matrix.__repr__())
         print('Variable order: ', reduced_system_km1.variables)
@@ -426,7 +426,7 @@ def michaelis_menten_two_variable(verbose=True):
         reduced_system_l.add_constraint('L', 's_0 + K_m')
         reduced_system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
 
-        translation = ODETranslation.from_ode_system(reduced_system_l)
+        translation = ODETranslator.from_ode_system(reduced_system_l)
 
         # print translation.invariants()
         # Scale t correctly to t/t_C = k_1 L t

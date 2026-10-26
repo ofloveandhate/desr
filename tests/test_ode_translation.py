@@ -4,10 +4,10 @@ import sympy
 
 from desr.chemical_reaction_network import ChemicalReactionNetwork
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 
-class TestODETranslationTraps(TestCase):
+class TestODETranslatorTraps(TestCase):
     ''' Things that used to fail silently, or somewhere other than where the mistake was. '''
 
     def test_non_unimodular_multiplier_is_refused_at_construction(self):
@@ -15,7 +15,7 @@ class TestODETranslationTraps(TestCase):
         doubled = sympy.Matrix([[0, 0, 2, 0, 0], [0, 0, 0, 1, 0], [1, 1, -2, -1, 0],
                                 [0, 0, 0, 0, 1], [0, 1, 0, -1, 1]])
         with self.assertRaises(ValueError) as caught:
-            ODETranslation(scaling, hermite_multiplier=doubled)
+            ODETranslator(scaling, hermite_multiplier=doubled)
         self.assertIn('not unimodular', str(caught.exception))
         self.assertIn('roots of degree 2', str(caught.exception))
 
@@ -58,7 +58,7 @@ class TestODETranslationTraps(TestCase):
                              list(system.derivatives) + [None, None, None],
                              indep_var=system.indep_var)
         extended.reorder_variables(['t', 'z1', 'z2', 't0', 'z10', 'z20'])
-        translation = ODETranslation(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
+        translation = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
                                      variables_domain=extended.variables)
         reduced = translation.translate(extended)
 
@@ -73,13 +73,13 @@ class TestODETranslationTraps(TestCase):
     def test_rational_section_returns_its_result(self):
         equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         system = ODESystem.from_equations(equations)
-        translation = ODETranslation.from_ode_system(system)
+        translation = ODETranslator.from_ode_system(system)
         section = translation.rational_section()
         self.assertIsNotNone(section)
         self.assertEqual(section.shape, (1, translation.r))
 
     def test_reverse_translate_dispatches_by_count(self):
-        translation = ODETranslation(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+        translation = ODETranslator(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
                                      hermite_multiplier=sympy.Matrix([[0, 1, 0],
                                                                       [1, 0, 1],
                                                                       [0, 0, 1]]))
@@ -87,7 +87,7 @@ class TestODETranslationTraps(TestCase):
         self.assertEqual(translation.reverse_translate((x0, y0), 0), (x0, y0 / x0))
         self.assertEqual(translation.reverse_translate((x0, t, y0), 0), (t, x0, y0 / x0))
         # The general branch checks its inputs are genuine solutions, so use the exact one.
-        general = ODETranslation(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
+        general = ODETranslator(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
                                  hermite_multiplier=sympy.Matrix([[1, 1, -1],
                                                                   [2, 3, 2],
                                                                   [0, 0, 1]]))

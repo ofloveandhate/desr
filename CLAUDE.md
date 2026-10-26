@@ -43,7 +43,7 @@ python examples/michaelis_menten.py
 
 ## Architecture
 
-The reduction pipeline flows: `ODESystem` → `ODETranslation` → reduced `ODESystem`.
+The reduction pipeline flows: `ODESystem` → `ODETranslator` → reduced `ODESystem`.
 
 ### Core modules
 
@@ -56,9 +56,9 @@ Represents a system of ODEs as parallel tuples of `variables` and `derivatives`.
 - `reorder_variables(order)` — variable order affects which parameters get normalized out
 - `update_initial_conditions(...)`, `add_constraint(lhs, rhs)` — enrich the system before reduction
 
-**`desr/ode_translation.py` — `ODETranslation`**
+**`desr/ode_translation.py` — `ODETranslator`**
 The reduction engine. Holds a `scaling_matrix` (rows = scaling dimensions, columns = variables) and its column Hermite normal form multiplier `V`. Key methods:
-- `ODETranslation.from_ode_system(system)` — auto-construct from a system
+- `ODETranslator.from_ode_system(system)` — auto-construct from a system
 - `translate(system)` — produce the reduced `ODESystem`
 - `invariants()` — the scaling-invariant monomials (the new variables)
 - `auxiliaries()` — the auxiliary variables that get normalized to 1
