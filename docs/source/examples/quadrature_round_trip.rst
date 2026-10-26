@@ -60,7 +60,7 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
-    >>> from desr.numerics import NumericTranslation
+    >>> from desr import NumericTranslation
 
     >>> eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
     >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'

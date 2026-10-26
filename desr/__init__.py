@@ -26,7 +26,7 @@ from . import tex_tools
 from .chemical_reaction_network import (ChemicalReactionNetwork, ChemicalSpecies, Complex,
                                         Reaction)
 from .ode_system import ODESystem
-from .ode_translation import ODETranslator
+from .ode_translation import ODETranslator, scale_action
 from .sympy_helper import sympify_expression, to_symbol
 
 # desr.numerics needs numpy and scipy, which are optional for using the rest of the
@@ -61,6 +61,7 @@ __all__ = [
     'ODESystem',
     # Reduction
     'ODETranslator',
+    'scale_action',
     # Chemical reaction networks
     'ChemicalReactionNetwork',
     'ChemicalSpecies',

@@ -17,9 +17,7 @@ import numpy as np
 import sympy
 from scipy.integrate import solve_ivp
 
-from desr.numerics import NumericTranslation
-from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslator
+from desr import NumericTranslation, ODESystem, ODETranslator
 
 # Categorical slots 1 and 2 of the reference palette; identity is carried by hue and
 # repeated as a direct label, never by colour alone.

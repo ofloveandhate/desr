@@ -4,8 +4,7 @@
 
 # do the necessary imports
 import sympy
-from desr.chemical_reaction_network import ChemicalSpecies, ChemicalReactionNetwork, Complex, Reaction
-from desr.ode_system import ODESystem
+from desr import (ChemicalReactionNetwork, ChemicalSpecies, Complex, ODESystem, Reaction)
 
 
 # make variables, then convert to `ChemicalSpecies` from `desr`.

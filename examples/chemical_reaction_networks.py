@@ -1,7 +1,6 @@
 
 import sympy
-from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslator, scale_action
+from desr import ODESystem, ODETranslator, scale_action
 
 
 def example_two_step_phosphorelay():

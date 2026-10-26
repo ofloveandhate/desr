@@ -21,10 +21,7 @@ Note that negative subscripts are turned into 'm' so that they comply with :py:m
 negatives when printint to LaTeX using :func:`desr.tex_tools`.
 
     >>> import sympy
-    >>> from desr.matrix_normal_forms import smf
-    >>> from desr.ode_system import ODESystem
-    >>> from desr.ode_translation import ODETranslator, scale_action
-    >>> from desr.tex_tools import expr_to_tex
+    >>> from desr import ODESystem, ODETranslator, scale_action
     >>> system_tex = '''\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\
     ...                 \frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\
     ...                 \frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\

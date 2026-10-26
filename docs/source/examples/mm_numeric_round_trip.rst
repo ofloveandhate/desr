@@ -30,7 +30,7 @@ The variable order matters: the reduction algorithm tends to reduce away the var
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
-    >>> from desr.numerics import NumericTranslation
+    >>> from desr import NumericTranslation
 
     >>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
