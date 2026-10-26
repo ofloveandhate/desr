@@ -34,13 +34,13 @@ EQUATIONS = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
 
 system = ODESystem.from_equations(EQUATIONS)
 system.reorder_variables(['t', 'z1', 'z2'])
-translation = ODETranslator.from_ode_system(system)
+translator = ODETranslator.from_ode_system(system)
 # Move onto the basis Hubert & Labahn use on p. 504, so the figure matches the paper.
-translation.multiplier_add_columns(2, 1, -1)
-translation.multiplier_add_columns(0, 2, -1)
-with_aux = translation.translate_general(system)
-reduced = translation.translate_general(system, include_aux_vars=False)
-numeric = NumericTranslation(system, translation, reduced)
+translator.multiplier_add_columns(2, 1, -1)
+translator.multiplier_add_columns(0, 2, -1)
+with_aux = translator.translate_general(system)
+reduced = translator.translate_general(system, include_aux_vars=False)
+numeric = NumericTranslation(system, translator, reduced)
 
 t, z1, z2 = system.variables
 x0 = with_aux.variables[1]
@@ -57,7 +57,7 @@ exact = {x0: c3 / (t ** sympy.Rational(1, 3) * L ** sympy.Rational(2, 3)),
          y0: c1 / (t * L),
          y1: t / (c1 - t)}
 constants = {c1: 21, c2: 168 - sympy.log(20), c3: 21 ** sympy.Rational(2, 3)}
-z1_exact, z2_exact = translation.reverse_translate_general((t, exact[x0], exact[y0], exact[y1]))
+z1_exact, z2_exact = translator.reverse_translate_general((t, exact[x0], exact[y0], exact[y1]))
 exact_z1 = sympy.lambdify(t, z1_exact.subs(constants), modules='numpy')
 exact_z2 = sympy.lambdify(t, z2_exact.subs(constants), modules='numpy')
 exact_x0 = sympy.lambdify(t, exact[x0].subs(constants), modules='numpy')

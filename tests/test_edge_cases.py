@@ -18,7 +18,7 @@ from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslator
 
 
-def expected_variable_count(system, translation, scheme=None, include_aux_vars=True):
+def expected_variable_count(system, translator, scheme=None, include_aux_vars=True):
     '''
     How many variables the reduced system should have.
 
@@ -38,17 +38,17 @@ def expected_variable_count(system, translation, scheme=None, include_aux_vars=T
     '''
     n = len(system.variables)
     if scheme is None:
-        if translation._is_translate_parameter_compatible(system):
+        if translator._is_translate_parameter_compatible(system):
             scheme = 'parameter'
-        elif translation.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
+        elif translator.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
             scheme = 'dep_var'
         else:
             scheme = 'general'
     if scheme == 'parameter':
-        return n - translation.r
+        return n - translator.r
     if scheme == 'dep_var':
         return n
-    return n + 1 if include_aux_vars else n - translation.r + 1
+    return n + 1 if include_aux_vars else n - translator.r + 1
 
 
 class TestDisconnectedSymbols(TestCase):
@@ -97,31 +97,31 @@ class TestDegenerateSystems(TestCase):
         #   ShapeError: Matrix shapes must agree (0, 0) != (1, 0)
         # from multiplying empty matrices.
         system = ODESystem.from_equations(['dz/dt = z'])
-        translation = ODETranslator.from_ode_system(system)
-        self.assertEqual(translation.r, 1)
-        reduced = translation.translate(system)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.r, 1)
+        reduced = translator.translate(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation))
+                         expected_variable_count(system, translator))
         # Nothing is left but the independent variable and the one auxiliary.
         self.assertEqual([str(v) for v in reduced.variables], ['t', 'x0'])
 
     def test_a_system_with_no_invariants_under_the_general_scheme(self):
         system = ODESystem.from_equations(['dz/dt = z'])
-        translation = ODETranslator.from_ode_system(system)
-        reduced = translation.translate_general(system)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate_general(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation, scheme='general'))
-        dropped = translation.translate_general(system, include_aux_vars=False)
+                         expected_variable_count(system, translator, scheme='general'))
+        dropped = translator.translate_general(system, include_aux_vars=False)
         self.assertEqual(len(dropped.variables),
-                         expected_variable_count(system, translation, scheme='general',
+                         expected_variable_count(system, translator, scheme='general',
                                                  include_aux_vars=False))
 
     def test_single_dependent_variable_with_one_parameter(self):
         system = ODESystem.from_equations(['dz/dt = a*z'])
-        translation = ODETranslator.from_ode_system(system)
-        reduced = translation.translate(system)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation))
+                         expected_variable_count(system, translator))
 
     def test_a_conserved_variable_keeps_its_equation(self):
         base = ODESystem.from_equations(['dz/dt = a*z'])
@@ -156,30 +156,30 @@ class TestInvariantsOfReduction(TestCase):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslator.from_ode_system(system)
-                reduced = translation.translate(system)
+                translator = ODETranslator.from_ode_system(system)
+                reduced = translator.translate(system)
                 self.assertEqual(len(reduced.variables),
-                                 expected_variable_count(system, translation))
+                                 expected_variable_count(system, translator))
 
     def test_every_invariant_is_actually_invariant(self):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslator.from_ode_system(system)
+                translator = ODETranslator.from_ode_system(system)
                 # A*V_n = 0 is what makes the columns of V_n invariants.
-                product = translation.scaling_matrix * translation.herm_mult_n
+                product = translator.scaling_matrix * translator.herm_mult_n
                 self.assertTrue(product.is_zero_matrix, name)
 
     def test_substitutions_only_mention_symbols_of_the_reduced_system(self):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslator.from_ode_system(system)
-                if not translation._is_translate_parameter_compatible(system):
+                translator = ODETranslator.from_ode_system(system)
+                if not translator._is_translate_parameter_compatible(system):
                     continue
-                reduced = translation.translate(system)
+                reduced = translator.translate(system)
                 mentioned = set()
-                for value in translation.translate_parameter_substitutions(system).values():
+                for value in translator.translate_parameter_substitutions(system).values():
                     mentioned |= value.free_symbols
                 self.assertFalse(mentioned - set(reduced.variables), name)
 

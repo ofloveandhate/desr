@@ -58,34 +58,34 @@ class TestODETranslatorTraps(TestCase):
                              list(system.derivatives) + [None, None, None],
                              indep_var=system.indep_var)
         extended.reorder_variables(['t', 'z1', 'z2', 't0', 'z10', 'z20'])
-        translation = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
+        translator = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
                                      variables_domain=extended.variables)
-        reduced = translation.translate(extended)
+        reduced = translator.translate(extended)
 
         self.assertEqual(len(reduced.variables),
-                         len(extended.variables) - translation.r)
+                         len(extended.variables) - translator.r)
         # Every symbol the substitutions mention must exist in the reduced system.
         mentioned = set()
-        for value in translation.translate_parameter_substitutions(extended).values():
+        for value in translator.translate_parameter_substitutions(extended).values():
             mentioned |= value.free_symbols
         self.assertFalse(mentioned - set(reduced.variables))
 
     def test_rational_section_returns_its_result(self):
         equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         system = ODESystem.from_equations(equations)
-        translation = ODETranslator.from_ode_system(system)
-        section = translation.rational_section()
+        translator = ODETranslator.from_ode_system(system)
+        section = translator.rational_section()
         self.assertIsNotNone(section)
-        self.assertEqual(section.shape, (1, translation.r))
+        self.assertEqual(section.shape, (1, translator.r))
 
     def test_reverse_translate_dispatches_by_count(self):
-        translation = ODETranslator(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+        translator = ODETranslator(scaling_matrix=sympy.Matrix([[0, 1, -1]]),
                                      hermite_multiplier=sympy.Matrix([[0, 1, 0],
                                                                       [1, 0, 1],
                                                                       [0, 0, 1]]))
         t, x0, y0 = sympy.symbols('t x0 y0')
-        self.assertEqual(translation.reverse_translate((x0, y0), 0), (x0, y0 / x0))
-        self.assertEqual(translation.reverse_translate((x0, t, y0), 0), (t, x0, y0 / x0))
+        self.assertEqual(translator.reverse_translate((x0, y0), 0), (x0, y0 / x0))
+        self.assertEqual(translator.reverse_translate((x0, t, y0), 0), (t, x0, y0 / x0))
         # The general branch checks its inputs are genuine solutions, so use the exact one.
         general = ODETranslator(scaling_matrix=sympy.Matrix([[3, -1, 5]]),
                                  hermite_multiplier=sympy.Matrix([[1, 1, -1],

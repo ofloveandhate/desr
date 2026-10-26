@@ -40,11 +40,11 @@ The variable order matters: the reduction algorithm tends to reduce away the var
 
 Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
 
-    >>> translation = ODETranslator.from_ode_system(system,
+    >>> translator = ODETranslator.from_ode_system(system,
     ...                                              naming_scheme=('tau', ['u', 'v'], 'c'))
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
-    >>> reduced_system = translation.translate(system)
+    >>> reduced_system = translator.translate(system)
     >>> reduced_system
     dtau/dtau = 1
     du/dtau = c0*v - c2*u + u*v
@@ -54,7 +54,7 @@ Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :ma
 
 Five constants have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
 
-    >>> translation.r
+    >>> translator.r
     2
 
 The number of scaling symmetries is also the number of parameters we must provide later, when reverse translating from nondimensionalized to the original symbols. 
@@ -88,7 +88,7 @@ Let's translate the values of our original parameters, into the dimensionless pa
 :class:`~desr.numerics.NumericTranslation` translates numeric values for parameters and variables across the same reduction that
 :class:`~desr.ode_translation.ODETranslator` applies to symbols.
 
-    >>> numeric_translation = NumericTranslation(system, translation, reduced_system)
+    >>> numeric_translation = NumericTranslation(system, translator, reduced_system)
 
 The :meth:`~desr.numerics.NumericTranslation.forward`  function takes values of the original variables and
 returns values of the reduced ones.  Here it converts the starting state and the parameters.

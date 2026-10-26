@@ -25,9 +25,9 @@ class TestNumericTranslation(TestCase):
         self.system = ODESystem.from_tex(system_tex)
         self.system.update_initial_conditions({'s': 's_0'})
         self.system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
-        self.translation = ODETranslator.from_ode_system(
+        self.translator = ODETranslator.from_ode_system(
             self.system, naming_scheme=('tau', ['u', 'v'], 'c'))
-        self.numeric = NumericTranslation(self.system, self.translation)
+        self.numeric = NumericTranslation(self.system, self.translator)
 
         self.t, self.s, self.c, self.k_m1, self.k_2, self.k_1, self.e_0, self.s_0 = \
             self.system.variables
@@ -248,8 +248,8 @@ class TestNumericTranslation(TestCase):
         equations = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
         system = ODESystem.from_equations(equations)
         system.reorder_variables(['t', 'z1', 'z2'])
-        translation = ODETranslator.from_ode_system(system)
-        numeric = NumericTranslation(system, translation)
+        translator = ODETranslator.from_ode_system(system)
+        numeric = NumericTranslation(system, translator)
         self.assertTrue(numeric.carries_auxiliaries)
         t, z1, z2 = system.variables
         point = numeric.forward({t: 1.0, z1: 0.4, z2: 0.3})

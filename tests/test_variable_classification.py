@@ -66,8 +66,8 @@ class TestParametersAndDependents(TestCase):
 
     def test_a_dependent_variable_with_derivative_one_survives_reduction(self):
         system = ODESystem.from_equations(['dx/dt = 1'])
-        translation = ODETranslator.from_ode_system(system)
-        reduced = translation.translate(system)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
         self.assertTrue(reduced.variables)
 
     def test_the_retired_vocabulary_is_gone(self):
@@ -222,13 +222,13 @@ class TestConservedVariablesAndReduction(TestCase):
         # eligible for a scheme it does not satisfy.
         system = with_conserved_w()
         system.reorder_variables(['t', 'z', 'a', 'w'])
-        translation = ODETranslator.from_ode_system(system)
-        self.assertFalse(translation._is_translate_parameter_compatible(system))
+        translator = ODETranslator.from_ode_system(system)
+        self.assertFalse(translator._is_translate_parameter_compatible(system))
 
     def test_a_conserved_variable_keeps_an_equation_in_the_reduced_system(self):
         conserved = with_conserved_w()
-        translation = ODETranslator.from_ode_system(conserved)
-        reduced = translation.translate(conserved)
+        translator = ODETranslator.from_ode_system(conserved)
+        reduced = translator.translate(conserved)
         # Whatever the scheme chose, the reduction must not have silently dropped it.
         self.assertTrue(reduced.variables)
 

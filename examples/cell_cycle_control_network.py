@@ -191,19 +191,19 @@ print(f'{len(system.dependent_variables)} dependent variables')
 
 print('\nVariable order: ', system.variables)
 
-translation = ODETranslator.from_ode_system(system, new_indices_start_at=1)
+translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
 
-print('\nScaling matrix',translation.scaling_matrix.__repr__())
-print('Scaling matrix size',translation.scaling_matrix.shape)
+print('\nScaling matrix',translator.scaling_matrix.__repr__())
+print('Scaling matrix size',translator.scaling_matrix.shape)
 
-print('\nHermite multiplier', translation.herm_mult.__repr__())
+print('\nHermite multiplier', translator.herm_mult.__repr__())
 
-print('\nInvariants: ', translation.invariants())
-print(f'{translation.invariants().shape} invariants')
+print('\nInvariants: ', translator.invariants())
+print(f'{translator.invariants().shape} invariants')
 
-print('\nsubstitutions:',translation.translate_parameter_substitutions(system))
+print('\nsubstitutions:',translator.translate_parameter_substitutions(system))
 
-system_translated = translation.translate(system)
+system_translated = translator.translate(system)
 
 # i really want to factor the system, cuz it's too long for a line in the paper.
 system_translated.simplify_derivatives()

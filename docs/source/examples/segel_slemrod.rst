@@ -58,23 +58,23 @@ Choose a variable order, with initial conditions at end so the algorithm will no
 
     >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
 
-    >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
-    >>> translation.multiplier_add_columns(2, -1, 1)  # Multiply time by epsilon
-    >>> translation.multiplier_add_columns(4, -1, -1)  # divide column 4 by epsilon
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
+    >>> translator.multiplier_add_columns(2, -1, 1)  # Multiply time by epsilon
+    >>> translator.multiplier_add_columns(4, -1, -1)  # divide column 4 by epsilon
 
 The invariants match :cite:`Segel1989` (9):
 
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[e_0*k_1*t, s/s_0, c/e_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), K_m/s_0, e_0/s_0]])
 
 Here are the substitutions the software will perform:
 
-    >>> translation.translate_parameter_substitutions(system)
+    >>> translator.translate_parameter_substitutions(system)
     {t: H/c3, s: y, c: c3*z, k_m1: c0, k_2: c1, k_1: 1, K_m: c2, e_0: c3, s_0: 1}
 
 Translate and obtain a system
 
-    >>> reduced_system = translation.translate(system)
+    >>> reduced_system = translator.translate(system)
 
 Do a few substitutions, and we have :cite:`Segel1989` (8a-b)
 
@@ -124,15 +124,15 @@ A sanity check
 
 Now we can construct the `ODETranslator`
 
-    >>> translation = ODETranslator.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
-    >>> translation.scaling_matrix
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
+    >>> translator.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, -1, 0, 0, 0],
     [0, 1, 1, 0,  0,  0, -1, 1, 1, 1]])
 
 and translate the system
 
-    >>> translation.translate(system)
+    >>> translator.translate(system)
     dtau/dtau = 1
     dc/dtau = -c*c1 - c*c2 - c*s + c4*s
     ds/dtau = c*c1 + c*s - c4*s
@@ -143,10 +143,10 @@ and translate the system
 
 The scaling invariants:
 
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, epsilon, k_m1/(k_1*s_0), k_2/(k_1*s_0), K_m/s_0, e_0/s_0]])
 
-This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translation.  
+This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.  
 
 To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :math:`V_3' = V_3 + V_{10} - V_6`
 
@@ -155,37 +155,37 @@ To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :
 Note that indices in Python start at 0, but in math / the paper start at 1, so they're off-by-one.
 
     >>> # Scale t correctly to t/t_C = k_1 L t = e_0 k_1 t / epsilon
-    >>> translation.multiplier_add_columns(2, 5, -1)
-    >>> translation.multiplier_add_columns(2, 9, 1)
+    >>> translator.multiplier_add_columns(2, 5, -1)
+    >>> translator.multiplier_add_columns(2, 9, 1)
 
 To get :math:`v = \frac{c}{s_0 \epsilon}`, we need to modify the Hermite multiplier as :math:`V_5' = V_5 - V_6`.  In code,
 
     >>> # Scale s correctly to s / s_0
     >>> # Scale c correctly to c / (e_0 s_0 / L) = c / (s_0 epsilon)
-    >>> translation.multiplier_add_columns(4, 5, -1)
+    >>> translator.multiplier_add_columns(4, 5, -1)
 
 
 We also want :math:`\sigma = \frac{s_0}{K_m}`, so :math:`V_9' = -V_9`.
 
     >>> # sigma = s_0 / K_m
-    >>> translation.multiplier_negate_column(8)
+    >>> translator.multiplier_negate_column(8)
 
 
 To get :math:`\kappa = \frac{k_{-1}}{k_2}` in :cite:`Segel1989` (17), or :math:`\rho = \frac{k_{-1}}{k_2}` in :cite:`murray` (6.20), we need :math:`V_7' = V_7 - V_8`
 
     >>> # Find kappa = rho = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-    >>> translation.multiplier_add_columns(6, 7, -1)
+    >>> translator.multiplier_add_columns(6, 7, -1)
 
 
 We have the invariants up to this point of
 
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[e_0*k_1*t/epsilon, s/s_0, c/(epsilon*s_0), epsilon, k_m1/k_2, k_2/(k_1*s_0), s_0/K_m, e_0/s_0]])
     
 
 Making some substitutions leads to :cite:`Segel1989` (21a-d)
     
-    >>> reduced_system = translation.translate(system)
+    >>> reduced_system = translator.translate(system)
     >>> reduced_system = reduced_system.diff_subs({'c2': '1 / (sigma * (kappa + 1))',
     ...                                          'c4': 'epsilon * (1 + 1 / sigma)'},subs_constraints=True,
     ...                    expand_after=True,
@@ -227,13 +227,13 @@ Computing equations :cite:`Segel1989` (24a-b)
 
     >>> # Scale t correctly to t/t_S = k_2 epsilon t
     >>> import copy
-    >>> translation_24 = copy.deepcopy(translation)
-    >>> translation_24.multiplier_add_columns(2, 7, 1)
-    >>> translation_24.multiplier_add_columns(2, -1, -1)
-    >>> translation_24.multiplier_add_columns(2, 5, 2)
-    >>> translation_24.invariants()
+    >>> translator_24 = copy.deepcopy(translator)
+    >>> translator_24.multiplier_add_columns(2, 7, 1)
+    >>> translator_24.multiplier_add_columns(2, -1, -1)
+    >>> translator_24.multiplier_add_columns(2, 5, 2)
+    >>> translator_24.invariants()
     Matrix([[epsilon*k_2*t, s/s_0, c/(epsilon*s_0), epsilon, k_m1/k_2, k_2/(k_1*s_0), s_0/K_m, e_0/s_0]])
-    >>> reduced_system = translation_24.translate(system)
+    >>> reduced_system = translator_24.translate(system)
     >>> reduced_system = reduced_system.diff_subs({'c2': '1 / (sigma * (kappa + 1))',
     ...                                          'c4': 'epsilon * (1 + 1 / sigma)'
     ...                                          },subs_constraints=True,
@@ -284,14 +284,14 @@ We can work with the expression :math:`s_0 + K_m` systematically by adding a new
 Check that if we keep :math:`L` near the end, we have the same reduced system as before
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
-    >>> translation = ODETranslator.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
-    >>> translation.scaling_matrix
+    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
+    >>> translator.scaling_matrix
     Matrix([
     [1, 0, 0, 0, -1, -1, 0, 0, 0],
     [0, 1, 1, 1,  0, -1, 1, 1, 1]])
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[k_1*s_0*t, s/s_0, c/s_0, K_m/s_0, k_2/(k_1*s_0), e_0/s_0, L/s_0]])
-    >>> translation.translate(system_l)
+    >>> translator.translate(system_l)
     dt/dt = 1
     dc/dt = -c*c0 - c*s + c2*s
     ds/dt = c*c0 - c*c1 + c*s - c2*s
@@ -302,21 +302,21 @@ Check that if we keep :math:`L` near the end, we have the same reduced system as
 Putting :math:`K_m` at the end, we have
 
     >>> system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
-    >>> translation = ODETranslator.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
     >>> # Scale t correctly to t/t_C = k_1 L t
-    >>> translation.multiplier_add_columns(2, -1, 1)
+    >>> translator.multiplier_add_columns(2, -1, 1)
     >>> # Scale s correctly to s / s_0
-    >>> translation.multiplier_add_columns(3, -2, -1)
+    >>> translator.multiplier_add_columns(3, -2, -1)
     >>> # Scale c correctly to c / (e_0 s_0 / L)
-    >>> translation.multiplier_add_columns(4, 6, -1)
-    >>> translation.multiplier_add_columns(4, 7, -1)
-    >>> translation.multiplier_add_columns(4, -1, 1)
+    >>> translator.multiplier_add_columns(4, 6, -1)
+    >>> translator.multiplier_add_columns(4, 7, -1)
+    >>> translator.multiplier_add_columns(4, -1, 1)
     >>> # Find kappa = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-    >>> translation.multiplier_negate_column(5)
+    >>> translator.multiplier_negate_column(5)
     >>> # Find epsilon = e_0 / L
-    >>> translation.multiplier_add_columns(6, -1, -1)
+    >>> translator.multiplier_add_columns(6, -1, -1)
     >>> # Find sigma = s_0 / K_m
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[L*k_1*t, s/s_0, L*c/(e_0*s_0), K_m*k_1/k_2, e_0/L, s_0/K_m, L/K_m]])
 
 
@@ -334,12 +334,12 @@ In the invariants, first comes the time variable, then the two "space" variables
 
 The substitutions that will be made:
 
-    >>> translation.translate_parameter_substitutions(system_l)
+    >>> translator.translate_parameter_substitutions(system_l)
     {t: tau/c3, s: c2*s, c: c*c1*c2, k_2: 1/c0, k_1: 1, e_0: c1*c3, s_0: c2, L: c3, K_m: 1}
 
 Here's the reduced system at this point:
 
-    >>> reduced_system = translation.translate(system_l)
+    >>> reduced_system = translator.translate(system_l)
     >>> reduced_system
     dtau/dtau = 1
     dc/dtau = -c*c2*s/c3 - c/c3 + s
@@ -376,23 +376,23 @@ Long/slow time scale
 To get the equations on the long/slow timescale :math:`t_c` from Murray, multiply :math:`\tau = Lk_1t` by the factors
 :math:`\frac{e_0}{L} \frac{k_2}{K_m*k_1}\frac{K_m}{L} = \frac{c_1}{c_0c_3}`
     
-    >>> translation.herm_mult.shape
+    >>> translator.herm_mult.shape
     (9, 9)
-    >>> translation.multiplier_add_columns(2, 6, 1)
-    >>> translation.multiplier_add_columns(2, 5, -1)
-    >>> translation.multiplier_add_columns(2, -1, -1)
+    >>> translator.multiplier_add_columns(2, 6, 1)
+    >>> translator.multiplier_add_columns(2, 5, -1)
+    >>> translator.multiplier_add_columns(2, -1, -1)
 
 Inspect
 
-    >>> translation.invariants()
+    >>> translator.invariants()
     Matrix([[e_0*k_2*t/L, s/s_0, L*c/(e_0*s_0), K_m*k_1/k_2, e_0/L, s_0/K_m, L/K_m]])
 
-    >>> translation.translate_parameter_substitutions(system_l)
+    >>> translator.translate_parameter_substitutions(system_l)
     {t: c0*tau/c1, s: c2*s, c: c*c1*c2, k_2: 1/c0, k_1: 1, e_0: c1*c3, s_0: c2, L: c3, K_m: 1}
 
 Translate and reduce the system
     
-    >>> reduced_system = translation.translate(system_l, naming_scheme=('T',['s','c'], 'c'))
+    >>> reduced_system = translator.translate(system_l, naming_scheme=('T',['s','c'], 'c'))
     >>> reduced_system
     dT/dT = 1
     dc/dT = -c*c0*c2*s/c1 - c*c0/c1 + c0*c3*s/c1

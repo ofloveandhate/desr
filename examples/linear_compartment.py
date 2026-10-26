@@ -30,18 +30,18 @@ def run_symmetry_reduction(sys):
     print(f'original variables: {sys.variables}')
     print(f'original system: {sys}')
 
-    translation = ODETranslator.from_ode_system(sys)
+    translator = ODETranslator.from_ode_system(sys)
 
     print('\nScaling matrix:')
-    print(translation.scaling_matrix.__repr__())
+    print(translator.scaling_matrix.__repr__())
 
-    print('Dimension of scaling action: ', translation.r)
+    print('Dimension of scaling action: ', translator.r)
     # Print invariants
-    print('Invariants: ', translation.invariants())
-    print('Substitutions: ', translation.translate_parameter_substitutions(system=sys))
+    print('Invariants: ', translator.invariants())
+    print('Substitutions: ', translator.translate_parameter_substitutions(system=sys))
 
     # Print translated system
-    reduced_system = translation.translate(sys)
+    reduced_system = translator.translate(sys)
 
     print(f'\nreduced variables: {reduced_system.variables}')
     print('\nReduced system:')
@@ -60,7 +60,7 @@ r'''
 system_a = ODESystem.from_tex(tex_a)
 # system_a.add_constraint(lhs='w_1',rhs='z_1')
 # desr cannot have constraints on non-constant variables, so commented out
-translation_a = run_symmetry_reduction(system_a)
+translator_a = run_symmetry_reduction(system_a)
 
 
 
@@ -78,7 +78,7 @@ system_b = ODESystem.from_tex(tex_b)
 
 
 
-translation_b = run_symmetry_reduction(system_b)
+translator_b = run_symmetry_reduction(system_b)
 
 
 print('\n\nC\n\n')
@@ -94,4 +94,4 @@ system_c = ODESystem.from_tex(tex_c)
 system_c.add_constraint(lhs='b_22',rhs='a_2 + a_12')
 
 
-translation_c = run_symmetry_reduction(system_c)
+translator_c = run_symmetry_reduction(system_c)
