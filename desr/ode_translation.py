@@ -4,7 +4,6 @@ import sympy
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
-from sympy.abc import _clash1
 
 def _rates_of_change(system):
     '''

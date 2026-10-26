@@ -45,6 +45,14 @@ python examples/michaelis_menten.py
 
 The reduction pipeline flows: `ODESystem` → `ODETranslator` → reduced `ODESystem`.
 
+The public names are exported from the package, so a whole workflow is one import:
+`from desr import ODESystem, ODETranslator`. `desr/__init__.py` holds the list in
+`__all__`; submodules stay reachable as attributes (`desr.matrix_normal_forms`) for
+everything finer-grained. The numeric names (`NumericTranslation`, `scheme_of`,
+`InsufficientKnownValues`, `ConflictingKnownValues`) resolve through a module-level
+`__getattr__` rather than an eager import, because `desr.numerics` needs numpy and
+`import desr` must not. `tests/test_namespace.py` pins both halves of that.
+
 ### Core modules
 
 **`desr/ode_system.py` — `ODESystem`**
