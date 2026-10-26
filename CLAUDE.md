@@ -80,6 +80,21 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
 ### Key design notes
 
 - Variables are ordered; the order matters because the last variables tend to be "normalized out" (set to 1) during reduction. Use `reorder_variables()` to control this.
-- Doctests are the primary test mechanism — most functions have embedded `>>>` examples. The `unittests.py` file has `unittest.TestCase` classes for matrix normal form routines.
+- **Parameters versus dependent variables.** A variable with no equation is a *parameter*
+  (`system.parameters`); it is stored as `None` in `system.derivatives`. A variable with an
+  equation is a *dependent variable* (`system.dependent_variables`), and that includes a
+  conserved variable whose equation says `0` — writing `dw/dt = 0` is a deliberate
+  statement, not a way of declaring a constant. `parameters=[...]` at construction, or
+  `system.make_parameter(name)` afterwards, discards such an equation and makes the
+  variable a parameter. Say "parameter", never "constant"; `constant_variables`,
+  `num_constants` and `non_constant_variables` were removed in 2.0 without aliases.
+- `repr` lists only variables that have equations, then names the parameters on a
+  `parameters:` line. `to_tex` omits parameters entirely.
+- **pytest is the primary test mechanism**, in the top-level `tests/`. Doctests are
+  documentation and a backstop: they are string comparison, which is how `rational_section()`
+  once printed its result and returned `None` with its doctest passing. Behaviour shown in
+  `docs/source/examples/*.rst` should also be asserted in `tests/`, so a regression surfaces
+  before anyone builds the docs.
+- The scripts in `examples/` open plot windows and block; they cannot be run unattended.
 - The naming scheme `('tau', 'nu', 'kappa')` controls output variable names: index-0 = new independent variable, index-1 = pattern for dependent variables, index-2 = pattern for invariant constants.
 - `exponent_matrix` was previously called `power_matrix` — watch for stale references in docs/comments.

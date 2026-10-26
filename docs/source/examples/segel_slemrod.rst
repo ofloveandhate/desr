@@ -85,10 +85,8 @@ Do a few substitutions, and we have :cite:`Segel1989` (8a-b)
     dH/dH = 1
     dy/dH = -lam*z + mu*z + y*z - y
     dz/dH = -(mu*z + y*z - y)/epsilon
-    depsilon/dH = 0
-    dlam/dH = 0
-    dmu/dH = 0
     y(0) = 1
+    parameters: epsilon, lam, mu
 
 
 
@@ -138,14 +136,10 @@ and translate the system
     dtau/dtau = 1
     dc/dtau = -c*c1 - c*c2 - c*s + c4*s
     ds/dtau = c*c1 + c*s - c4*s
-    dc0/dtau = 0
-    dc1/dtau = 0
-    dc2/dtau = 0
-    dc3/dtau = 0
-    dc4/dtau = 0
     s(0) = 1
     c3 == c1 + c2
     c0 == c4/(c3 + 1)
+    parameters: c0, c1, c2, c3, c4
 
 The scaling invariants:
 
@@ -206,11 +200,9 @@ Making some substitutions leads to :cite:`Segel1989` (21a-d)
     dtau/dtau = 1
     dc/dtau = -(c*s*sigma + c - s*sigma - s)/(sigma + 1)
     ds/dtau = epsilon*(c*kappa*s*sigma + c*kappa + c*s*sigma - kappa*s*sigma - kappa*s - s*sigma - s)/((kappa + 1)*(sigma + 1))
-    depsilon/dtau = 0
-    dkappa/dtau = 0
-    dsigma/dtau = 0
     s(0) = 1
     1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+    parameters: epsilon, kappa, sigma
 
 
 To get :cite:`murray` (6.21), we need to rename some variables
@@ -223,11 +215,9 @@ To get :cite:`murray` (6.21), we need to rename some variables
     dtau/dtau = 1
     dv/dtau = -(sigma*u*v - sigma*u - u + v)/(sigma + 1)
     du/dtau = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
-    depsilon/dtau = 0
-    dkappa/dtau = 0
-    dsigma/dtau = 0
     u(0) = 1
     1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+    parameters: epsilon, kappa, sigma
 
 
 After the pre-steady state
@@ -259,11 +249,9 @@ Computing equations :cite:`Segel1989` (24a-b)
     dtau/dtau = 1
     dv/dtau = -(kappa + 1)*(sigma*u*v - sigma*u - u + v)/epsilon
     du/dtau = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
-    depsilon/dtau = 0
-    dkappa/dtau = 0
-    dsigma/dtau = 0
     u(0) = 1
     1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+    parameters: epsilon, kappa, sigma
 
 
 
@@ -280,10 +268,7 @@ Starting from the same system, Michaelis-Menten, with :math:`K_m = \frac{k_{-1} 
     dt/dt = 1
     dc/dt = -c*k_1*s - c*k_2 - c*(K_m*k_1 - k_2) + e_0*k_1*s
     ds/dt = c*k_1*s + c*(K_m*k_1 - k_2) - e_0*k_1*s
-    dK_m/dt = 0
-    de_0/dt = 0
-    dk_1/dt = 0
-    dk_2/dt = 0
+    parameters: K_m, e_0, k_1, k_2
     >>> system_l.update_initial_conditions({'s': 's_0'})
 
 
@@ -310,12 +295,9 @@ Check that if we keep :math:`L` near the end, we have the same reduced system as
     dt/dt = 1
     dc/dt = -c*c0 - c*s + c2*s
     ds/dt = c*c0 - c*c1 + c*s - c2*s
-    dc0/dt = 0
-    dc1/dt = 0
-    dc2/dt = 0
-    dc3/dt = 0
     s(0) = 1
     c3 == c0 + 1
+    parameters: c0, c1, c2, c3
 
 Putting :math:`K_m` at the end, we have
 
@@ -362,12 +344,9 @@ Here's the reduced system at this point:
     dtau/dtau = 1
     dc/dtau = -c*c2*s/c3 - c/c3 + s
     ds/dtau = c*c1*c2*s/c3 + c*c1/c3 - c*c1/(c0*c3) - c1*s
-    dc0/dtau = 0
-    dc1/dtau = 0
-    dc2/dtau = 0
-    dc3/dtau = 0
     s(0) = 1
     c3 == c2 + 1
+    parameters: c0, c1, c2, c3
 
 To get the system in (21a-d) Segel, let's do the substitutions into known symbol names
 
@@ -376,10 +355,8 @@ To get the system in (21a-d) Segel, let's do the substitutions into known symbol
     dtau/dtau = 1
     dc/dtau = -c*s*sigma/(sigma + 1) - c/(sigma + 1) + s
     ds/dtau = c*epsilon*s*sigma/(sigma + 1) - c*epsilon/(kappa*sigma + kappa + sigma + 1) + c*epsilon/(sigma + 1) - epsilon*s
-    depsilon/dtau = 0
-    dkappa/dtau = 0
-    dsigma/dtau = 0
     s(0) = 1
+    parameters: epsilon, kappa, sigma
 
 ..
    _Silviana checked these on November 4, 2025, by hand in research notebook 10, page 75.
@@ -420,12 +397,9 @@ Translate and reduce the system
     dT/dT = 1
     dc/dT = -c*c0*c2*s/c1 - c*c0/c1 + c0*c3*s/c1
     ds/dT = c*c0*c2*s + c*c0 - c - c0*c3*s
-    dc0/dT = 0
-    dc1/dT = 0
-    dc2/dT = 0
-    dc3/dT = 0
     s(0) = 1
     c3 == c2 + 1
+    parameters: c0, c1, c2, c3
 
 These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.  
 
@@ -466,10 +440,8 @@ we do a few substitutions, we get (6.23) from Murray.
     dT/dT = 1
     dc/dT = -(kappa + 1)*(c*s*sigma + c - s*sigma - s)/epsilon
     ds/dT = c*kappa*s*sigma + c*kappa + c*s*sigma - kappa*s*sigma - kappa*s - s*sigma - s
-    depsilon/dT = 0
-    dkappa/dT = 0
-    dsigma/dT = 0
     s(0) = 1
+    parameters: epsilon, kappa, sigma
 
 
 The equation for :math:`\frac{dc}{dT}` is exactly the same as Segel (24b), after some minor algebra.  

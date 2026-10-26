@@ -52,7 +52,7 @@ final_time = 70.0
 
 def as_function(a_system, constants):
     """Turn a system with its constants fixed into a right-hand side for solve_ivp."""
-    variables = list(a_system.non_constant_variables)
+    variables = list(a_system.dependent_variables)
     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

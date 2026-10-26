@@ -18,11 +18,6 @@ from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslation
 
 
-def parameters_of(system):
-    '''The variables with no equation of their own.'''
-    return system.constant_variables
-
-
 def expected_variable_count(system, translation, scheme=None, include_aux_vars=True):
     '''
     How many variables the reduced system should have.
@@ -63,16 +58,14 @@ class TestDisconnectedSymbols(TestCase):
     def with_inert(names):
         '''`dz/dt = a*z - b*z**2` with extra parameters that appear in no equation.'''
         base = ODESystem.from_equations(['dz/dt = a*z - b*z**2'])
-        derivatives = [None if v in base.constant_variables else base.derivative_dict[v]
-                       for v in base.variables]
         extra = [sympy.Symbol(name) for name in names]
         return ODESystem(list(base.variables) + extra,
-                         derivatives + [None] * len(extra),
+                         list(base.derivatives) + [None] * len(extra),
                          indep_var=base.indep_var)
 
     def test_one_inert_parameter(self):
         system = self.with_inert(['rho'])
-        self.assertIn(sympy.Symbol('rho'), parameters_of(system))
+        self.assertIn(sympy.Symbol('rho'), system.parameters)
         scaling = system.maximal_scaling_matrix()
         self.assertEqual(scaling.cols, len(system.variables))
 
@@ -132,14 +125,12 @@ class TestDegenerateSystems(TestCase):
 
     def test_a_conserved_variable_keeps_its_equation(self):
         base = ODESystem.from_equations(['dz/dt = a*z'])
-        derivatives = [None if v in base.constant_variables else base.derivative_dict[v]
-                       for v in base.variables]
         conserved = ODESystem(list(base.variables) + [sympy.Symbol('w')],
-                              derivatives + [sympy.sympify(0)],
+                              list(base.derivatives) + [sympy.sympify(0)],
                               indep_var=base.indep_var)
         w = sympy.Symbol('w')
         # It has an equation, so it is not a parameter ...
-        self.assertNotIn(w, parameters_of(conserved))
+        self.assertNotIn(w, conserved.parameters)
         # ... and that equation says it does not move.
         self.assertEqual(conserved.derivative_dict[w], sympy.sympify(0))
         # Whatever else happens, computing the scaling must not raise.

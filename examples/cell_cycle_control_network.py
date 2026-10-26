@@ -99,10 +99,10 @@ text = pre_process_latex(system_tex)
 
 
 num_dynamic_eqns = 7
-num_constants = 4
+num_parameters = 4
 
 lines = text.split(r'\\')
-assert(len(lines) == num_dynamic_eqns + num_constants)
+assert(len(lines) == num_dynamic_eqns + num_parameters)
 
 system_tex_dynamic = r'\\'.join(lines[:num_dynamic_eqns])
 
@@ -183,11 +183,11 @@ print(system)
 
 print(f'\n{system.variables=}')
 
-print(f'\n{system.constant_variables=}')
-print(f'{len(system.constant_variables)} constant variables')
+print(f'\n{system.parameters=}')
+print(f'{len(system.parameters)} parameters')
 
-print(f'\n{system.non_constant_variables=}')
-print(f'{len(system.non_constant_variables)} non-constant variables')
+print(f'\n{system.dependent_variables=}')
+print(f'{len(system.dependent_variables)} dependent variables')
 
 print('\nVariable order: ', system.variables)
 
@@ -216,11 +216,11 @@ print(system_translated.to_tex())#.to_tex()
 
 
 print(f'{system_translated.variables=}')
-print(f'{system_translated.constant_variables=}')
-print(f'{len(system_translated.constant_variables)}  constant variables')
+print(f'{system_translated.parameters=}')
+print(f'{len(system_translated.parameters)}  parameters')
 
-print(f'{system_translated.non_constant_variables=}')
-print(f'{len(system_translated.non_constant_variables)}  non-constant variables')
+print(f'{system_translated.dependent_variables=}')
+print(f'{len(system_translated.dependent_variables)}  dependent variables')
 
 
 

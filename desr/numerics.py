@@ -457,8 +457,8 @@ class NumericTranslation(object):
                                         **solver_options)
 
     def _reject_time_varying(self, known_values):
-        '''In a series, a known value of anything but a constant is a category error.'''
-        constants = set(self.system.constant_variables)
+        '''In a series, a known value of anything but a parameter is a category error.'''
+        constants = set(self.system.parameters)
         for variable in known_values:
             if variable in constants:
                 continue
@@ -752,7 +752,7 @@ class NumericTranslation(object):
             self._reject_time_varying(known_values)
             at_first = {self.reduced.indep_var: times[0]}
             at_first.update(dict(zip(self._invariants, sampled[:, 0])))
-            constants = [v for v in self._acted if v in self.system.constant_variables]
+            constants = [v for v in self._acted if v in self.system.parameters]
             start = self.auxiliaries_from(at_first, known_values, tolerance,
                                           allowed=constants)
 

@@ -95,12 +95,9 @@ Just for curiosity, here's what we get if we translate the system at this point:
     dt/dt = 1
     dc/dt = -c*c1 - c*c2 - c*s + c3*s
     ds/dt = c*c1 + c*s - c3*s
-    dc0/dt = 0
-    dc1/dt = 0
-    dc2/dt = 0
-    dc3/dt = 0
     s(0) = 1
     c0 == c1 + c2
+    parameters: c0, c1, c2, c3
 
 Column operations to match the canonical system
 *************************************************
@@ -111,14 +108,9 @@ Returning back to the original system with initial conditions,
     dt/dt = 1
     ds/dt = c*k_1*s + c*k_m1 - e_0*k_1*s
     dc/dt = -c*k_1*s - c*k_2 - c*k_m1 + e_0*k_1*s
-    dK_m/dt = 0
-    dk_m1/dt = 0
-    dk_2/dt = 0
-    dk_1/dt = 0
-    de_0/dt = 0
-    ds_0/dt = 0
     s(0) = s_0
     K_m == (k_2 + k_m1)/k_1
+    parameters: K_m, k_m1, k_2, k_1, e_0, s_0
     >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
 
 Do some column operations on the Hermite multiplier
@@ -143,12 +135,9 @@ Translate
     dtau/dtau = 1
     du/dtau = c1*v + u*v - u
     dv/dtau = -c1*v/c3 - c2*v/c3 - u*v/c3 + u/c3
-    dc0/dtau = 0
-    dc1/dtau = 0
-    dc2/dtau = 0
-    dc3/dtau = 0
     u(0) = 1
     c0 == c1 + c2
+    parameters: c0, c1, c2, c3
 
 Now we have a system, but the names of symbols don't match.  We'll do substitutions.
     
@@ -157,10 +146,8 @@ Now we have a system, but the names of symbols don't match.  We'll do substituti
     dtau/dtau = 1
     du/dtau = K*v - L*v + u*v - u
     dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
-    dK/dtau = 0
-    dL/dtau = 0
-    depsilon/dtau = 0
     u(0) = 1
+    parameters: K, L, epsilon
 
 The only step that `desr` cannot do is multiply :math:`\frac{dv}{d\tau}` by :math:`\epsilon`.  That has to be done by hand.  And finally we have the result from :cite:`murray` (6.13).
 

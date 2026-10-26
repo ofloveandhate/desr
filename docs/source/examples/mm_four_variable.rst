@@ -57,7 +57,7 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
     dE/dt = C*c0 + C - E*S
     dP/dt = C*c0
     dS/dt = C - E*S
-    dc0/dt = 0
+    parameters: c0
 
 
 
@@ -87,7 +87,7 @@ Now we can reduce to find another, equivalent system.
     dE/dt = C*c0 + C - E*S
     dP/dt = C
     dS/dt = C*c0 - E*S
-    dc0/dt = 0
+    parameters: c0
 
 Extending a choice of invariants
 --------------------------------
@@ -188,7 +188,7 @@ invariants come first and the parameter comes last.
     dE/dt = C*alpha**2 + C*alpha - E*S
     dP/dt = C*alpha**2
     dS/dt = C*alpha - E*S
-    dalpha/dt = 0
+    parameters: alpha
 
 So we have found a third different reparametrization of the Michaelis-Menten equations.
 

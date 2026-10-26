@@ -49,10 +49,8 @@ Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :ma
     dtau/dtau = 1
     du/dtau = c0*v - c2*u + u*v
     dv/dtau = -c0*v - c1*v + c2*u - u*v
-    dc0/dtau = 0
-    dc1/dtau = 0
-    dc2/dtau = 0
     u(0) = 1
+    parameters: c0, c1, c2
 
 Five constants have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
 
@@ -74,7 +72,7 @@ Choose some arbitrary parameter values and solve directly.  This is the answer w
 
     >>> parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
     >>> def as_function(a_system, constants):
-    ...     variables = list(a_system.non_constant_variables)
+    ...     variables = list(a_system.dependent_variables)
     ...     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

@@ -368,7 +368,7 @@ def michaelis_menten_two_variable(verbose=True):
         # Print variable order
         
         print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
-        print('constants: ',reduced_system_km1.constant_variables)
+        print('parameters: ',reduced_system_km1.parameters)
 
         max_scal2 = ODETranslation.from_ode_system(reduced_system_km1)
         

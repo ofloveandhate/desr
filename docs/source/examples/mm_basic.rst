@@ -43,10 +43,7 @@ First we make the system in Python from LaTeX code.
     dt/dt = 1
     ds/dt = c*k_1*s + c*k_m1 - e_0*k_1*s
     dc/dt = -c*k_1*s - c*k_2 - c*k_m1 + e_0*k_1*s
-    dk_m1/dt = 0
-    dk_2/dt = 0
-    dk_1/dt = 0
-    de_0/dt = 0
+    parameters: k_m1, k_2, k_1, e_0
 
 We can see the system's properties
 
@@ -76,8 +73,7 @@ Actually do the reduction by calling the `translate` function on the `ODETransla
     dtau/dtau = 1
     du/dtau = c0*v + u*v - u
     dv/dtau = -c0*v - c1*v - u*v + u
-    dc0/dtau = 0
-    dc1/dtau = 0
+    parameters: c0, c1
 
 
 
