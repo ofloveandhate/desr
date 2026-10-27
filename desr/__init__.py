@@ -37,8 +37,8 @@ _LAZY = {
     'ConflictingKnownValues': 'numerics',
     'InsufficientKnownValues': 'numerics',
     'NumericTranslation': 'numerics',
+    'Scheme': 'numerics',
     'numerics': None,
-    'scheme_of': 'numerics',
 }
 
 
@@ -71,7 +71,7 @@ __all__ = [
     'NumericTranslation',
     'InsufficientKnownValues',
     'ConflictingKnownValues',
-    'scheme_of',
+    'Scheme',
     # The one place text becomes sympy
     'sympify_expression',
     'to_symbol',

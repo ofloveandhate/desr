@@ -33,10 +33,12 @@ class TestPublicNames(TestCase):
         self.assertEqual(to_symbol('S'), sympify_expression('S'))
 
     def test_the_numeric_names_resolve_through_the_package(self):
-        from desr import ConflictingKnownValues, InsufficientKnownValues, NumericTranslation
+        from desr import (ConflictingKnownValues, InsufficientKnownValues,
+                          NumericTranslation, Scheme)
         self.assertTrue(issubclass(InsufficientKnownValues, ValueError))
         self.assertTrue(issubclass(ConflictingKnownValues, ValueError))
         self.assertTrue(callable(NumericTranslation))
+        self.assertEqual(Scheme.GENERAL, 'general')
 
     def test_submodules_are_reachable_as_attributes(self):
         for name in ('chemical_reaction_network', 'matrix_normal_forms', 'numerics',
