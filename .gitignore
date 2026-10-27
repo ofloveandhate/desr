@@ -60,8 +60,9 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
+# Sphinx documentation (the Makefile builds into docs/build; sphinx's default is docs/_build)
 docs/_build/
+docs/build/
 
 # PyBuilder
 target/
@@ -89,6 +90,10 @@ ENV/
 .ropeproject
 
 .DS_Store
+
+# LaTeX build products for the figures; the .tex source and the .svg output are kept
+docs/source/figures/*.aux
+docs/source/figures/*.pdf
 
 # Local notes
 z_notes/
