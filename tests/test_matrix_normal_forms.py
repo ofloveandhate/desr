@@ -27,12 +27,30 @@ class TestHermiteMethods(TestCase):
         self.assertEqual(H, V * A)
         self.assertTrue(is_hnf_row(H))
 
-        ##TODO This test case is broken, the answer should be [[0, 1]]
-        # A = sympy.Matrix([[0, -1]])
-        # H, V = hnf_row_lll(A)
-        # self.assertEqual(H, sympy.Matrix([[0, -1]]))
-        # self.assertEqual(H, V * A)
-        # self.assertTrue(is_hnf_row(H))
+        # This case was commented out with a note that it was broken and the answer should
+        # be [[0, 1]].  It is right now: a canonical row HNF has positive pivots, so a
+        # negative one is negated and the factorisation absorbs the sign.  The
+        # canonicalising post-pass added with the FLINT backend is what fixed it.
+        A = sympy.Matrix([[0, -1]])
+        H, V = hnf_row_lll(A)
+        self.assertEqual(H, sympy.Matrix([[0, 1]]))
+        self.assertEqual(H, V * A)
+        self.assertTrue(is_hnf_row(H))
+
+    def test_a_negative_pivot_is_made_positive(self):
+        ''' The case above, generalised: a canonical row HNF has positive pivots, whatever
+            the sign of the input.  This was broken before the canonicalising post-pass, and
+            silently so -- a non-canonical answer is still a valid factorisation, so only
+            the pivot sign gives it away.
+        '''
+        for entries in ([[0, -1]], [[-1, 0]], [[0, 0, -3]], [[-2, -4]],
+                        [[0, -1], [0, 0]]):
+            with self.subTest(matrix=entries):
+                A = sympy.Matrix(entries)
+                H, V = hnf_row_lll(A)
+                self.assertTrue(is_hnf_row(H))
+                self.assertEqual(H, V * A)
+                self.assertIn(V.det(), (1, -1))  # unimodular, so the lattice is unchanged
 
     def test_canonicalise_hnf_row(self):
         ''' _canonicalise_hnf_row turns a valid but non-canonical row HNF into the unique
