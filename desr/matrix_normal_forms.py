@@ -44,6 +44,31 @@ def get_pivot_row_indices(matrix_):
             raise ValueError('Zero row in {}'.format(matrix_))
     return indices
 
+def get_pivot_col_indices(matrix_):
+    '''
+    Return the pivot row of each column of a matrix in column Hermite normal form.
+
+    The counterpart of :func:`get_pivot_row_indices`, and the one place that knows where a
+    column's pivot sits.  Which entry of a column is the pivot is a property of the
+    convention -- Havas-Majewski-Matthews take the first nonzero entry, Hubert & Labahn the
+    last -- so anything that needs a pivot's position asks here rather than deciding for
+    itself.
+
+    Args:
+        matrix_ (sympy.Matrix): A matrix in column Hermite normal form.
+
+    Returns:
+        indices (list): A list of indices, where the pivot entry of column j is
+        [indices[j], j].
+
+    >>> get_pivot_col_indices(sympy.eye(3))
+    [0, 1, 2]
+
+    >>> get_pivot_col_indices(sympy.Matrix([[1, 0], [0, 0], [0, 1]]))
+    [0, 2]
+    '''
+    return get_pivot_row_indices(matrix_.T)
+
 def is_hnf_col(matrix_):
     '''
     Decide whether a matrix is in row Hermite normal form, when acting on rows.
@@ -266,11 +291,25 @@ def is_normal_hermite_multiplier(hermite_multiplier, matrix_):
     herm_mul_i, herm_mul_n = hermite_multiplier[:, :r], hermite_multiplier[:, r:]
     if not is_hnf_col(herm_mul_n):
         return False
-    # Condition c)
-    for i in range(r):
-        pivot_val = max(herm_mul_n[i, :])
-        if any(abs(x) >= pivot_val for x in herm_mul_i.row(i)):
-            return False
+    # Condition c): V_i is reduced with respect to the pivot rows of V_n.  Hubert & Labahn
+    # Prop 2.3(ii)(c): if i_1 < ... < i_{n-r} are those pivot rows then
+    # 0 <= [V_i]_{i_j,k} < [V_n]_{i_j,j} for every 1 <= k <= r.
+    #
+    # This used to iterate `range(r)` -- the first r rows of the matrix -- which are not in
+    # general the pivot rows.  So it skipped pivot rows the condition does constrain, and
+    # tested rows it says nothing about.  It also bounded by `max(V_n[i, :])` and allowed
+    # any sign.  The row maximum is in fact the pivot, but only *on a pivot row*, where the
+    # entries left of the pivot are reduced below it and those to the right are zero; off a
+    # pivot row it means nothing.  Asking for the pivot directly says what is meant.
+    #
+    # Together with (a) and (b) this makes the normal Hermite multiplier unique: by
+    # Prop 2.3(i) the freedom is V_n -> V_n*U and V_i -> V_i + V_n*M, and (b) pins the
+    # first while (c) pins the second.
+    for j, pivot_row in enumerate(get_pivot_col_indices(herm_mul_n)):
+        pivot = herm_mul_n[pivot_row, j]
+        for k in range(r):
+            if not 0 <= herm_mul_i[pivot_row, k] < pivot:
+                return False
 
     return True
 

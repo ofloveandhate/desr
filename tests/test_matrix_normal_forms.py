@@ -165,8 +165,13 @@ class TestHermiteMethods(TestCase):
             self.assertEqual(H, V * A)
 
     def test_normal_hermite_multiplier_example(self):
-        ''' Example from Hubert Labahn '''
-        # Broken due to different definitions of HNF
+        ''' Hubert & Labahn 2013, example 2.4, p. 486.
+
+            The paper's own normal Hermite multiplier is asserted in
+            tests/test_hubert_labahn.py, where the difference of convention between desr
+            and the paper is recorded.  What is checked here is that whatever desr computes
+            satisfies the conditions of Prop 2.3(ii) under desr's own convention.
+        '''
         A = sympy.Matrix([[8, 2, 15, 9, 11],
                           [6, 0, 6, 2, 3]])
 
@@ -182,9 +187,38 @@ class TestHermiteMethods(TestCase):
         self.assertTrue(is_hnf_col(V[:, 2:]))
         self.assertTrue(is_normal_hermite_multiplier(V, A))
 
-        # We can't compare Hermite mmultipliers since we are using different definitions
-        V_answer = sympy.Matrix([[-1, -2, -2, -2, -1],
-                                 [-3, -14, -7, -13, -7],
-                                 [1, 1, 2, 1, 0],
-                                 [0, 2, 0, 3, 0],
-                                 [0, 1, 0, 0, 2]])
+    def test_a_valid_but_unnormalised_multiplier_is_refused(self):
+        ''' Hubert & Labahn Prop 2.3(i): a Hermite multiplier is unique up to right
+            multiplication by [[I, 0], [M, U]], which is to say V_n -> V_n*U and
+            V_i -> V_i + V_n*M.  Perturbing by such an M leaves a perfectly valid Hermite
+            multiplier that is no longer the *normal* one, so it is what condition (c)
+            exists to reject.
+
+            Worth asserting explicitly: condition (c) was previously checked over the first
+            r rows rather than V_n's pivot rows, and a predicate that is never shown to say
+            "no" is not known to work.  On this example the old test accepted 6 of these 18
+            perturbations -- every one along the third invariant column, whose pivot row is
+            2 and so was never looked at.
+        '''
+        A = sympy.Matrix([[8, 2, 15, 9, 11],
+                          [6, 0, 6, 2, 3]])
+        r = A.rows
+        H, V = normal_hnf_col(A)
+        self.assertTrue(is_normal_hermite_multiplier(V, A))
+
+        # Add a multiple of an invariant column onto an auxiliary column: the M block.
+        for column in range(r):
+            for kernel_column in range(r, V.cols):
+                for multiple in (1, -1, 3):
+                    with self.subTest(column=column, kernel_column=kernel_column,
+                                      multiple=multiple):
+                        perturbed = V.copy()
+                        perturbed[:, column] += multiple * V[:, kernel_column]
+
+                        # Still a valid Hermite multiplier: unimodular, same A*V.
+                        self.assertEqual(abs(perturbed.det()), 1)
+                        self.assertEqual(A * perturbed, H)
+                        # The invariant columns are untouched, so (b) still holds ...
+                        self.assertTrue(is_hnf_col(perturbed[:, r:]))
+                        # ... and only (c) can tell it is not the normal multiplier.
+                        self.assertFalse(is_normal_hermite_multiplier(perturbed, A))
