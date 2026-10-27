@@ -1,8 +1,9 @@
 """
 Numerical translation between an :class:`~desr.ode_system.ODESystem` and its reduction.
 
-:mod:`desr` reduces a system symbolically.  This module carries *numbers* across the same
-reduction: it turns parameter values and initial conditions of the original system into
+:mod:`desr` reduces a system symbolically.  This module carries numeric values and
+numeric solutions across the same
+reduction.  It turns parameter values and initial conditions of the original system into
 their counterparts in the reduced system, and turns a numerical solution of the reduced
 system back into a solution of the original one.
 
@@ -26,7 +27,7 @@ import sympy
 try:
     import numpy as np
 except ImportError:  # pragma: no cover
-    raise ImportError('desr.numerics requires numpy.  Install it with `pip install numpy`.')
+    raise ImportError('desr.numerics requires numpy.  Install it.')
 
 from .ode_translation import ODETranslation
 from .ode_system import ODESystem
@@ -67,7 +68,7 @@ def _first(value):
     return value.reshape(-1)[0] if value.ndim else value[()]
 
 
-def _monomial(values, exponents, column):
+def _eval_monomial(values, exponents, column):
     '''
     Evaluate one monomial: the product of ``values`` raised to the powers in one column.
 
@@ -152,15 +153,15 @@ class NumericTranslation(object):
     >>> numeric.scheme
     'parameter'
 
-    Three of the eight variables are scaling symmetries, so three values must be known to
-    come back.
+    The system has three scaling symmetries, so three values must be known to
+    come back.  The value of `r` tells us this (for the parameter scheme it's exact).
 
     >>> numeric.r
     3
     >>> numeric.carries_auxiliaries
     False
 
-    Translate a state of the original system into the reduced one.
+    You can translate a state of the original system into the reduced one.
 
     >>> t, n, p, K, d, h, k, r, s = system.variables
     >>> original = {t: 2.0, n: 1.0, p: 0.5, K: 5.0, d: 0.7, h: 1.3, k: 0.9, r: 1.1, s: 0.4}
@@ -168,7 +169,7 @@ class NumericTranslation(object):
     >>> sorted(str(x) for x in reduced_values)
     ['kappa0', 'kappa1', 'kappa2', 'nu0', 'nu1', 'tau']
 
-    And back again, given three values we already know.
+    And you can reverse-translate, given three values we already know.
 
     >>> recovered = numeric.reverse(reduced_values, known_values={d: 0.7, s: 0.4, k: 0.9})
     >>> [round(float(recovered[x]), 10) for x in (t, n, p)]
@@ -395,7 +396,8 @@ class NumericTranslation(object):
             raise InsufficientKnownValues(
                 'No value given for the auxiliary variable{} {}, which the original system '
                 'cannot be recovered without.'.format(
-                    '' if len(missing) == 1 else 's', ', '.join(map(str, missing))))
+                    '' if len(missing) == 1 else 's', # pluralization, lol
+                    ', '.join(map(str, missing)))) # the vars to report
         return [values[x] for x in self._auxiliaries]
 
     def _given_auxiliaries(self, auxiliaries):
@@ -518,7 +520,7 @@ class NumericTranslation(object):
                     'Every variable of the original system is a product of powers of the '
                     'reduced ones, so no rescaling turns a nonzero value into zero or back.  '
                     'Supply the value of a variable that is nonzero here.'.format(variable))
-            invariant_part = _monomial(invariants, W[self.r:, :], i)
+            invariant_part = _eval_monomial(invariants, W[self.r:, :], i)
             if invariant_part == 0:
                 zero = [y for y in needed if _first(values[y]) == 0]
                 raise ValueError(
@@ -554,13 +556,13 @@ class NumericTranslation(object):
                 'instead a known value of a variable that the scaling acts on with power '
                 '1.'.format(', '.join(map(str, known_values)), index, index,
                             ', whose sign would be undetermined' if index % 2 == 0 else ''))
-        auxiliaries = [_monomial([residuals[row] for row in independent], exponents.T, j)
+        auxiliaries = [_eval_monomial([residuals[row] for row in independent], exponents.T, j)
                        for j in range(self.r)]
 
         disagreements = []
         for row, ((variable, known), residual) in enumerate(zip(known_values.items(),
                                                                 residuals)):
-            implied = _monomial(auxiliaries, coefficients.T, row)
+            implied = _eval_monomial(auxiliaries, coefficients.T, row)
             if not np.isclose(implied, residual, rtol=tolerance, atol=0):
                 disagreements.append((variable, known, known * implied / residual))
         if disagreements:
@@ -774,7 +776,7 @@ class NumericTranslation(object):
         for j, out in enumerate(outputs):
             required = [i for i in range(exponents.rows) if exponents[i, j] != 0]
             if all(ordered[i] is not None for i in required):
-                result[out] = _monomial(ordered, exponents, j)
+                result[out] = _eval_monomial(ordered, exponents, j)
         return result
 
     def _check(self, values, variables, description):
