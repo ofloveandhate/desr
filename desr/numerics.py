@@ -31,7 +31,7 @@ try:
 except ImportError:  # pragma: no cover
     raise ImportError('desr.numerics requires numpy.  Install it.')
 
-from .ode_translation import ODETranslation
+from .ode_translation import ODETranslator
 from .ode_system import ODESystem
 from .sympy_helper import to_symbol
 
@@ -129,20 +129,20 @@ def _eval_monomial(values, exponents, column):
     return result
 
 
-def _dep_var_translation(system, translation):
+def _dep_var_translator(system, translator):
     '''
-    Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslation.translate_dep_var`
+    Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`
     works with internally: the same scaling action, with the independent variable removed.
     '''
     index = system.indep_var_index
-    scaling_matrix = translation.scaling_matrix.copy()
-    hermite_multiplier = translation.dep_var_herm_mult(indep_var_index=index)
-    if translation.n == len(system.variables):
+    scaling_matrix = translator.scaling_matrix.copy()
+    hermite_multiplier = translator.dep_var_herm_mult(indep_var_index=index)
+    if translator.n == len(system.variables):
         scaling_matrix.col_del(index)
     else:
         hermite_multiplier.col_del(index)
         hermite_multiplier.row_del(index)
-    return ODETranslation(scaling_matrix=scaling_matrix,
+    return ODETranslator(scaling_matrix=scaling_matrix,
                           hermite_multiplier=hermite_multiplier)
 
 
@@ -152,9 +152,9 @@ class NumericTranslation(object):
 
     Args:
         system (ODESystem): The original system.
-        translation (ODETranslation): The reduction of that system.
+        translator (ODETranslator): The reduction of that system.
         reduced (ODESystem, optional): The reduced system.  Computed with
-            :meth:`~desr.ode_translation.ODETranslation.translate` if not given.  Pass it
+            :meth:`~desr.ode_translation.ODETranslator.translate` if not given.  Pass it
             explicitly when it was produced with non-default options, such as
             ``include_aux_vars=False``.
 
@@ -171,8 +171,8 @@ class NumericTranslation(object):
     >>> from desr.numerics import NumericTranslation
     >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
     >>> system = ODESystem.from_equations(equations)
-    >>> translation = ODETranslation.from_ode_system(system)
-    >>> numeric = NumericTranslation(system, translation)
+    >>> translator = ODETranslator.from_ode_system(system)
+    >>> numeric = NumericTranslation(system, translator)
     >>> numeric.scheme
     Scheme.PARAMETER
 
@@ -201,10 +201,10 @@ class NumericTranslation(object):
     [5.0, 1.3, 1.1]
     '''
 
-    def __init__(self, system, translation, reduced=None):
+    def __init__(self, system, translator, reduced=None):
         self.system = system
-        self.translation = translation
-        self.reduced = translation.translate(system) if reduced is None else reduced
+        self.translator = translator
+        self.reduced = translator.translate(system) if reduced is None else reduced
 
         # `translate` prefers the parameter scheme, but a caller may have asked for another
         # one explicitly, so choose the scheme whose bookkeeping actually fits the reduced
@@ -217,8 +217,8 @@ class NumericTranslation(object):
                 break
         if layout is None:
             raise ValueError(
-                'Reduced system {} does not match any reduction of {} by this translation.  '
-                'Check that `reduced` came from this system and translation.'.format(
+                'Reduced system {} does not match any reduction of {} by this translator.  '
+                'Check that `reduced` came from this system and translator.'.format(
                     tuple(self.reduced.variables), tuple(system.variables)))
 
         (self._acted, source, self._auxiliaries, self._invariants,
@@ -231,11 +231,11 @@ class NumericTranslation(object):
     def _applicable_schemes(self):
         '''The schemes this system admits, in the order `translate` prefers them.'''
         schemes = []
-        if self.translation._is_translate_parameter_compatible(self.system):
+        if self.translator._is_translate_parameter_compatible(self.system):
             schemes.append(Scheme.PARAMETER)
-        columns = self.translation.scaling_matrix.shape[1]
+        columns = self.translator.scaling_matrix.shape[1]
         if ((len(self.system.variables) == columns + 1)
-                or self.translation.scaling_matrix[
+                or self.translator.scaling_matrix[
                     :, self.system.indep_var_index].is_zero_matrix):
             schemes.append(Scheme.DEP_VAR)
         if len(self.system.variables) == columns:
@@ -251,7 +251,7 @@ class NumericTranslation(object):
         under one scheme, or return None if they cannot.
         '''
         if scheme == Scheme.PARAMETER:
-            source = self.translation
+            source = self.translator
             # The reduced system carries no auxiliaries, and its variables line up
             # one-for-one with the columns of V_n -- the new independent variable among
             # them, since it is itself an invariant.
@@ -261,10 +261,10 @@ class NumericTranslation(object):
                     list(self.reduced.variables), False)
 
         if scheme == Scheme.DEP_VAR:
-            source = _dep_var_translation(self.system, self.translation)
+            source = _dep_var_translator(self.system, self.translator)
             acted = [v for v in self.system.variables if v != self.system.indep_var]
         else:
-            source = self.translation
+            source = self.translator
             acted = list(self.system.variables)
 
         # Here the reduced system keeps the original independent variable, and its
@@ -457,8 +457,8 @@ class NumericTranslation(object):
                                         **solver_options)
 
     def _reject_time_varying(self, known_values):
-        '''In a series, a known value of anything but a constant is a category error.'''
-        constants = set(self.system.constant_variables)
+        '''In a series, a known value of anything but a parameter is a category error.'''
+        constants = set(self.system.parameters)
         for variable in known_values:
             if variable in constants:
                 continue
@@ -502,7 +502,7 @@ class NumericTranslation(object):
 
         Returns:
             list: The auxiliary values, in the order of the columns of
-            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`.
+            :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.
         '''
         known_values = {to_symbol(k): v for k, v in known_values.items()}
         allowed = list(self._acted) if allowed is None else list(allowed)
@@ -626,9 +626,9 @@ class NumericTranslation(object):
         >>> from desr.numerics import NumericTranslation
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translation = ODETranslation.from_ode_system(system)
-        >>> autonomous = NumericTranslation(system, translation,
-        ...                                 translation.translate_general(system))
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> autonomous = NumericTranslation(system, translator,
+        ...                                 translator.translate_general(system))
         >>> autonomous.scheme
         Scheme.GENERAL
         >>> autonomous.auxiliary_growth_rates()
@@ -642,10 +642,10 @@ class NumericTranslation(object):
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
-        >>> translation = ODETranslation.from_ode_system(system)
+        >>> translator = ODETranslator.from_ode_system(system)
         >>> moving = NumericTranslation(
-        ...     system, translation,
-        ...     translation.translate_general(system, include_aux_vars=False))
+        ...     system, translator,
+        ...     translator.translate_general(system, include_aux_vars=False))
         >>> moving.carries_auxiliaries
         False
         >>> moving.auxiliaries_are_constant
@@ -662,12 +662,12 @@ class NumericTranslation(object):
                 if self.carries_auxiliaries:
                     carrier, auxiliaries = self.reduced, self._auxiliaries
                 elif self.scheme == Scheme.GENERAL:
-                    carrier = self.translation.translate_general(self.system,
+                    carrier = self.translator.translate_general(self.system,
                                                                  include_aux_vars=True)
                     auxiliaries = [v for v in carrier.variables
                                    if v != carrier.indep_var][:self.r]
                 else:
-                    carrier = self.translation.translate_dep_var(self.system)
+                    carrier = self.translator.translate_dep_var(self.system)
                     auxiliaries = [v for v in carrier.variables
                                    if v != carrier.indep_var][:self.r]
                 rates = [sympy.simplify(carrier.derivative_dict[x] / x)
@@ -721,7 +721,7 @@ class NumericTranslation(object):
 
         Returns:
             list: One value per auxiliary, in the order of the columns of
-            :attr:`~desr.ode_translation.ODETranslation.herm_mult_i`: an array along the
+            :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`: an array along the
             series if it moves, a scalar if it is constant.
         '''
         values = self._check(values, self.reduced.variables, 'the reduced system')
@@ -752,7 +752,7 @@ class NumericTranslation(object):
             self._reject_time_varying(known_values)
             at_first = {self.reduced.indep_var: times[0]}
             at_first.update(dict(zip(self._invariants, sampled[:, 0])))
-            constants = [v for v in self._acted if v in self.system.constant_variables]
+            constants = [v for v in self._acted if v in self.system.parameters]
             start = self.auxiliaries_from(at_first, known_values, tolerance,
                                           allowed=constants)
 

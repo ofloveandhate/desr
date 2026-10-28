@@ -16,15 +16,25 @@ class ODESystem(object):
     :attr:`~desr.ode_system.ODESystem.variables` is an ordered tuple of variables, which includes the independent variable.
     :attr:`~desr.ode_system.ODESystem.derivatives` is an ordered tuple of the same length that contains the derivatives with respect to :attr:`~desr.ode_system.ODESystem.indep_var`.
 
+    A variable with no equation of its own -- a :const:`None` in
+    :attr:`~desr.ode_system.ODESystem.derivatives` -- is a :attr:`~desr.ode_system.ODESystem.parameters`.
+    A variable with an equation is a :attr:`~desr.ode_system.ODESystem.dependent_variables`,
+    including when that equation says zero: :math:`dw/dt = 0` states that :math:`w` is
+    conserved, which is a statement about a dependent variable.  To say instead that it is
+    a constant of the model, name it in `parameters` or call
+    :meth:`~desr.ode_system.ODESystem.make_parameter`.
+
     Args:
         variables (tuple of sympy.Symbol): Ordered tuple of variables.
-        derivatives (tuple of sympy.Expression): Ordered tuple of derivatives.
+        derivatives (tuple of sympy.Expression): Ordered tuple of derivatives, :const:`None` for a parameter.
         indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
-        initial_conditions (tuple of sympy.Symbol): The initial values of non-constant variables
+        initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
         same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
+        parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+            discarding the zero equations they were given.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -38,7 +48,13 @@ class ODESystem(object):
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
-        assert self.derivatives[self.indep_var_index] == sympy.sympify(1)
+        assert self._derivatives[self.indep_var_index] == sympy.sympify(1)
+
+        # Reclassify before anything else reads the derivatives, so that the rest of
+        # construction sees the system the caller asked for.
+        if parameters is not None:
+            for parameter in parameters:
+                self.make_parameter(parameter)
 
         # carry over additional arguments
         if initial_conditions is not None:
@@ -120,10 +136,8 @@ class ODESystem(object):
         dtau/dtau = 1
         dx/dtau = c_0*x*y
         dy/dtau = c_1*tau*(1 - x)*(1 - y)
-        dc_0/dtau = 0
-        dc_1/dtau = 0
-        dx_0/dtau = 0
         x(0) = x_0
+        parameters: c_0, c_1, x_0
 
         >>> system.variables
         (tau, x, y, c_0, c_1, x_0)
@@ -175,66 +189,151 @@ class ODESystem(object):
         return self._variables
 
     @property
-    def constant_variables(self):
+    def parameters(self):
         '''
-        Return the constant variables - specifically those which have a None derivative.
+        Return the parameters of the system: the variables with no equation of their own.
+
+        A variable whose equation says zero is conserved, not constant, and so is a
+        dependent variable rather than a parameter.  See
+        :attr:`~desr.ode_system.ODESystem.dependent_variables`.
 
         Returns:
-            tuple: The constant variables.
+            tuple: The parameters, in variable order.
+
+        >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
+        >>> system.parameters
+        (a,)
+        >>> system.dependent_variables
+        (w, z)
         '''
         return tuple(var for var, deriv in zip(self.variables, self._derivatives) if deriv is None)
 
     @property
-    def non_constant_variables(self):
+    def num_parameters(self):
         '''
-        Return the non-constant non-independent variables - specifically those which have a derivative that isn't None or 1.
+        Returns:
+            int: The number of parameters.
+        '''
+        return len(self.parameters)
+
+    @property
+    def dependent_variables(self):
+        '''
+        Return the dependent variables: those with an equation of their own, excluding the
+        independent variable.
+
+        A conserved variable, whose equation says zero, is a dependent variable.
 
         Returns:
-            tuple: The non-constant non-independent variables.
+            tuple: The dependent variables, in variable order.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
         >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
-        >>> system.non_constant_variables
+        >>> system.dependent_variables
         (x, y)
+
+        A variable may move at unit rate; being told apart from the independent variable is
+        a matter of which variable it is, not of what its equation happens to say.
+
+        >>> ODESystem.from_equations(['dx/dt = 1']).dependent_variables
+        (x,)
         '''
-        return tuple(var for var, deriv in zip(self.variables, self._derivatives) if
-                     ((deriv is not None) and (deriv != 1)))
+        return tuple(var for var, deriv in zip(self.variables, self._derivatives)
+                     if deriv is not None and var != self.indep_var)
 
     @property
-    def num_nonconstants(self):
-        return len(self.non_constant_variables)
-
-    @property
-    def num_constants(self):
+    def num_dependent_variables(self):
         '''
-        Return the number of constant variables - specifically those which have a :const:`None` derivative
-
         Returns:
-            int: Number of non-constant variables.
+            int: The number of dependent variables, excluding the independent variable.
         '''
-        return len(self.constant_variables)
-        
-
+        return len(self.dependent_variables)
 
     @property
     def derivatives(self):
         ''' Getter for an ordered tuple of expressions representing the derivatives of self.variables.
 
+        A parameter has no equation, and so is reported as :const:`None`.  That is not the
+        same answer as ``0``, which is the equation of a conserved variable.
+
         Returns:
-            tuple: Ordered tuple of sympy.Expressions.
+            tuple: Ordered tuple of sympy.Expression, or :const:`None` for a parameter.
         '''
-        return [expr if expr is not None else sympy.sympify(0) for expr in self._derivatives]
+        return self._derivatives
 
     @property
     def derivative_dict(self):
         '''
-        Return a variable: expr mapping, filtering out the :const:`None`'s in expr.
+        Return a variable: expr mapping, over the variables that have an equation.
 
         Returns:
-            dict: Keys are non-constant variables, value is the derivative with respect to the independent variable.
+            dict: Keys are the independent and dependent variables, value is the derivative with respect to the independent variable.
         '''
         return dict(filter(lambda x: x[1] is not None, zip(self.variables, self._derivatives)))
+
+    def make_parameter(self, variable):
+        '''
+        Declare a variable to be a parameter, discarding the equation it was given.
+
+        Only a variable that does not move can become a parameter: one that is already a
+        parameter, in which case this does nothing, or one whose equation says zero.  An
+        explicit :math:`dw/dt = 0` says :math:`w` is conserved, which is a statement about
+        a dependent variable; this is how to say instead that it is a constant of the model.
+
+        The variable keeps its place in the ordering.  Only
+        :meth:`~desr.ode_system.ODESystem.default_order_variables` moves it to sit with the
+        other parameters, because the ordering decides which parameters are normalised away.
+
+        Args:
+            variable (str, sympy.Symbol): The variable to reclassify.
+
+        Raises:
+            ValueError: If the variable is unknown to the system, is the independent
+                variable, has an equation saying it moves, or has an initial condition.
+
+        >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
+        >>> system.make_parameter('w')
+        >>> system.parameters
+        (w, a)
+        >>> system.dependent_variables
+        (z,)
+
+        >>> system.make_parameter('z')
+        Traceback (most recent call last):
+            ...
+        ValueError: Cannot make a parameter of z, which moves: dz/dt = a*z.
+        '''
+        if isinstance(variable, str):
+            variable = to_symbol(variable)
+
+        if variable not in self.variables:
+            raise ValueError('Cannot make a parameter of {}, which is not a variable of the '
+                             'system.'.format(variable))
+
+        if variable == self.indep_var:
+            raise ValueError('Cannot make a parameter of {}, the independent '
+                             'variable.'.format(variable))
+
+        index = self.variables.index(variable)
+        derivative = self._derivatives[index]
+
+        if derivative is None:
+            return
+
+        if derivative != sympy.sympify(0):
+            raise ValueError('Cannot make a parameter of {}, which moves: d{}/d{} = {}.'.format(
+                variable, variable, self.indep_var, derivative))
+
+        initial_condition = self._initial_conditions.get(variable)
+        if initial_condition is not None:
+            raise ValueError('Cannot make a parameter of {}, which has an initial condition '
+                             '{}(0) = {}.  Drop the initial condition first.'.format(
+                                 variable, variable, initial_condition))
+
+        derivatives = list(self._derivatives)
+        derivatives[index] = None
+        self._derivatives = tuple(derivatives)
 
     @property
     def initial_conditions(self):
@@ -281,7 +380,7 @@ class ODESystem(object):
                     d = sympy.collect(d,v)
             new_derivs.append(d)
 
-        self._derivatives = new_derivs
+        self._derivatives = tuple(new_derivs)
 
 
     def update_initial_conditions(self, initial_conditions):
@@ -302,25 +401,21 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*t*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
-        dx_0/dt = 0
         x(0) = x_0
+        parameters: c_0, c_1, x_0
 
         >>> system.update_initial_conditions({'c_0': 'k'})
         Traceback (most recent call last):
             ...
-        ValueError: Cannot set initial condition k for constant variable c_0 with derivative None.
-        
+        ValueError: Cannot set initial condition k for c_0, which is not a dependent variable of the system.
+
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*t*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
-        dx_0/dt = 0
         x(0) = x_0
-        
+        parameters: c_0, c_1, x_0
+
         >>> system.is_reduced
         False
 
@@ -338,10 +433,8 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*t*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
-        dx_0/dt = 0
         x(0) = x_0
+        parameters: c_0, c_1, x_0
         '''
         for variable, init_cond in initial_conditions.items():
 
@@ -352,11 +445,10 @@ class ODESystem(object):
             if isinstance(init_cond, str):
                 init_cond = sympify_expression(init_cond)
 
-            # We can only set initial conditions for non-constant variables we already know about.
-            if variable not in self.non_constant_variables:
-                raise ValueError('Cannot set initial condition {} for constant variable {} with derivative {}.'.format(init_cond,
-                                                                                                              variable,
-                                                                                                              self.derivative_dict.get(variable)))
+            # We can only set initial conditions for dependent variables we already know about.
+            if variable not in self.dependent_variables:
+                raise ValueError('Cannot set initial condition {} for {}, which is not a dependent variable of the system.'.format(init_cond,
+                                                                                                              variable))
 
 
 
@@ -440,23 +532,20 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
+        parameters: c_0, c_1
 
         >>> system.add_constraint('c_2', 'c_0 + c_1')
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
-        dc_2/dt = 0
         c_2 == c_0 + c_1
+        parameters: c_0, c_1, c_2
 
         >>> system.add_constraint('c_2', 'c_0 + x')
         Traceback (most recent call last):
             ...
-        ValueError: Cannot add constraints on non-constant parameters {x}. .  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...
+        ValueError: Cannot add constraints involving the dependent variables {x}.  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...
 
         >>> system.add_constraint('c_0', 0)
         Traceback (most recent call last):
@@ -471,14 +560,15 @@ class ODESystem(object):
             raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
         # get the variables from the constraint
-        all_constraint_vars, nonconst_vars, new_vars = self.equation_variables(lhs, rhs)
+        all_constraint_vars, dependent_vars, new_vars = self.equation_variables(lhs, rhs)
 
-        # check if have non-constant variables present.  if so, raise with a helpful error message
-        if nonconst_vars:
-            raise ValueError('Cannot add constraints on non-constant parameters {}. '.format(nonconst_vars) +
-                             '.  Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...')
+        # A constraint may only relate parameters.  One involving a dependent variable is a
+        # statement about the trajectory, which this library cannot act on.
+        if dependent_vars:
+            raise ValueError('Cannot add constraints involving the dependent variables {}. '.format(dependent_vars) +
+                             ' Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...')
 
-        # no non-constants, no problem.  update the recorded symbols
+        # Only parameters involved, no problem.  update the recorded symbols
         self._variables = tuple(list(self._variables) + new_vars)
         self._derivatives = tuple(list(self._derivatives) + [None for _ in new_vars])
         self._constraints.append(sympy.Eq(lhs, rhs))
@@ -492,15 +582,15 @@ class ODESystem(object):
             lhs (sympy.Expr): The left hand side of the constraint.
             rhs (sympy.Expr): The right hand side of the constraint.
 
-        Returns: length-three tuple of containers of variables: all, non-constant existing, new
+        Returns: length-three tuple of containers of variables: all, existing dependent, new
         """
         all_vars = expressions_to_variables([lhs, rhs])
-        nonconst_vars = all_vars.intersection(self.non_constant_variables)
+        dependent_vars = all_vars.intersection(self.dependent_variables)
         new_vars = sorted(all_vars.difference(set(self.variables)), key=str)
 
-        return all_vars, nonconst_vars, new_vars
+        return all_vars, dependent_vars, new_vars
 
-    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=True, new_symbols_are_constants=True):
+    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=True, new_symbols_are_parameters=True):
         '''
         Make substitutions into the derivatives, returning a new system.
 
@@ -510,7 +600,7 @@ class ODESystem(object):
             expand_after (bool): Expand the sympy expression for each derivative after substitution.
             factor_after (bool): Factorise the sympy expression for each derivative after substitution.
             subs_constraints (bool): Perform the substitutions into the initial constraints.
-            new_symbols_are_constants (bool): Treat newly encountered symbols as constants. If a substitution is a variable renaming, this does not apply.  I have no idea what to do if this is false, so it will generate exceptions..
+            new_symbols_are_parameters (bool): Treat newly encountered symbols as parameters. If a substitution is a variable renaming, this does not apply.  I have no idea what to do if this is false, so it will generate exceptions..
         
         Returns:
             ODESystem: System with substitutions carried out.
@@ -536,15 +626,14 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = x*y
         dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
-        dc_0/dt = 0
-        dc_1/dt = 0
         c_0 == c_1**2
+        parameters: c_0, c_1
         >>> system.diff_subs({'c_0': '1'}, subs_constraints=True)
         dt/dt = 1
         dx/dt = x*y
         dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
-        dc_1/dt = 0
         1 == c_1**2
+        parameters: c_1
         '''
 
         # sympify the dict of things to substitute
@@ -557,11 +646,11 @@ class ODESystem(object):
             rhs_vars = set(expressions_to_variables([rhs]))
 
             
-            lhs_nonconst_vars = lhs_vars.intersection(set(self.non_constant_variables))
+            lhs_dependent_vars = lhs_vars.intersection(set(self.dependent_variables))
 
             # make sure we can actually do the substitution
-            if lhs_nonconst_vars:
-                # in this conditional, we're trying to substitute away a non-constant variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
+            if lhs_dependent_vars:
+                # in this conditional, we're trying to substitute away a dependent variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
 
                 # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
                 if (rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]) and not self.is_reduced:
@@ -630,17 +719,19 @@ class ODESystem(object):
         # record that we have them, for the new post-substitution system
         new_vars = variables + missing_vars # this is a list extension operation
 
-        if new_symbols_are_constants:
+        if new_symbols_are_parameters:
+            # None rather than 0: a symbol arriving from a substitution has no equation, so
+            # it is a parameter.  Giving it `0` would declare it a conserved dependent.
             for x in missing_vars:
                 new_derivs.append(None)
         else:
-            raise NotImplementedError(f"don't want new symbols from substitution to be constant, but don't know what else to do.  the new symbols: {missing_vars}")
+            raise NotImplementedError(f"don't want new symbols from substitution to be parameters, but don't know what else to do.  the new symbols: {missing_vars}")
 
 
         # remove variables that don't appear in any expressions
 
         variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
-        extant_vars = set(expressions_to_variables( new_derivs + constraints + list(initial_conditions.values()) + [self.indep_var] + list(self.non_constant_variables)))
+        extant_vars = set(expressions_to_variables( [d for d in new_derivs if d is not None] + constraints + list(initial_conditions.values()) + [self.indep_var] + list(self.dependent_variables)))
 
         for v in variables_to_inspect:
 
@@ -662,14 +753,16 @@ class ODESystem(object):
         return subs_system
 
     @classmethod
-    def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False):
+    def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False, parameters=None):
         '''
         Instantiate from multiple equations.
 
         Args:
             equations (str, iter of str): Equations of the form "dx/dt = expr", optionally seperated by :code:`\\n`.
             indep_var (sympy.Symbol): The independent variable, usually :code:`t`.
-            initial_conditions (tuple of sympy.Symbol): The initial values of non-constant variables
+            initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
+            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+                discarding the zero equations they were given.
 
         Returns:
             ODESystem: System of equations.
@@ -679,21 +772,32 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
+        parameters: c_0, c_1
         >>> eqns = '\\n'.join(['dy/dx = c_0*x*y', 'dz/dx = c_1*(1-y)*z**2'])
         >>> ODESystem.from_equations(eqns, indep_var=sympy.Symbol('x'))
         dx/dx = 1
         dy/dx = c_0*x*y
         dz/dx = c_1*z**2*(1 - y)
-        dc_0/dx = 0
-        dc_1/dx = 0
+        parameters: c_0, c_1
+
+        A variable written down with a zero equation is conserved, and stays a dependent
+        variable; `parameters` is how to ask for it to be a constant of the model instead.
+
+        >>> ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
+        dt/dt = 1
+        dw/dt = 0
+        dz/dt = a*z
+        parameters: a
+        >>> ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=['w'])
+        dt/dt = 1
+        dz/dt = a*z
+        parameters: a, w
         '''
         if isinstance(equations, str):
             equations = equations.strip().split('\n')
 
         deriv_dict = dict(map(lambda x: parse_de(x, indep_var=str(indep_var)), equations))
-        system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions, is_reduced=is_reduced)
+        system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions, is_reduced=is_reduced, parameters=parameters)
         system.default_order_variables()
 
         system._variable_sanity_check()
@@ -701,14 +805,17 @@ class ODESystem(object):
         return system
 
     @classmethod
-    def from_dict(cls, deriv_dict, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False):
+    def from_dict(cls, deriv_dict, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False, parameters=None):
         '''
         Instantiate from a text of equations.
 
         Args:
-            deriv_dict (dict): {variable: derivative} mapping.
+            deriv_dict (dict): {variable: derivative} mapping.  A variable absent from the
+                mapping, but appearing in the expressions, is a parameter.
             indep_var (sympy.Symbol): Independent variable, that the derivatives are with respect to.
-            initial_conditions (tuple of sympy.Symbol): The initial values of non-constant variables
+            initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
+            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+                discarding the zero equations they were given.
 
 
         Returns:
@@ -720,8 +827,7 @@ class ODESystem(object):
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*(1 - x)*(1 - y)
-        dc_0/dt = 0
-        dc_1/dt = 0
+        parameters: c_0, c_1
 
         >>> _input = {'y':  'c_0*x*y', 'z': 'c_1*(1-y)*z**2'}
         >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
@@ -729,8 +835,7 @@ class ODESystem(object):
         dx/dx = 1
         dy/dx = c_0*x*y
         dz/dx = c_1*z**2*(1 - y)
-        dc_0/dx = 0
-        dc_1/dx = 0
+        parameters: c_0, c_1
         '''
         # Make a tuple of all variables.
         variables = set(expressions_to_variables(deriv_dict.values())).union(set(deriv_dict.keys()))
@@ -745,7 +850,8 @@ class ODESystem(object):
                      tuple([deriv_dict.get(var) for var in variables]),
                      indep_var=indep_var,
                      initial_conditions=initial_conditions,
-                     is_reduced=is_reduced)
+                     is_reduced=is_reduced,
+                     parameters=parameters)
 
         system.default_order_variables()
 
@@ -754,13 +860,19 @@ class ODESystem(object):
         return system
 
     def __repr__(self):
-        lines = ['d{}/d{} = {}'.format(var, self.indep_var, expr) for var, expr in zip(self.variables, self.derivatives)]
-        for v in self.non_constant_variables:
+        # None means "no equation", so the None's are exactly the parameters; they are
+        # named below instead of being given a line claiming they do not move.  That leaves
+        # `d_/dt = 0` free to mean what it says -- a conserved dependent variable.
+        lines = ['d{}/d{} = {}'.format(var, self.indep_var, expr)
+                 for var, expr in zip(self.variables, self._derivatives) if expr is not None]
+        for v in self.dependent_variables:
             init_cond = self.initial_conditions.get(v)
             if init_cond is not None:
                 lines.append('{}(0) = {}'.format(v, init_cond))
         for eqn in self.constraints:
             lines.append('{} == {}'.format(eqn.lhs, eqn.rhs))
+        if self.parameters:
+            lines.append('parameters: {}'.format(', '.join(map(str, self.parameters))))
         return '\n'.join(lines)
 
     def to_tex(self):
@@ -768,6 +880,10 @@ class ODESystem(object):
         Returns:
             str: TeX representation.
 
+        Parameters are left out.  :math:`dk_1/dt = 0` is not part of the mathematics of the
+        system; it is how this library records that :math:`k_1` has no equation, and it was
+        being deleted by hand from the generated tex anyway.  A conserved variable, which
+        does have an equation, keeps its line.
 
         >>> eqns = ['dC/dt = -C*k_2 - C*k_m1 + E*S*k_1',
         ... 'dE/dt = C*k_2 + C*k_m1 - E*S*k_1',
@@ -779,10 +895,7 @@ class ODESystem(object):
         \\frac{dC}{dt} &= - C k_{2} - C k_{-1} + E S k_{1} \\\\
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
         \\frac{dP}{dt} &= C k_{2} \\\\
-        \\frac{dS}{dt} &= C k_{-1} - E S k_{1} \\\\
-        \\frac{dk_{1}}{dt} &= 0 \\\\
-        \\frac{dk_{2}}{dt} &= 0 \\\\
-        \\frac{dk_{-1}}{dt} &= 0
+        \\frac{dS}{dt} &= C k_{-1} - E S k_{1}
 
         >>> system.update_initial_conditions({'C': 'C_0'})
         >>> print(system.to_tex())
@@ -791,10 +904,6 @@ class ODESystem(object):
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
         \\frac{dP}{dt} &= C k_{2} \\\\
         \\frac{dS}{dt} &= C k_{-1} - E S k_{1} \\\\
-        \\frac{dk_{1}}{dt} &= 0 \\\\
-        \\frac{dk_{2}}{dt} &= 0 \\\\
-        \\frac{dk_{-1}}{dt} &= 0 \\\\
-        \\frac{dC_{0}}{dt} &= 0 \\\\
         C\\left(0\\right) &= C_{0}
 
         >>> system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
@@ -804,19 +913,21 @@ class ODESystem(object):
         \\frac{dE}{dt} &= C k_{2} + C k_{-1} - E S k_{1} \\\\
         \\frac{dP}{dt} &= C k_{2} \\\\
         \\frac{dS}{dt} &= C k_{-1} - E S k_{1} \\\\
-        \\frac{dk_{1}}{dt} &= 0 \\\\
-        \\frac{dk_{2}}{dt} &= 0 \\\\
-        \\frac{dk_{-1}}{dt} &= 0 \\\\
-        \\frac{dC_{0}}{dt} &= 0 \\\\
-        \\frac{dK_{m}}{dt} &= 0 \\\\
         C\\left(0\\right) &= C_{0} \\\\
         K_{m} &= \\frac{k_{2} + k_{-1}}{k_{1}}
 
         '''
         line_template = '\\frac{{d{}}}{{d{}}} &= {}'
+        # `expr is not None` is the test for "this variable has an equation".  A parameter
+        # is stored as None precisely because it has none, so skipping the None's drops the
+        # parameters and keeps every real equation -- including a conserved variable's
+        # `= 0`, which is an equation and must appear.  Testing `expr != 0` instead would
+        # delete the conservation law along with the parameters.
         lines = [line_template.format(var_to_tex(var), var_to_tex(self.indep_var), expr_to_tex(expr))
-                 for var, expr in zip(self.variables, self.derivatives)]
-        for v in self.non_constant_variables:
+                 for var, expr in zip(self.variables, self._derivatives) if expr is not None]
+        # Here, by contrast, None only means that `self.initial_conditions` has no entry
+        # for this variable.
+        for v in self.dependent_variables:
             init_cond = self.initial_conditions.get(v)
             if init_cond is not None:
                 lines.append('{}\\left(0\\right) &= {}'.format(var_to_tex(v), expr_to_tex(init_cond)))
@@ -825,12 +936,14 @@ class ODESystem(object):
         return ' \\\\\n'.join(lines)
 
     @classmethod
-    def from_tex(cls, tex, is_reduced=False):
+    def from_tex(cls, tex, is_reduced=False, parameters=None):
         """
         Given the LaTeX of a system of differential equations, return a ODESystem of it.
 
         Args:
             tex (str): LaTeX
+            parameters (iter of str or sympy.Symbol, optional): Variables to treat as
+                parameters, discarding the zero equations they were given.
 
         Returns:
             ODESystem: System of ODEs.
@@ -845,9 +958,7 @@ class ODESystem(object):
         dE/dt = C*k_2 + C*k_m1 - E*S*k_1
         dP/dt = C*k_2
         dS/dt = C*k_m1 - E*S*k_1
-        dk_1/dt = 0
-        dk_2/dt = 0
-        dk_m1/dt = 0
+        parameters: k_1, k_2, k_m1
 
         Todo:
             * Allow initial conditions to be set from tex.
@@ -877,7 +988,8 @@ class ODESystem(object):
                         raise ValueError('Must be ordinary differential equation, but found two independent variables {} and {}.'.format(indep_var, eq.lhs.args[1]))
 
         # make the system which we will eventually return.
-        system = cls.from_dict(deriv_dict=derivative_dict, is_reduced=is_reduced)
+        system = cls.from_dict(deriv_dict=derivative_dict, is_reduced=is_reduced,
+                               parameters=parameters)
 
         # Add the constraints.  This might `raise` if the constraints involve non-constant variables
         for lhs, rhs in constraints.items():
@@ -902,8 +1014,12 @@ class ODESystem(object):
             List of sympy expressions
         """
 
-        # first, the derivatives
-        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items() if expr != 1]
+        # first, the derivatives.  The independent variable is excluded by being the
+        # independent variable, not by its derivative happening to equal 1: a dependent
+        # variable moving at unit rate has a real equation, and `t * 1 / x` is a real
+        # constraint on the scaling.
+        exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items()
+                 if var != self.indep_var]
 
         # next, initial conditions
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
@@ -1021,14 +1137,20 @@ class ODESystem(object):
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
         >>> system.variables
         (t, z_1, z_2, z_3)
+
+        `z_3` is a parameter, so it has no equation and its entry is :const:`None`.  The
+        classification travels with the variable through a reordering.
+
         >>> system.derivatives
-        [1, z_1*z_3, z_1*z_2/z_3**2, 0]
+        (1, z_1*z_3, z_1*z_2/z_3**2, None)
 
         >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
         >>> system.variables
         (z_2, z_3, t, z_1)
         >>> system.derivatives
-        [z_1*z_2/z_3**2, 0, 1, z_1*z_3]
+        (z_1*z_2/z_3**2, None, 1, z_1*z_3)
+        >>> system.parameters
+        (z_3,)
         '''
         if isinstance(variables, str):
             if ' ' in variables:
@@ -1049,9 +1171,13 @@ class ODESystem(object):
 
     def default_order_variables(self):
         '''
-        Reorder the variables into (independent variable, dependent variables, constant variables),
+        Reorder the variables into (independent variable, dependent variables, parameters),
         which generally gives the simplest reductions.
         Variables of the same type are sorted by their string representations.
+
+        A conserved variable is a dependent variable, so it sorts with the dependents rather
+        than with the parameters.  The parameter scheme of translation requires the
+        parameters to be the trailing variables, and this is what puts them there.
 
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
@@ -1067,13 +1193,11 @@ class ODESystem(object):
         >>> system.variables
         (t, z_1, z_2, z_3)
         '''
-        all_var = self.variables
-        dep_var = sorted(self.derivative_dict.keys(), key=str)
-        dep_var.remove(self.indep_var)
-        const_var = sorted(set(all_var).difference(dep_var).difference(set([self.indep_var])), key=str)
+        dep_var = sorted(self.dependent_variables, key=str)
+        parameters = sorted(self.parameters, key=str)
 
         # Order variables as independent, dependent, parameters
-        variables = [self.indep_var] + dep_var + const_var
+        variables = [self.indep_var] + dep_var + parameters
         assert len(variables) == len(set(variables)) # assures no duplicates
         self.reorder_variables(variables=variables)
 

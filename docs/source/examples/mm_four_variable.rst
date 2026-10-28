@@ -21,10 +21,7 @@ Note that negative subscripts are turned into 'm' so that they comply with :py:m
 negatives when printint to LaTeX using :func:`desr.tex_tools`.
 
     >>> import sympy
-    >>> from desr.matrix_normal_forms import smf
-    >>> from desr.ode_system import ODESystem
-    >>> from desr.ode_translation import ODETranslation, scale_action
-    >>> from desr.tex_tools import expr_to_tex
+    >>> from desr import ODESystem, ODETranslator, scale_action
     >>> system_tex = '''\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\
     ...                 \frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\
     ...                 \frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\
@@ -32,7 +29,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> original_system.variables
     (t, C, E, P, S, k_1, k_2, k_m1)
-    >>> max_scal1 = ODETranslation.from_ode_system(original_system, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Variable order: ', max_scal1.variables_domain)
     Variable order:  (t, C, E, P, S, k_1, k_2, k_m1)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
@@ -48,7 +45,7 @@ Inspect the scaling invariants:
 
 Finding the reduced system is also easy.
 Since the Hermite multiplier and inverse are compatible with the simplest parameter reduction scheme,
-:meth:`~desr.ode_translation.ODETranslation.translate` will automatically perform this reduction.
+:meth:`~desr.ode_translation.ODETranslator.translate` will automatically perform this reduction.
 
     >>> print(f'Reduced system:\n{max_scal1.translate(original_system)}')
     Reduced system:
@@ -57,7 +54,7 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
     dE/dt = C*c0 + C - E*S
     dP/dt = C*c0
     dS/dt = C - E*S
-    dc0/dt = 0
+    parameters: c0
 
 
 
@@ -66,7 +63,7 @@ Changing the variable order
 
 In our previous example, we had :math:`k_{-1}` at the end of the variable order, so that the algorithm tries to normalise using :math:`k_{-1}`.
 Instead, we can choose to normalise by :math:`k_2`, by swapping around the last two variables.
-Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslation` instance.
+Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator` instance.
 
     >>> original_system_reorder = original_system.copy()
     >>> variable_order = list(original_system.variables)
@@ -74,7 +71,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslatio
     >>> original_system_reorder.reorder_variables(variable_order)
     >>> original_system_reorder.variables
     (t, C, E, P, S, k_1, k_m1, k_2)
-    >>> max_scal1_reorder = ODETranslation.from_ode_system(original_system_reorder, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
     Invariants: k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2, k_m1/k_2
 
@@ -87,7 +84,7 @@ Now we can reduce to find another, equivalent system.
     dE/dt = C*c0 + C - E*S
     dP/dt = C
     dS/dt = C*c0 - E*S
-    dc0/dt = 0
+    parameters: c0
 
 Extending a choice of invariants
 --------------------------------
@@ -140,8 +137,8 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
 For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
 
 Now, this transformation doesn't satisfy the conditions of the parameter reduction scheme, so if we try to reduce it
-:meth:`~desr.ode_translation.ODETranslation.translate` will use the dependent reduction scheme implemented in
-:meth:`~desr.ode_translation.ODETranslation.translate_dep_var`.
+:meth:`~desr.ode_translation.ODETranslator.translate` will use the dependent reduction scheme implemented in
+:meth:`~desr.ode_translation.ODETranslator.translate_dep_var`.
 
     >>> max_scal2.invariants()
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, S*k_1/k_m1]])
@@ -181,18 +178,18 @@ invariants come first and the parameter comes last.
     [0, -1,  0,  0,  0,  1],
     [1,  0, -1, -1, -1, -1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslation(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal3 = ODETranslator(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print(max_scal3.translate(original_system).diff_subs({'c0':'alpha'}))
     dt/dt = 1
     dC/dt = -C*alpha - C + E*S/alpha
     dE/dt = C*alpha**2 + C*alpha - E*S
     dP/dt = C*alpha**2
     dS/dt = C*alpha - E*S
-    dalpha/dt = 0
+    parameters: alpha
 
 So we have found a third different reparametrization of the Michaelis-Menten equations.
 
 .. todo::
 
-    Add a method to :class:`~desr.ode_translation.ODETranslation` that will try and re-order the last :math:`n-r` columns so
+    Add a method to :class:`~desr.ode_translation.ODETranslator` that will try and re-order the last :math:`n-r` columns so
     that the parameter reduction scheme can be applied.

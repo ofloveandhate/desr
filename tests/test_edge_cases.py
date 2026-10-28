@@ -15,15 +15,10 @@ from unittest import TestCase
 import sympy
 
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslation
+from desr.ode_translation import ODETranslator
 
 
-def parameters_of(system):
-    '''The variables with no equation of their own.'''
-    return system.constant_variables
-
-
-def expected_variable_count(system, translation, scheme=None, include_aux_vars=True):
+def expected_variable_count(system, translator, scheme=None, include_aux_vars=True):
     '''
     How many variables the reduced system should have.
 
@@ -43,17 +38,17 @@ def expected_variable_count(system, translation, scheme=None, include_aux_vars=T
     '''
     n = len(system.variables)
     if scheme is None:
-        if translation._is_translate_parameter_compatible(system):
+        if translator._is_translate_parameter_compatible(system):
             scheme = 'parameter'
-        elif translation.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
+        elif translator.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
             scheme = 'dep_var'
         else:
             scheme = 'general'
     if scheme == 'parameter':
-        return n - translation.r
+        return n - translator.r
     if scheme == 'dep_var':
         return n
-    return n + 1 if include_aux_vars else n - translation.r + 1
+    return n + 1 if include_aux_vars else n - translator.r + 1
 
 
 class TestDisconnectedSymbols(TestCase):
@@ -63,16 +58,14 @@ class TestDisconnectedSymbols(TestCase):
     def with_inert(names):
         '''`dz/dt = a*z - b*z**2` with extra parameters that appear in no equation.'''
         base = ODESystem.from_equations(['dz/dt = a*z - b*z**2'])
-        derivatives = [None if v in base.constant_variables else base.derivative_dict[v]
-                       for v in base.variables]
         extra = [sympy.Symbol(name) for name in names]
         return ODESystem(list(base.variables) + extra,
-                         derivatives + [None] * len(extra),
+                         list(base.derivatives) + [None] * len(extra),
                          indep_var=base.indep_var)
 
     def test_one_inert_parameter(self):
         system = self.with_inert(['rho'])
-        self.assertIn(sympy.Symbol('rho'), parameters_of(system))
+        self.assertIn(sympy.Symbol('rho'), system.parameters)
         scaling = system.maximal_scaling_matrix()
         self.assertEqual(scaling.cols, len(system.variables))
 
@@ -89,8 +82,8 @@ class TestDisconnectedSymbols(TestCase):
     def test_an_inert_parameter_does_not_change_the_rest_of_the_reduction(self):
         plain = ODESystem.from_equations(['dz/dt = a*z - b*z**2'])
         padded = self.with_inert(['rho'])
-        plain_reduced = ODETranslation.from_ode_system(plain).translate(plain)
-        padded_reduced = ODETranslation.from_ode_system(padded).translate(padded)
+        plain_reduced = ODETranslator.from_ode_system(plain).translate(plain)
+        padded_reduced = ODETranslator.from_ode_system(padded).translate(padded)
         # The extra symbol is free, so it is normalised away and the reduction is unchanged.
         self.assertEqual(len(padded_reduced.variables), len(plain_reduced.variables))
 
@@ -104,42 +97,40 @@ class TestDegenerateSystems(TestCase):
         #   ShapeError: Matrix shapes must agree (0, 0) != (1, 0)
         # from multiplying empty matrices.
         system = ODESystem.from_equations(['dz/dt = z'])
-        translation = ODETranslation.from_ode_system(system)
-        self.assertEqual(translation.r, 1)
-        reduced = translation.translate(system)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.r, 1)
+        reduced = translator.translate(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation))
+                         expected_variable_count(system, translator))
         # Nothing is left but the independent variable and the one auxiliary.
         self.assertEqual([str(v) for v in reduced.variables], ['t', 'x0'])
 
     def test_a_system_with_no_invariants_under_the_general_scheme(self):
         system = ODESystem.from_equations(['dz/dt = z'])
-        translation = ODETranslation.from_ode_system(system)
-        reduced = translation.translate_general(system)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate_general(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation, scheme='general'))
-        dropped = translation.translate_general(system, include_aux_vars=False)
+                         expected_variable_count(system, translator, scheme='general'))
+        dropped = translator.translate_general(system, include_aux_vars=False)
         self.assertEqual(len(dropped.variables),
-                         expected_variable_count(system, translation, scheme='general',
+                         expected_variable_count(system, translator, scheme='general',
                                                  include_aux_vars=False))
 
     def test_single_dependent_variable_with_one_parameter(self):
         system = ODESystem.from_equations(['dz/dt = a*z'])
-        translation = ODETranslation.from_ode_system(system)
-        reduced = translation.translate(system)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
         self.assertEqual(len(reduced.variables),
-                         expected_variable_count(system, translation))
+                         expected_variable_count(system, translator))
 
     def test_a_conserved_variable_keeps_its_equation(self):
         base = ODESystem.from_equations(['dz/dt = a*z'])
-        derivatives = [None if v in base.constant_variables else base.derivative_dict[v]
-                       for v in base.variables]
         conserved = ODESystem(list(base.variables) + [sympy.Symbol('w')],
-                              derivatives + [sympy.sympify(0)],
+                              list(base.derivatives) + [sympy.sympify(0)],
                               indep_var=base.indep_var)
         w = sympy.Symbol('w')
         # It has an equation, so it is not a parameter ...
-        self.assertNotIn(w, parameters_of(conserved))
+        self.assertNotIn(w, conserved.parameters)
         # ... and that equation says it does not move.
         self.assertEqual(conserved.derivative_dict[w], sympy.sympify(0))
         # Whatever else happens, computing the scaling must not raise.
@@ -165,30 +156,30 @@ class TestInvariantsOfReduction(TestCase):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslation.from_ode_system(system)
-                reduced = translation.translate(system)
+                translator = ODETranslator.from_ode_system(system)
+                reduced = translator.translate(system)
                 self.assertEqual(len(reduced.variables),
-                                 expected_variable_count(system, translation))
+                                 expected_variable_count(system, translator))
 
     def test_every_invariant_is_actually_invariant(self):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslation.from_ode_system(system)
+                translator = ODETranslator.from_ode_system(system)
                 # A*V_n = 0 is what makes the columns of V_n invariants.
-                product = translation.scaling_matrix * translation.herm_mult_n
+                product = translator.scaling_matrix * translator.herm_mult_n
                 self.assertTrue(product.is_zero_matrix, name)
 
     def test_substitutions_only_mention_symbols_of_the_reduced_system(self):
         for name, equations in self.SYSTEMS.items():
             with self.subTest(system=name):
                 system = ODESystem.from_equations(equations)
-                translation = ODETranslation.from_ode_system(system)
-                if not translation._is_translate_parameter_compatible(system):
+                translator = ODETranslator.from_ode_system(system)
+                if not translator._is_translate_parameter_compatible(system):
                     continue
-                reduced = translation.translate(system)
+                reduced = translator.translate(system)
                 mentioned = set()
-                for value in translation.translate_parameter_substitutions(system).values():
+                for value in translator.translate_parameter_substitutions(system).values():
                     mentioned |= value.free_symbols
                 self.assertFalse(mentioned - set(reduced.variables), name)
 
@@ -196,19 +187,19 @@ class TestInvariantsOfReduction(TestCase):
         system = ODESystem.from_equations(['dn/dt = r*n*(1-n/k)'])
         renamed = ODESystem.from_equations(['dpopulation/dt = growth*population*'
                                             '(1-population/capacity)'])
-        self.assertEqual(ODETranslation.from_ode_system(system).r,
-                         ODETranslation.from_ode_system(renamed).r)
+        self.assertEqual(ODETranslator.from_ode_system(system).r,
+                         ODETranslator.from_ode_system(renamed).r)
         self.assertEqual(len(system.variables), len(renamed.variables))
 
     def test_reordering_variables_does_not_change_the_number_of_symmetries(self):
         equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         first = ODESystem.from_equations(equations)
-        original_r = ODETranslation.from_ode_system(first).r
+        original_r = ODETranslator.from_ode_system(first).r
         for order in ('tnpKdhkrs', 'rhKskdtnp', 'srkhdKpnt'):
             with self.subTest(order=order):
                 system = ODESystem.from_equations(equations)
                 system.reorder_variables(order)
-                self.assertEqual(ODETranslation.from_ode_system(system).r, original_r)
+                self.assertEqual(ODETranslator.from_ode_system(system).r, original_r)
 
 
 class TestAdversarialNames(TestCase):
@@ -255,7 +246,7 @@ class TestAdversarialNames(TestCase):
         system = ODESystem.from_equations(['dS/dt = -k*S'])
         system.reorder_variables(['t', 'S', 'k'])
         self.assertIn(sympy.Symbol('S'), system.variables)
-        numeric = NumericTranslation(system, ODETranslation.from_ode_system(system))
+        numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
 
         by_symbol = numeric.forward({sympy.Symbol('t'): 1.0, sympy.Symbol('S'): 2.0,
                                      sympy.Symbol('k'): 0.5})

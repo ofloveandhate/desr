@@ -8,12 +8,7 @@ Adapted from: J. C. S. . J. J. Tyson, Mathematical modeling as a tool for invest
 """
 
 import sympy
-from desr.matrix_normal_forms import smf
-from desr.ode_system import ODESystem
-from desr.ode_system import maximal_scaling_matrix, rational_expr_to_exponent_matrix, hnf_col, hnf_row, normal_hnf_col
-from desr.matrix_normal_forms import normal_hnf_row
-from desr.ode_translation import ODETranslation, scale_action
-from desr.tex_tools import expr_to_tex, matrix_to_tex
+from desr import ODESystem, ODETranslator
 import desr.tex_tools as tex_tools
 
 
@@ -99,10 +94,10 @@ text = pre_process_latex(system_tex)
 
 
 num_dynamic_eqns = 7
-num_constants = 4
+num_parameters = 4
 
 lines = text.split(r'\\')
-assert(len(lines) == num_dynamic_eqns + num_constants)
+assert(len(lines) == num_dynamic_eqns + num_parameters)
 
 system_tex_dynamic = r'\\'.join(lines[:num_dynamic_eqns])
 
@@ -183,27 +178,27 @@ print(system)
 
 print(f'\n{system.variables=}')
 
-print(f'\n{system.constant_variables=}')
-print(f'{len(system.constant_variables)} constant variables')
+print(f'\n{system.parameters=}')
+print(f'{len(system.parameters)} parameters')
 
-print(f'\n{system.non_constant_variables=}')
-print(f'{len(system.non_constant_variables)} non-constant variables')
+print(f'\n{system.dependent_variables=}')
+print(f'{len(system.dependent_variables)} dependent variables')
 
 print('\nVariable order: ', system.variables)
 
-translation = ODETranslation.from_ode_system(system, new_indices_start_at=1)
+translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
 
-print('\nScaling matrix',translation.scaling_matrix.__repr__())
-print('Scaling matrix size',translation.scaling_matrix.shape)
+print('\nScaling matrix',translator.scaling_matrix.__repr__())
+print('Scaling matrix size',translator.scaling_matrix.shape)
 
-print('\nHermite multiplier', translation.herm_mult.__repr__())
+print('\nHermite multiplier', translator.herm_mult.__repr__())
 
-print('\nInvariants: ', translation.invariants())
-print(f'{translation.invariants().shape} invariants')
+print('\nInvariants: ', translator.invariants())
+print(f'{translator.invariants().shape} invariants')
 
-print('\nsubstitutions:',translation.translate_parameter_substitutions(system))
+print('\nsubstitutions:',translator.translate_parameter_substitutions(system))
 
-system_translated = translation.translate(system)
+system_translated = translator.translate(system)
 
 # i really want to factor the system, cuz it's too long for a line in the paper.
 system_translated.simplify_derivatives()
@@ -216,11 +211,11 @@ print(system_translated.to_tex())#.to_tex()
 
 
 print(f'{system_translated.variables=}')
-print(f'{system_translated.constant_variables=}')
-print(f'{len(system_translated.constant_variables)}  constant variables')
+print(f'{system_translated.parameters=}')
+print(f'{len(system_translated.parameters)}  parameters')
 
-print(f'{system_translated.non_constant_variables=}')
-print(f'{len(system_translated.non_constant_variables)}  non-constant variables')
+print(f'{system_translated.dependent_variables=}')
+print(f'{len(system_translated.dependent_variables)}  dependent variables')
 
 
 
