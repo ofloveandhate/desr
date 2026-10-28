@@ -6,7 +6,7 @@ import sympy
 from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
 from desr.sympy_helper import (expressions_to_variables, unique_array_stable,
                                monomial_to_powers, sympify_expression, to_symbol)
-from desr.tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
+from desr.tex_tools import TexParseError, expr_to_tex, var_to_tex, tex_to_sympy
 
 class ODESystem(object):
     '''
@@ -936,17 +936,36 @@ class ODESystem(object):
         return ' \\\\\n'.join(lines)
 
     @classmethod
-    def from_tex(cls, tex, is_reduced=False, parameters=None):
+    def from_tex(cls, tex, is_reduced=False, parameters=None, primes='name',
+                 sub_defns=False):
         """
         Given the LaTeX of a system of differential equations, return a ODESystem of it.
+
+        Every line of the tex is one of three things, and which one is decided by what the
+        line mentions rather than by where it sits:
+
+        - a **derivative**, which is an equation of the system;
+        - a relation among **parameters** only, which becomes a constraint;
+        - a **definition** of something in terms of a dependent variable, which cannot be
+          a constraint -- a constraint is a statement about parameters -- and so is either
+          substituted away or refused.
 
         Args:
             tex (str): LaTeX
             parameters (iter of str or sympy.Symbol, optional): Variables to treat as
                 parameters, discarding the zero equations they were given.
+            primes (str): ``'name'`` (the default) or ``'derivative'``; see
+                :func:`desr.tex_tools.tex_to_sympy_one_line`.
+            sub_defns (bool): Substitute definitions away rather than refusing them.
+                :const:`False` by default, so that a system quietly different from the one
+                written down is not built by accident.
 
         Returns:
             ODESystem: System of ODEs.
+
+        Raises:
+            TexParseError: If a line is a definition and `sub_defns` was not asked for.
+            NotImplementedError: If a definition refers to another definition.
 
         >>> eqns = ['\\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\',
         ... '\\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\',
@@ -963,18 +982,18 @@ class ODESystem(object):
         Todo:
             * Allow initial conditions to be set from tex.
         """
-        sympification = tex_to_sympy(tex)
+        sympification = tex_to_sympy(tex, primes=primes)
         derivative_dict = {}
         indep_var = None
 
-        constraints = {}
+        relations = {}
 
         for eqn in sympification:
             if not isinstance(eqn.lhs, sympy.Derivative):
-                # since it's not a derivative, it must be a constraint.
-
-                # add to a local container, and then we'll process later
-                constraints[eqn.lhs] = eqn.rhs
+                # Not a derivative, so it relates existing quantities.  Which kind of
+                # relation it is cannot be known until every derivative line has been
+                # read, because that is what says which variables are dependent.
+                relations[eqn.lhs] = eqn.rhs
 
             else:
                 # add to the dict from which we will construct the system
@@ -985,15 +1004,20 @@ class ODESystem(object):
                     indep_var = eqn.lhs.args[1]
                 else:
                     if indep_var != eqn.lhs.args[1]:
-                        raise ValueError('Must be ordinary differential equation, but found two independent variables {} and {}.'.format(indep_var, eq.lhs.args[1]))
+                        raise ValueError('Must be ordinary differential equation, but found two independent variables {} and {}.'.format(indep_var, eqn.lhs.args[1]))
 
         # make the system which we will eventually return.
         system = cls.from_dict(deriv_dict=derivative_dict, is_reduced=is_reduced,
                                parameters=parameters)
 
-        # Add the constraints.  This might `raise` if the constraints involve non-constant variables
+        constraints, definitions = cls._classify_relations(system, relations, sub_defns)
+
+        if definitions:
+            system = system.diff_subs(definitions)
+
+        # Add the constraints.  These mention parameters only, so they cannot be refused.
         for lhs, rhs in constraints.items():
-            system.add_constraint(lhs,rhs)
+            system.add_constraint(lhs, rhs)
 
         # Add the initial conditions
         # todo: code here
@@ -1003,6 +1027,70 @@ class ODESystem(object):
         system._variable_sanity_check()
 
         return system
+
+    @staticmethod
+    def _classify_relations(system, relations, sub_defns):
+        '''
+        Split the non-derivative lines of some tex into constraints and definitions.
+
+        A relation mentioning only parameters is a **constraint**: it says something true
+        of the constants of the model, and the system can carry it as one.  A relation
+        mentioning a dependent variable is a **definition** -- it gives a quantity in terms
+        of things that move -- and :meth:`add_constraint` rightly refuses those, so it is
+        either substituted away or reported.
+
+        Args:
+            system (ODESystem): The system built from the derivative lines, which is what
+                knows which variables are dependent.
+            relations (dict): {lhs: rhs} for each non-derivative line.
+            sub_defns (bool): Whether a definition may be substituted away.
+
+        Returns:
+            tuple: (constraints, definitions), both {lhs: rhs} dicts.
+
+        Raises:
+            TexParseError: On a definition when `sub_defns` is False.
+            NotImplementedError: On a definition that refers to another definition.
+        '''
+        dependent = set(system.dependent_variables)
+
+        constraints, definitions = {}, {}
+        for lhs, rhs in relations.items():
+            if expressions_to_variables([lhs, rhs]) & dependent:
+                definitions[lhs] = rhs
+            else:
+                constraints[lhs] = rhs
+
+        if definitions and not sub_defns:
+            raise TexParseError(
+                'The relation{} {} mention{} a dependent variable, so {} a definition '
+                'rather than a constraint -- a constraint is a statement about '
+                'parameters.  Pass sub_defns=True to substitute {} away, which is what a '
+                'definition is for.'.format(
+                    '' if len(definitions) == 1 else 's',
+                    ', '.join('{} = {}'.format(lhs, rhs)
+                              for lhs, rhs in sorted(definitions.items(), key=str)),
+                    's' if len(definitions) == 1 else '',
+                    'it is' if len(definitions) == 1 else 'they are',
+                    'it' if len(definitions) == 1 else 'them'))
+
+        # A definition whose right-hand side names another definition would have an answer
+        # that depended on the order the two were applied, and a pair that named each other
+        # would not have one at all.  Neither is guessed at.
+        defined = set(definitions)
+        for lhs, rhs in sorted(definitions.items(), key=str):
+            chained = expressions_to_variables([rhs]) & defined
+            if chained:
+                raise NotImplementedError(
+                    'The definition of {} refers to {}, which {} also defined.  '
+                    'Substituting definitions into one another is not implemented: the '
+                    'result would depend on the order they were applied in, and mutually '
+                    'referring definitions have no result at all.  Substitute by hand '
+                    'with diff_subs, in the order you intend.'.format(
+                        lhs, ', '.join(sorted(map(str, chained))),
+                        'is' if len(chained) == 1 else 'are'))
+
+        return constraints, definitions
 
     def _expressions(self):
         """

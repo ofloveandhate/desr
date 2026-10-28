@@ -7,72 +7,7 @@ Adapted from: J. C. S. . J. J. Tyson, Mathematical modeling as a tool for invest
 
 """
 
-import sympy
 from desr import ODESystem, ODETranslator
-import desr.tex_tools as tex_tools
-
-
-
-def pre_process_latex(system_tex):
-	import re
-
-	# get rid of textrm
-	pattern = r"\\textrm\{([^}]*)\}"
-	text = re.sub(pattern,r'\1',system_tex)
-
-
-	# replaces spaces inside square braces.  
-	# this is scary to me, because sometimes [] is used in place of parentheses in tex, but not in these eqns so it's ok
-	text = re.sub(r"\[([^\]]+)\]", lambda m: "[" + m.group(1).replace(" ", "") + "]", text)
-
-
-	# this codeblock removed because the APC* variable was recognized as a typo.
-	# # replace '*' with 'star' only inside [...] 
-	# text = re.sub(r"\[([^\]]*?)\]", lambda m: "[" + m.group(1).replace("*", "star") + "]", text)
-
-
-
-	# replace [] with ()
-	text = text.replace('[','(').replace(']',')')
-
-	# strip left/right
-	text = re.sub(r"\\left\s*\(", "(", text)
-	text = re.sub(r"\\right\s*\)", ")", text)
-
-
-	# combine variables with spaces between []
-	pattern = re.compile(r"\(\s*([^()+=\-*/]+?)\s*\)")
-
-	while True:
-	    new_text = pattern.sub(r"\1", text)
-	    if new_text == text:
-	        break
-	    text = new_text
-
-
-	# turn d/dt x into dx/dt
-	# pattern: \frac{d}{dt}Variable
-	pattern = r"\\frac\{d\}\{dt\}([a-zA-Z0-9]+)"
-
-	# replace with \frac{dVariable}{dt}
-	text = re.sub(pattern, r"\\frac{d\1}{dt}", text)
-	# print('after moving d/dt x --> dx/dt:\n',text,'\n\n')
-
-
-	# repnace Variable2( with Variable2*(
-	pattern = r"([a-zA-Z0-9]+)\("
-	text = re.sub(pattern, r"\1*(", text)
-	# print('after stars before ():\n',text,'\n')
-
-	# Make multi-char subscipts just underscores.  Flatten all other {...} after underscore
-	text = re.sub(r"_\{([^}]*)\}", r"_\1", text)
-
-	# replace ' with prime
-	text = re.sub(r"'", r"prime", text)
-
-	# finally done doing regex stuff to preprocess so it makes the system from tex ok.
-	return text
-
 
 
 # the tex from our scaling symmetries paper, faithfully transcribed from: J. C. S. . J. J. Tyson, Mathematical modeling as a tool for investigating cell cycle control networks,
@@ -90,35 +25,17 @@ k_{\textrm{wee}} &= V_{\textrm{wee}}' \textrm{[Wee1P]} + V_{\textrm{wee}}'' \lef
 k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm{[APC]}'''
 
 
-text = pre_process_latex(system_tex)
-
-
-num_dynamic_eqns = 7
-num_parameters = 4
-
-lines = text.split(r'\\')
-assert(len(lines) == num_dynamic_eqns + num_parameters)
-
-system_tex_dynamic = r'\\'.join(lines[:num_dynamic_eqns])
-
-
-system = ODESystem.from_tex(system_tex_dynamic)
+# The tex above is the paper's, unaltered.  `from_tex` sorts out which lines are equations
+# of the system and which are definitions -- the last four give Cdk, k_25, k_wee and k_2 in
+# terms of species that move -- and `sub_defns` asks for those to be substituted away.
+# The primes in V_{25}' and V_{25}'' are parts of names here, not derivatives, which is
+# `from_tex`'s default reading.
+system = ODESystem.from_tex(system_tex, sub_defns=True)
 
 print(system)
 # silviana has faith in this code, up to this point.  she manually checked the ODEs in `system`, and they match what's in the 2007 paper.
-
-
-# now we need to make the substitions.
-# first we construct a dictionary of them
-subme = {}
-for line in lines[num_dynamic_eqns:]:
-	lhs,rhs = line.split('&=')
-	rhs = tex_tools._tex_to_sympy_one_line(rhs)
-	print(f'{lhs} = {rhs}')
-	subme[lhs] = rhs
-
-# then we actually make the substitutions (using Sympy behind the scene)
-system = system.diff_subs(subme)
+# (that check was made on the system before the definitions were substituted in; to see
+#  that form again, pass only the seven derivative lines to from_tex.)
 
 
 # the commented-out ones have been substituted away
@@ -173,7 +90,7 @@ variable_order = \
 
 system.reorder_variables(variable_order)
 
-print('\n\n---------\n\nsystem after substitutions:')
+print('\n\n---------\n\nsystem in the chosen variable order:')
 print(system)
 
 print(f'\n{system.variables=}')
