@@ -28,20 +28,20 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     ...                 \frac{dP}{dt} &= k_2 C'''
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> original_system.variables
-    (t, C, E, P, S, k_1, k_2, k_m1)
+    (k_1, k_2, k_m1, t, C, E, P, S)
     >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Variable order: ', max_scal1.variables_domain)
-    Variable order:  (t, C, E, P, S, k_1, k_2, k_m1)
+    Variable order:  (k_1, k_2, k_m1, t, C, E, P, S)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
     Scaling Matrix:
     Matrix([
-    [1, 0, 0, 0, 0, -1, -1, -1],
-    [0, 1, 1, 1, 1, -1,  0,  0]])
+    [-1, -1, -1, 1, 0, 0, 0, 0],
+    [-1,  0,  0, 0, 1, 1, 1, 1]])
 
 Inspect the scaling invariants:
 
     >>> print('Invariants: ', max_scal1.invariants())
-    Invariants:  Matrix([[k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1, k_2/k_m1]])
+    Invariants:  Matrix([[k_m1/k_2, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
 
 Finding the reduced system is also easy.
 Since the Hermite multiplier and inverse are compatible with the simplest parameter reduction scheme,
@@ -52,8 +52,8 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S
     dE/dt = C*c0 + C - E*S
-    dP/dt = C*c0
-    dS/dt = C - E*S
+    dP/dt = C
+    dS/dt = C*c0 - E*S
     parameters: c0
 
 
@@ -61,19 +61,19 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
 Changing the variable order
 ---------------------------
 
-In our previous example, we had :math:`k_{-1}` at the end of the variable order, so that the algorithm tries to normalise using :math:`k_{-1}`.
-Instead, we can choose to normalise by :math:`k_2`, by swapping around the last two variables.
+Parameters come first in the variable order, and the leading ones are the ones the algorithm normalises.
+In our previous example the parameter order was :math:`k_1, k_2, k_{-1}`, so :math:`k_1` and :math:`k_2` were
+normalised and the one surviving parameter was the ratio :math:`k_{-1}/k_2`.
+Instead, we can normalise by :math:`k_{-1}` and leave :math:`k_2` in the ratio, by swapping the last two parameters.
 Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator` instance.
 
     >>> original_system_reorder = original_system.copy()
-    >>> variable_order = list(original_system.variables)
-    >>> variable_order[-1], variable_order[-2] = variable_order[-2], variable_order[-1]  # Swap the last two variables
-    >>> original_system_reorder.reorder_variables(variable_order)
+    >>> original_system_reorder.reorder_variables(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
     >>> original_system_reorder.variables
-    (t, C, E, P, S, k_1, k_m1, k_2)
+    (k_1, k_m1, k_2, t, C, E, P, S)
     >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
-    Invariants: k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2, k_m1/k_2
+    Invariants: k_2/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1
 
 Now we can reduce to find another, equivalent system.
 
@@ -82,26 +82,26 @@ Now we can reduce to find another, equivalent system.
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S
     dE/dt = C*c0 + C - E*S
-    dP/dt = C
-    dS/dt = C*c0 - E*S
+    dP/dt = C*c0
+    dS/dt = C - E*S
     parameters: c0
 
 Extending a choice of invariants
 --------------------------------
 
-We return to our original variable order: :math:`t, C, E, P, S, k_1, k_2, k_{-1}`.
+We return to our original variable order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
 
 Suppose we wish to study the invariants :math:`\frac{k_1}{k_{2}}C` and :math:`\frac{k_1}{k_{-1}}P`.
 Then we must create a matrix representing these invariants:
 
 .. math::
 
-    P = \left[\begin{matrix}0 & 0\\1 & 0\\0 & 0\\0 & 1\\0 & 0\\1 & 1\\-1 & 0\\0 & -1\end{matrix}\right].
+    P = \left[\begin{matrix}1 & 1\\-1 & 0\\0 & -1\\0 & 0\\1 & 0\\0 & 0\\0 & 1\\0 & 0\end{matrix}\right].
 
 We can easily check we have correct matrix:
 
-    >>> invariant_choice = sympy.Matrix([[0, 1, 0, 0, 0, 1, -1, 0],
-    ...                                  [0, 0, 0, 1, 0, 1, 0, -1]]).T
+    >>> invariant_choice = sympy.Matrix([[1, -1, 0, 0, 1, 0, 0, 0],
+    ...                                  [1, 0, -1, 0, 0, 0, 1, 0]]).T
     >>> scale_action(max_scal1.variables_domain, invariant_choice)
     Matrix([[C*k_1/k_2, P*k_1/k_m1]])
 
@@ -111,28 +111,28 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
     >>> max_scal2
     A=
     Matrix([
-    [1, 0, 0, 0, 0, -1, -1, -1],
-    [0, 1, 1, 1, 1, -1,  0,  0]])
+    [-1, -1, -1, 1, 0, 0, 0, 0],
+    [-1,  0,  0, 0, 1, 1, 1, 1]])
     V=
     Matrix([
-    [ 0,  0,  0,  0, 1,  0,  0,  0],
-    [ 0,  0,  1,  0, 0,  1,  0,  0],
-    [ 0,  0,  0,  0, 0,  0,  1,  0],
-    [ 0,  0,  0,  1, 0,  0,  0,  0],
-    [ 0,  0,  0,  0, 0,  0,  0,  1],
     [ 0, -1,  1,  1, 0,  1,  1,  1],
-    [ 0,  0, -1,  0, 0,  0,  0,  0],
-    [-1,  1,  0, -1, 1, -1, -1, -1]])
+    [-1,  1, -1,  0, 1, -1, -1, -1],
+    [ 0,  0,  0, -1, 0,  0,  0,  0],
+    [ 0,  0,  0,  0, 1,  0,  0,  0],
+    [ 0,  0,  1,  0, 0,  0,  0,  0],
+    [ 0,  0,  0,  0, 0,  1,  0,  0],
+    [ 0,  0,  0,  1, 0,  0,  1,  0],
+    [ 0,  0,  0,  0, 0,  0,  0,  1]])
     W=
     Matrix([
-    [1, 0, 0, 0, 0, -1, -1, -1],
-    [0, 1, 1, 1, 1, -1,  0,  0],
-    [0, 0, 0, 0, 0,  0, -1,  0],
-    [0, 0, 0, 1, 0,  0,  0,  0],
-    [1, 0, 0, 0, 0,  0,  0,  0],
-    [0, 1, 0, 0, 0,  0,  1,  0],
-    [0, 0, 1, 0, 0,  0,  0,  0],
-    [0, 0, 0, 0, 1,  0,  0,  0]])
+    [-1, -1, -1, 1, 0, 0, 0, 0],
+    [-1,  0,  0, 0, 1, 1, 1, 1],
+    [ 0,  0,  0, 0, 1, 0, 0, 0],
+    [ 0,  0, -1, 0, 0, 0, 0, 0],
+    [ 0,  0,  0, 1, 0, 0, 0, 0],
+    [ 0,  0,  0, 0, 0, 1, 0, 0],
+    [ 0,  0,  1, 0, 0, 0, 1, 0],
+    [ 0,  0,  0, 0, 0, 0, 0, 1]])
 
 For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
 
@@ -141,50 +141,50 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
 :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`.
 
     >>> max_scal2.invariants()
-    Matrix([[C*k_1/k_2, P*k_1/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, S*k_1/k_m1]])
+    Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate(original_system)
     dt/dt = 1
     dx0/dt = 0
     dx1/dt = 0
-    dy0/dt = y0*(-y2 + y2*y4*y5/y3 - y2*y3/y0)/t
-    dy1/dt = y2*y3**2/(t*y0)
+    dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
+    dy1/dt = y0*y1*y2/(t*y4)
     dy2/dt = y2/t
-    dy3/dt = y3*(-y2 + y2*y4*y5/y3 - y2*y3/y0)/t
-    dy4/dt = y4*(y2*y3/y4 - y2*y5 + y2*y3**2/(y0*y4))/t
-    dy5/dt = y5*(y2*y3/y5 - y2*y4)/t
+    dy3/dt = y3*(y0*y2/y3 + y0*y2*y4/(y1*y3) - y2*y5)/t
+    dy4/dt = y0*y2/t
+    dy5/dt = y5*(y0*y2*y4/(y1*y5) - y2*y3)/t
 
 Here, :code:`x0` and :code:`x1` are auxiliary variables, which can be fixed at any value at all.
-The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, S*k_1/k_m1)`
+The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
 
 However, we can rearrange these invariants into an order that *does* satisfy the parameter reduction scheme.
 While this isn't implemented yet, we can do it by hand for the moment. First we expose the parameter
-:math:`k_2 / k_{-1}` as a single column, by subtracting the :math:`\frac{k_1}{k_2} C` column from the
-:math:`\frac{k_1}{k_{-1}} C` column. We then reorder the last :math:`n-r` columns so that the dependent
-invariants come first and the parameter comes last.
+:math:`k_2 / k_{-1}` as a single column, by subtracting the :math:`\frac{k_1}{k_2} P` column from the
+:math:`\frac{k_1}{k_{-1}} P` column. We then reorder the last :math:`n-r` columns into the layout the
+scheme wants: the parameter invariant first, then the independent variable, then the dependent invariants.
 
     >>> max_scal3 = max_scal2.herm_mult_n
-    >>> max_scal3[:, 3] = max_scal3[:, 3] - max_scal3[:, 0]  # C*k_1/k_m1 - C*k_1/k_2 = k_2/k_m1
-    >>> max_scal3 = max_scal3[:, [2, 0, 4, 1, 5, 3]]  # dependent invariants first, parameter last
+    >>> max_scal3[:, 1] = max_scal3[:, 1] - max_scal3[:, 4]  # P*k_1/k_m1 - P*k_1/k_2 = k_2/k_m1
+    >>> max_scal3 = max_scal3[:, [1, 2, 0, 3, 4, 5]]  # parameter first, then time and the dependents
     >>> print(f'Permuted Vn:\n{repr(max_scal3)}')
     Permuted Vn:
     Matrix([
-    [1,  0,  0,  0,  0,  0],
-    [0,  1,  0,  0,  0,  0],
-    [0,  0,  1,  0,  0,  0],
-    [0,  0,  0,  1,  0,  0],
-    [0,  0,  0,  0,  1,  0],
-    [0,  1,  1,  1,  1,  0],
-    [0, -1,  0,  0,  0,  1],
-    [1,  0, -1, -1, -1, -1]])
+    [ 0, 0,  1,  1,  1,  1],
+    [ 1, 1, -1, -1, -1, -1],
+    [-1, 0,  0,  0,  0,  0],
+    [ 0, 1,  0,  0,  0,  0],
+    [ 0, 0,  1,  0,  0,  0],
+    [ 0, 0,  0,  1,  0,  0],
+    [ 0, 0,  0,  0,  1,  0],
+    [ 0, 0,  0,  0,  0,  1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
     >>> max_scal3 = ODETranslator(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
     >>> print(max_scal3.translate(original_system).diff_subs({'c0':'alpha'}))
     dt/dt = 1
-    dC/dt = -C*alpha - C + E*S/alpha
-    dE/dt = C*alpha**2 + C*alpha - E*S
-    dP/dt = C*alpha**2
-    dS/dt = C*alpha - E*S
+    dC/dt = -C - C/alpha + E*S
+    dE/dt = C + C/alpha - E*S
+    dP/dt = C
+    dS/dt = C/alpha - E*S
     parameters: alpha
 
 So we have found a third different reparametrization of the Michaelis-Menten equations.
