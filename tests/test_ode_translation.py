@@ -57,7 +57,9 @@ class TestODETranslatorTraps(TestCase):
         extended = ODESystem(list(system.variables) + [t0, z10, z20],
                              list(system.derivatives) + [None, None, None],
                              indep_var=system.indep_var)
-        extended.reorder_variables(['t', 'z1', 'z2', 't0', 'z10', 'z20'])
+        # Parameters, then the independent variable, then the dependents.  The scaling
+        # matrix below is unchanged by the move because its pattern repeats with period 3.
+        extended.reorder_variables(['t0', 'z10', 'z20', 't', 'z1', 'z2'])
         translator = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
                                      variables_domain=extended.variables)
         reduced = translator.translate(extended)

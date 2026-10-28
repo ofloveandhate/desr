@@ -59,9 +59,14 @@ class TestDisconnectedSymbols(TestCase):
         '''`dz/dt = a*z - b*z**2` with extra parameters that appear in no equation.'''
         base = ODESystem.from_equations(['dz/dt = a*z - b*z**2'])
         extra = [sympy.Symbol(name) for name in names]
-        return ODESystem(list(base.variables) + extra,
-                         list(base.derivatives) + [None] * len(extra),
-                         indep_var=base.indep_var)
+        system = ODESystem(list(base.variables) + extra,
+                           list(base.derivatives) + [None] * len(extra),
+                           indep_var=base.indep_var)
+        # Appending puts the new parameters after the dependent variables, which is not the
+        # canonical order -- the parameters come first.  `from_equations` would have sorted
+        # them; a hand-built system has to say so.
+        system.default_order_variables()
+        return system
 
     def test_one_inert_parameter(self):
         system = self.with_inert(['rho'])
