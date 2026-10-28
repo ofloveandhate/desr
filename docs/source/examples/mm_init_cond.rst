@@ -51,24 +51,24 @@ To match the analysis in Murray, We need to add in our initial condition for :ma
     >>> system.update_initial_conditions({'s': 's_0'})
 
 
-    >>> system.exponent_matrix()
-    Matrix([
-    [0, 0, 0,  1, 1, 0,  0,  0,  0,  0],
-    [1, 0, 0,  1, 1, 1,  0,  0,  1,  0],
-    [0, 1, 0,  0, 0, 0,  0,  0,  0,  1],
-    [0, 0, 1,  0, 0, 0,  1,  0, -1, -1],
-    [1, 1, 1,  1, 1, 1,  1,  0,  0,  0],
-    [0, 0, 0, -1, 0, 1,  1,  0,  0,  0],
-    [1, 0, 0,  1, 0, 0, -1,  1,  0,  0],
-    [0, 0, 0,  0, 0, 0,  0,  0,  1,  0],
-    [0, 0, 0,  0, 0, 0,  0, -1,  0,  0]])
-
-
-
-
 Choose the variable order.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 't', 's', 'c'])
+
+Now the exponent matrix can be read against that order: one row per variable, in the order
+just chosen, and one column per monomial appearing in the system.
+
+    >>> system.exponent_matrix()
+    Matrix([
+    [0, 0,  0, 0, 0, 0,  0, -1,  0,  0],
+    [1, 0,  0, 0, 0, 0,  1,  0,  0,  0],
+    [1, 1,  0, 1, 0, 0,  1,  0,  1,  0],
+    [0, 0,  0, 0, 1, 0,  0,  0,  0,  1],
+    [0, 0,  1, 0, 0, 1,  0,  0, -1, -1],
+    [0, 0,  0, 0, 0, 0,  0,  0,  1,  0],
+    [1, 1,  1, 1, 1, 1,  1,  0,  0,  0],
+    [0, 0, -1, 1, 0, 0,  1,  1,  0,  0],
+    [0, 1,  1, 0, 0, 0, -1,  0,  0,  0]])
 
 Compute the reduced system by making an `ODETranslator` from the original system,
 
@@ -126,7 +126,7 @@ Optionally, see the invariants and substitutions
 We have substitutions to make.  Note that many get normalized to :math:`1`.
 
     >>> translator.translate_parameter_substitutions(system)
-    {t: tau/c0, s: u, c: c0*v, s_0: 1, e_0: c0, k_1: 1, k_2: c1, k_m1: c2, K_m: c3}
+    {s_0: 1, e_0: c0, k_1: 1, k_2: c1, k_m1: c2, K_m: c3, t: tau/c0, s: u, c: c0*v}
 
 Translate
 

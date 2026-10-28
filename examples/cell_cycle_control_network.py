@@ -38,18 +38,12 @@ print(system)
 #  that form again, pass only the seven derivative lines to from_tex.)
 
 
-# the commented-out ones have been substituted away
+# the commented-out ones have been substituted away.
+#
+# The canonical order is parameters, then the independent variable, then the dependent
+# variables.  The leading parameters are the ones the reduction normalises.
 variable_order = \
 (
-'t', # time
-# the seven variables
-'Cyclin',
-'MPF',
-'preMPF',
-'Cdc25P',
-'Wee1P',
-'IEP',
-'APC', 
 # start the constants
 'PPase',
 'K_a',
@@ -84,8 +78,17 @@ variable_order = \
 'totalCdc25',
 'totalIE',
 'totalAPC',
-'totalCdk', 
-'totalWee1'
+'totalCdk',
+'totalWee1',
+'t', # time
+# the seven variables
+'Cyclin',
+'MPF',
+'preMPF',
+'Cdc25P',
+'Wee1P',
+'IEP',
+'APC',
 )
 
 system.reorder_variables(variable_order)

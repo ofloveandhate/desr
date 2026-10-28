@@ -140,7 +140,7 @@ class ODESystem(object):
         parameters: c_0, c_1, x_0
 
         >>> system.variables
-        (c_0, c_1, tau, x, y, x_0)
+        (c_0, c_1, x_0, tau, x, y)
         """
         if not isinstance(new_indep, sympy.Symbol):
             new_indep = sympify_expression(new_indep)
@@ -468,8 +468,7 @@ class ODESystem(object):
 
             # silviana: i think we should guard against having 1 be a variable...
             if (init_cond not in self.variables) and not init_cond.is_constant(): # checking emptiness on ics_vars
-                self._variables = tuple(list(self._variables) + [init_cond])
-                self._derivatives = tuple(list(self._derivatives) + [None])
+                self._add_parameters([init_cond])
 
             self._initial_conditions[variable] = init_cond
     
@@ -569,9 +568,31 @@ class ODESystem(object):
                              ' Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...')
 
         # Only parameters involved, no problem.  update the recorded symbols
-        self._variables = tuple(list(self._variables) + new_vars)
-        self._derivatives = tuple(list(self._derivatives) + [None for _ in new_vars])
+        self._add_parameters(new_vars)
         self._constraints.append(sympy.Eq(lhs, rhs))
+
+    def _add_parameters(self, new_vars):
+        '''
+        Record `new_vars` as parameters of the system, at the end of the parameter block.
+
+        New parameters must land *before* the independent variable, not at the end of the
+        variable list.  The canonical order is parameters, independent variable, dependents,
+        and a parameter sitting after the dependents breaks it: the parameter reduction
+        scheme needs the independent variable at index `num_parameters`, so appending to the
+        end silently costs the scheme.  It is easy to miss, because :meth:`__repr__` groups
+        the variables by classification and so prints a sane-looking `parameters:` line
+        either way.
+
+        Args:
+            new_vars (list of sympy.Symbol): The parameters to add.  May be empty.
+        '''
+        if not new_vars:
+            return
+        at = self.num_parameters
+        variables = list(self._variables)
+        derivatives = list(self._derivatives)
+        self._variables = tuple(variables[:at] + list(new_vars) + variables[at:])
+        self._derivatives = tuple(derivatives[:at] + [None] * len(new_vars) + derivatives[at:])
 
     def equation_variables(self, lhs, rhs):
         """
@@ -716,16 +737,18 @@ class ODESystem(object):
         known_vars = set(expressions_to_variables(variables + new_derivs + constraints + list(initial_conditions.values())))
         missing_vars = sorted(list(set(known_vars) - set(variables)),key=str)
         
-        # record that we have them, for the new post-substitution system
-        new_vars = variables + missing_vars # this is a list extension operation
-
-        if new_symbols_are_parameters:
-            # None rather than 0: a symbol arriving from a substitution has no equation, so
-            # it is a parameter.  Giving it `0` would declare it a conserved dependent.
-            for x in missing_vars:
-                new_derivs.append(None)
-        else:
+        if not new_symbols_are_parameters:
             raise NotImplementedError(f"don't want new symbols from substitution to be parameters, but don't know what else to do.  the new symbols: {missing_vars}")
+
+        # A symbol arriving from a substitution has no equation, so it is a parameter, and it
+        # belongs at the end of the parameter block -- before the independent variable, not at
+        # the end of the list, which would put it after the dependents and cost the parameter
+        # reduction scheme.  None rather than 0: giving it `0` would declare it a conserved
+        # dependent.  The derivatives are stored in the variable order, so both lists are cut
+        # at the same point.
+        at = variables.index(self.indep_var)
+        new_vars = variables[:at] + missing_vars + variables[at:]
+        new_derivs = new_derivs[:at] + [None] * len(missing_vars) + new_derivs[at:]
 
 
         # remove variables that don't appear in any expressions
@@ -1184,10 +1207,10 @@ class ODESystem(object):
         [1, 0, 0,  1, 1, 1,  0,  0],
         [0, 1, 0,  0, 0, 0,  0,  0],
         [0, 0, 1,  0, 0, 0,  1,  0],
+        [0, 0, 0,  0, 0, 0,  0, -1],
         [1, 1, 1,  1, 1, 1,  1,  0],
         [0, 0, 0, -1, 0, 1,  1,  0],
-        [1, 0, 0,  1, 0, 0, -1,  1],
-        [0, 0, 0,  0, 0, 0,  0, -1]])
+        [1, 0, 0,  1, 0, 0, -1,  1]])
         '''
 
         exprs = self._expressions()

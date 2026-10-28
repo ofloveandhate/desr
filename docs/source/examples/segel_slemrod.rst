@@ -70,7 +70,7 @@ The invariants match :cite:`Segel1989` (9):
 Here are the substitutions the software will perform:
 
     >>> translator.translate_parameter_substitutions(system)
-    {t: H/c0, s: y, c: c0*z, s_0: 1, e_0: c0, K_m: c1, k_1: 1, k_2: c2, k_m1: c3}
+    {s_0: 1, e_0: c0, K_m: c1, k_1: 1, k_2: c2, k_m1: c3, t: H/c0, s: y, c: c0*z}
 
 Translate and obtain a system
 
@@ -340,7 +340,7 @@ In the invariants, first come the scale-invariant coefficients, then the time va
 The substitutions that will be made:
 
     >>> translator.translate_parameter_substitutions(system_l)
-    {t: tau/c0, s: c1*s, c: c*c1*c2, K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3}
+    {K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3, t: tau/c0, s: c1*s, c: c*c1*c2}
 
 Here's the reduced system at this point:
 
@@ -397,7 +397,7 @@ Inspect
     Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, e_0*k_2*t/L, s/s_0, L*c/(e_0*s_0)]])
 
     >>> translator.translate_parameter_substitutions(system_l)
-    {t: c3*tau/c2, s: c1*s, c: c*c1*c2, K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3}
+    {K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3, t: c3*tau/c2, s: c1*s, c: c*c1*c2}
 
 Translate and reduce the system
 

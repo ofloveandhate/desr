@@ -287,10 +287,13 @@ class TestInitialConditions(TestCase):
         self.assertSetEqual(set(original_system.initial_conditions.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
                                     (('s', 's_0'),))))
-        # s_0 is appended, which leaves the system out of canonical order: it is a parameter
-        # and the parameters come first.  Putting it back is the caller's job for now; see
-        # the note about update_initial_conditions in the task list.
-        self.assertEqual(variables + ['s_0'], list(map(str, original_system.variables)))
+        # s_0 is a parameter, so it lands at the end of the parameter block and the system
+        # stays in canonical order -- parameters, independent variable, dependents.
+        self.assertEqual(['e_0', 'k_1', 'k_2', 'K', 's_0', 't', 's', 'c'],
+                         list(map(str, original_system.variables)))
+        self.assertEqual(original_system.indep_var_index, original_system.num_parameters)
+        # Moving it to the front is now a choice, not a repair: leading parameters are the
+        # ones the reduction normalises, and the rest of this test wants s_0 normalised.
         original_system.reorder_variables(['s_0'] + variables)
 
         self.assertEqual(original_system.exponent_matrix(),

@@ -988,22 +988,28 @@ class ODETranslator(object):
             system (ODESystem):
                 The system in question.
 
+        The substitutions come back in the system's own variable order -- parameters, then
+        the independent variable, then the dependents -- so they can be read straight down
+        against :attr:`~desr.ode_system.ODESystem.variables`.
+
         :rtype: dict
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
+        >>> system.variables
+        (K, d, h, k, r, s, t, n, p)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: tau, n: nu0, p: nu1, K: 1, d: kappa0, h: 1, k: 1, r: kappa1, s: kappa2}
+        {K: 1, d: kappa0, h: 1, k: 1, r: kappa1, s: kappa2, t: tau, n: nu0, p: nu1}
 
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: t, n: n, p: p, K: 1, d: c0, h: 1, k: 1, r: c1, s: c2}
+        {K: 1, d: c0, h: 1, k: 1, r: c1, s: c2, t: t, n: n, p: p}
 
         >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: tau, n: nu1, p: nu2, K: 1, d: kappa1, h: 1, k: 1, r: kappa2, s: kappa3}
+        {K: 1, d: kappa1, h: 1, k: 1, r: kappa2, s: kappa3, t: tau, n: nu1, p: nu2}
         '''
 
         p = system.num_parameters
@@ -1030,7 +1036,15 @@ class ODETranslator(object):
         # Form new constants
         new_consts = self._new_constants(system)
 
+        # Built in the system's own variable order -- parameters, independent, dependents --
+        # so that reading the substitutions against system.variables needs no reshuffling.
         to_sub = {}
+
+        # Scale parameters
+        scale = scale_action(new_consts, W_c)
+        assert len(system.parameters) == len(scale.T)
+        for const, _const_scale in zip(system.parameters, scale.T):
+            to_sub[const] = _const_scale
 
         # Scale t
         to_sub[system.indep_var] = scale_action(new_consts, W_t)[0] * variable_map[system.indep_var]
@@ -1040,12 +1054,6 @@ class ODETranslator(object):
         assert len(system.dependent_variables) == len(scale.T)
         for dep_var, _const_scale in zip(system.dependent_variables, scale.T):
             to_sub[dep_var] = _const_scale * variable_map[dep_var]
-
-        # Scale constants
-        scale = scale_action(new_consts, W_c)
-        assert len(system.parameters) == len(scale.T)
-        for const, _const_scale in zip(system.parameters, scale.T):
-            to_sub[const] = _const_scale
 
         return to_sub
 
@@ -1143,7 +1151,7 @@ class ODETranslator(object):
         dp/dt = c2*p - c2*p**2/n
         parameters: c0, c1, c2
         >>> translator.translate_parameter_substitutions(system)
-        {t: t, n: n, p: p, K: 1, h: 1, r: 1, d: c0, k: c1, s: c2}
+        {K: 1, h: 1, r: 1, d: c0, k: c1, s: c2, t: t, n: n, p: p}
         >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
         >>> translator.reverse_translate_parameter(soln_reduced)
         Matrix([[x2, x2/x3, 1/x1, t*x2, n*x2/(x1*x3), p/x1, c0*x1, c1*x2, c2*x3]])
