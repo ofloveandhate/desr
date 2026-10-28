@@ -179,7 +179,7 @@ scheme wants: the parameter invariant first, then the independent variable, then
     [ 0, 0,  0,  0,  0,  1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
     >>> max_scal3 = ODETranslator(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
-    >>> print(max_scal3.translate(original_system).diff_subs({'c0':'alpha'}))
+    >>> print(max_scal3.translate(original_system).subs({'c0':'alpha'}))
     dt/dt = 1
     dC/dt = -C - C/alpha + E*S
     dE/dt = C + C/alpha - E*S

@@ -338,7 +338,7 @@ def michaelis_menten_two_variable(verbose=True):
         print(reduced_system)#.to_tex()
 
         to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
-        reduced_system = reduced_system.diff_subs(to_sub, subs_constraints=True)
+        reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
 
         print('after subbing into canonical names from Murray')
         print(reduced_system)#.to_tex()

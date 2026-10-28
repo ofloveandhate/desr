@@ -76,17 +76,20 @@ Translate and obtain a system
 
     >>> reduced_system = translator.translate(system)
 
-Do a few substitutions, and we have :cite:`Segel1989` (8a-b)
+Do a few substitutions, and we have :cite:`Segel1989` (8a-b).  Note the spelling
+:math:`\lambda` has to take: ``lambda`` is a reserved word in Python, so :mod:`sympy` cannot
+parse it, and its own convention -- which :mod:`desr` follows -- is ``lamda``.  That spelling
+typesets as :math:`\lambda`, so :func:`desr.tex_tools.expr_to_tex` renders it correctly.
 
-    >>> reduced_system.diff_subs({'c0': 'epsilon', 'c1': 'mu', 'c2': 'lam', 'c3': 'mu-lam'},
+    >>> reduced_system.subs({'c0': 'epsilon', 'c1': 'mu', 'c2': 'lamda', 'c3': 'mu-lamda'},
     ...                    subs_constraints=True,
     ...                    expand_after=True,
     ...                    factor_after=True)
     dH/dH = 1
-    dy/dH = -lam*z + mu*z + y*z - y
+    dy/dH = -lamda*z + mu*z + y*z - y
     dz/dH = -(mu*z + y*z - y)/epsilon
     y(0) = 1
-    parameters: epsilon, lam, mu
+    parameters: epsilon, lamda, mu
 
 
 
@@ -186,11 +189,11 @@ We have the invariants up to this point of
 Making some substitutions leads to :cite:`Segel1989` (21a-d)
     
     >>> reduced_system = translator.translate(system)
-    >>> reduced_system = reduced_system.diff_subs({'c0': 'epsilon * (1 + 1 / sigma)',
+    >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
     ...                                          'c2': '1 / (sigma * (kappa + 1))'},subs_constraints=True,
     ...                    expand_after=True,
     ...                    factor_after=True)
-    >>> reduced_system = reduced_system.diff_subs({'c1': 'sigma',
+    >>> reduced_system = reduced_system.subs({'c1': 'sigma',
     ...                          'c3': 'kappa',
     ...                          'c4': 'epsilon'},
     ...                         subs_constraints=True,
@@ -207,7 +210,7 @@ Making some substitutions leads to :cite:`Segel1989` (21a-d)
 
 To get :cite:`murray` (6.21), we need to rename some variables
 
-    >>> reduced_system_murray = reduced_system.diff_subs({'c': 'v', 's':'u'},
+    >>> reduced_system_murray = reduced_system.subs({'c': 'v', 's':'u'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,
     ...                         factor_after=True)
@@ -236,12 +239,12 @@ and only the clock changes.  The three column operations act on the time column 
     >>> translator_24.invariants()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
     >>> reduced_system = translator_24.translate(system)
-    >>> reduced_system = reduced_system.diff_subs({'c0': 'epsilon * (1 + 1 / sigma)',
+    >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
     ...                                          'c2': '1 / (sigma * (kappa + 1))'
     ...                                          },subs_constraints=True,
     ...                    expand_after=True,
     ...                    factor_after=True)
-    >>> reduced_system.diff_subs({'c': 'v',
+    >>> reduced_system.subs({'c': 'v',
     ...                          'c1': 'sigma',
     ...                          'c3': 'kappa',
     ...                          'c4': 'epsilon',
@@ -355,7 +358,7 @@ Here's the reduced system at this point:
 
 To get the system in (21a-d) Segel, let's do the substitutions into known symbol names
 
-    >>> system_segel = reduced_system.diff_subs({'c0':'sigma+1', 'c1':'sigma', 'c2':'epsilon', 'c3':'kappa+1'},expand_after=True, factor_after=False)
+    >>> system_segel = reduced_system.subs({'c0':'sigma+1', 'c1':'sigma', 'c2':'epsilon', 'c3':'kappa+1'},expand_after=True, factor_after=False)
     >>> system_segel
     dtau/dtau = 1
     dc/dtau = -c*s*sigma/(sigma + 1) - c/(sigma + 1) + s
@@ -439,7 +442,7 @@ Then, the coefficients
 
 we do a few substitutions, we get (6.23) from Murray.
 
-    >>> system_murray = reduced_system.diff_subs({#     ...                         'c':'v', 's':'u',
+    >>> system_murray = reduced_system.subs({#     ...                         'c':'v', 's':'u',
     ...                         'c0':'sigma+1', 'c1':'sigma',
     ...                         'c2':'epsilon', 'c3':'kappa+1'},
     ...                         subs_constraints=True,

@@ -323,3 +323,126 @@ class TestInitialConditions(TestCase):
         self.assertSetEqual(set(reduced_system.initial_conditions.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
                                     (('nu0', 1),))))
+
+
+class TestCanonicalOrder(TestCase):
+    '''
+    Every way of adding a variable must leave the system in canonical order.
+
+    The order is parameters, then the independent variable, then the dependents.  A new
+    parameter appended to the *end* of the variable list lands after the dependents, which
+    costs the parameter reduction scheme while leaving `repr` looking correct, since `repr`
+    groups the variables by classification.  That is how this escaped notice until
+    `examples/linear_compartment.py` tripped over it, so the invariant is asserted directly
+    here rather than inferred from a reduction succeeding.
+    '''
+
+    def assertCanonicalOrder(self, system):
+        self.assertEqual(system.indep_var_index, system.num_parameters,
+                         'independent variable should sit at index num_parameters, after the '
+                         'parameters and before the dependents.  Order is {}'.format(
+                             system.variables))
+        self.assertEqual(tuple(system.parameters) + (system.indep_var,)
+                         + tuple(system.dependent_variables),
+                         system.variables)
+
+    def test_from_equations_is_canonical(self):
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        self.assertCanonicalOrder(system)
+
+    def test_add_constraint_naming_a_new_parameter(self):
+        ''' The `examples/linear_compartment.py` case: the constraint introduces `a_2`. '''
+        system = ODESystem.from_equations(['dz_1/dt = -a_1*z_1 + a_12*z_2',
+                                           'dz_2/dt = -b_22*z_2 + u_2'])
+        self.assertCanonicalOrder(system)
+        system.add_constraint('b_22', 'a_2 + a_12')
+        self.assertIn(sympy.Symbol('a_2'), system.parameters)
+        self.assertCanonicalOrder(system)
+
+    def test_add_constraint_naming_several_new_parameters(self):
+        system = ODESystem.from_equations(['dx/dt = c_0*x'])
+        system.add_constraint('c_0', 'a*b')
+        self.assertCanonicalOrder(system)
+        for name in ('a', 'b'):
+            self.assertIn(sympy.Symbol(name), system.parameters)
+
+    def test_update_initial_conditions(self):
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        system.update_initial_conditions({'x': 'x_0'})
+        self.assertIn(sympy.Symbol('x_0'), system.parameters)
+        self.assertCanonicalOrder(system)
+
+    def test_subs_introducing_a_new_parameter(self):
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        substituted = system.subs({'c_0': 'a*b'})
+        self.assertIn(sympy.Symbol('a'), substituted.parameters)
+        self.assertCanonicalOrder(substituted)
+
+    def test_a_new_parameter_respects_the_chosen_within_block_order(self):
+        ''' The dependents keep the order the caller asked for; c_2 goes at the block end. '''
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        system.reorder_variables(['c_1', 'c_0', 't', 'y', 'x'])
+        self.assertCanonicalOrder(system)
+        system.add_constraint('c_2', 'c_0 + c_1')
+        self.assertEqual(('c_1', 'c_0', 'c_2', 't', 'y', 'x'),
+                         tuple(map(str, system.variables)))
+        self.assertCanonicalOrder(system)
+
+    def test_a_non_canonical_order_is_not_silently_rearranged(self):
+        '''
+        `reorder_variables` takes any permutation, by design, so a caller may deliberately
+        leave the system non-canonical.  Adding a parameter then puts it immediately before
+        the independent variable and disturbs nothing else -- it does not quietly shuffle
+        the system into canonical order behind the caller's back.
+        '''
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        system.reorder_variables(['c_0', 't', 'x', 'y', 'c_1'])  # an interleaved order
+        system.add_constraint('c_2', 'c_0 + c_1')
+        self.assertEqual(('c_0', 'c_2', 't', 'x', 'y', 'c_1'),
+                         tuple(map(str, system.variables)))
+        self.assertIn(sympy.Symbol('c_2'), system.parameters)
+
+
+class TestSubsCallShapes(TestCase):
+    ''' `subs` is named after sympy's, so it takes the argument shapes sympy's takes. '''
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        self.expected = self.system.subs({'c_0': 'a'})
+
+    def test_two_arguments(self):
+        self.assertEqual(self.expected, self.system.subs('c_0', 'a'))
+
+    def test_iterable_of_pairs(self):
+        self.assertEqual(self.expected, self.system.subs([('c_0', 'a')]))
+
+    def test_tuple_of_pairs(self):
+        self.assertEqual(self.expected, self.system.subs((('c_0', 'a'),)))
+
+    def test_several_pairs_match_the_dict(self):
+        expected = self.system.subs({'c_0': 'a', 'c_1': 'b'})
+        self.assertEqual(expected, self.system.subs([('c_0', 'a'), ('c_1', 'b')]))
+
+    def test_a_lone_symbol_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.system.subs('c_0')
+
+    def test_too_many_arguments_are_refused(self):
+        with self.assertRaises(ValueError):
+            self.system.subs('c_0', 'a', 'b')
+
+    def test_a_group_that_is_not_a_pair_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.system.subs([('c_0', 'a', 'b')])
+
+    def test_lamda_is_the_spelling_that_parses(self):
+        '''
+        `lambda` is a reserved word, so sympy cannot parse it and uses `lamda`, which desr
+        follows.  Worth pinning: `lam` also parses, but renders as literal `lam` in TeX.
+        '''
+        from desr.tex_tools import expr_to_tex
+        substituted = self.system.subs({'c_0': 'lamda'})
+        self.assertIn(sympy.Symbol('lamda'), substituted.parameters)
+        self.assertIn(r'\lambda', expr_to_tex(substituted.derivative_dict[sympy.Symbol('x')]))
+        with self.assertRaises(Exception):
+            self.system.subs({'c_0': 'lambda'})

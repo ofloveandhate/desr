@@ -8,6 +8,43 @@ from desr.sympy_helper import (expressions_to_variables, unique_array_stable,
                                monomial_to_powers, sympify_expression, to_symbol)
 from desr.tex_tools import TexParseError, expr_to_tex, var_to_tex, tex_to_sympy
 
+
+def _as_substitution_pairs(to_sub, extra_args):
+    '''
+    Normalise the argument shapes :meth:`sympy.core.basic.Basic.subs` accepts into a list of
+    `(old, new)` pairs, so that :meth:`ODESystem.subs` takes the same shapes sympy does.
+
+    Args:
+        to_sub: A dict, an iterable of `(old, new)` pairs, or the `old` of an `old, new` pair.
+        extra_args (tuple): The positional arguments following `to_sub`; either empty, or the
+            single `new` of an `old, new` pair.
+
+    Returns:
+        list: The `(old, new)` pairs, in the order given.  A dict keeps its insertion order.
+    '''
+    if extra_args:
+        if len(extra_args) > 1:
+            raise ValueError('subs takes either one argument -- a dict or an iterable of '
+                             '(old, new) pairs -- or two, an old and a new.  Got {} '
+                             'arguments.'.format(1 + len(extra_args)))
+        return [(to_sub, extra_args[0])]
+
+    if isinstance(to_sub, dict):
+        return list(to_sub.items())
+
+    if isinstance(to_sub, (str, sympy.Basic)):
+        raise ValueError('subs was given a single {} with nothing to replace it by.  Pass a '
+                         'dict, an iterable of (old, new) pairs, or both an old and a '
+                         'new.'.format(type(to_sub).__name__))
+
+    pairs = [tuple(pair) for pair in to_sub]
+    for pair in pairs:
+        if len(pair) != 2:
+            raise ValueError('subs expects (old, new) pairs; got a group of {}: '
+                             '{}.'.format(len(pair), pair))
+    return pairs
+
+
 class ODESystem(object):
     '''
     A system of differential equations.
@@ -583,12 +620,18 @@ class ODESystem(object):
         the variables by classification and so prints a sane-looking `parameters:` line
         either way.
 
+        The insertion point is the independent variable's index rather than
+        `num_parameters`, so that a system the caller has deliberately put in a
+        non-canonical order -- :meth:`reorder_variables` allows any permutation -- is not
+        silently rearranged around the new parameter.  For a canonical system the two
+        agree.
+
         Args:
             new_vars (list of sympy.Symbol): The parameters to add.  May be empty.
         '''
         if not new_vars:
             return
-        at = self.num_parameters
+        at = self.indep_var_index
         variables = list(self._variables)
         derivatives = list(self._derivatives)
         self._variables = tuple(variables[:at] + list(new_vars) + variables[at:])
@@ -611,54 +654,70 @@ class ODESystem(object):
 
         return all_vars, dependent_vars, new_vars
 
-    def diff_subs(self, to_sub, expand_before=False, expand_after=True, factor_after=False, subs_constraints=True, new_symbols_are_parameters=True):
+    def subs(self, to_sub, *args, expand_before=False, expand_after=True, factor_after=False, subs_constraints=True, new_symbols_are_parameters=True):
         '''
-        Make substitutions into the derivatives, returning a new system.
+        Make substitutions throughout the system, returning a new system.
+
+        Named and shaped after :meth:`sympy.core.basic.Basic.subs`, which it extends from one
+        expression to a whole system: the substitutions are made in the derivatives, and --
+        unless `subs_constraints` says otherwise -- in the constraints and the initial
+        conditions too.  Like sympy's, it does not mutate; it returns a new system.
 
         Args:
-            to_sub (dict): Dictionary of substitutions to make.
+            to_sub: The substitutions, in any of the forms :meth:`sympy.core.basic.Basic.subs`
+                takes -- a dict `{old: new}`, an iterable of `(old, new)` pairs, or the two
+                arguments `old, new`.  A dict shows the old-new pairs in one object and is the
+                form the examples use.
             expand_before (bool): Expand the sympy expression for each derivative before substitution.
             expand_after (bool): Expand the sympy expression for each derivative after substitution.
             factor_after (bool): Factorise the sympy expression for each derivative after substitution.
             subs_constraints (bool): Perform the substitutions into the initial constraints.
             new_symbols_are_parameters (bool): Treat newly encountered symbols as parameters. If a substitution is a variable renaming, this does not apply.  I have no idea what to do if this is false, so it will generate exceptions..
-        
+
         Returns:
             ODESystem: System with substitutions carried out.
 
         >>> eqns = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
         >>> system = ODESystem.from_equations(eqns)
-        >>> system.diff_subs({'1-x': 'z'}, expand_before=False, expand_after=False, factor_after=False)
+        >>> system.subs({'1-x': 'z'}, expand_before=False, expand_after=False, factor_after=False)
         Traceback (most recent call last):
         ...
         ValueError: unable to make substitution 1 - x -> z.
-        >>> system.diff_subs({'1-x': 'z'}, expand_before=True, expand_after=False, factor_after=False)
+        >>> system.subs({'1-x': 'z'}, expand_before=True, expand_after=False, factor_after=False)
         Traceback (most recent call last):
         ...
         ValueError: unable to make substitution 1 - x -> z.
 
-        >>> system.diff_subs({'x': '1-z'}, expand_before=True, expand_after=True, factor_after=False)
+        >>> system.subs({'x': '1-z'}, expand_before=True, expand_after=True, factor_after=False)
         Traceback (most recent call last):
         ...
         ValueError: unable to make substitution x -> 1 - z.
 
         >>> system.add_constraint('c_0', 'c_1**2')
-        >>> system.diff_subs({'c_0': '1'}, subs_constraints=False)
+        >>> system.subs({'c_0': '1'}, subs_constraints=False)
         dt/dt = 1
         dx/dt = x*y
         dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
         c_0 == c_1**2
         parameters: c_0, c_1
-        >>> system.diff_subs({'c_0': '1'}, subs_constraints=True)
+        >>> system.subs({'c_0': '1'}, subs_constraints=True)
         dt/dt = 1
         dx/dt = x*y
         dy/dt = c_1*x*y - c_1*x - c_1*y + c_1
         1 == c_1**2
         parameters: c_1
+
+        The sympy call shapes work too, and mean the same thing:
+
+        >>> system.subs('c_0', '1') == system.subs({'c_0': '1'})
+        True
+        >>> system.subs([('c_0', '1')]) == system.subs({'c_0': '1'})
+        True
         '''
 
         # sympify the dict of things to substitute
-        to_sub = {sympify_expression(lhs): sympify_expression(rhs) for lhs, rhs in to_sub.items()}
+        to_sub = {sympify_expression(lhs): sympify_expression(rhs)
+                  for lhs, rhs in _as_substitution_pairs(to_sub, args)}
 
         variable_renamings = []
         
@@ -1036,7 +1095,7 @@ class ODESystem(object):
         constraints, definitions = cls._classify_relations(system, relations, sub_defns)
 
         if definitions:
-            system = system.diff_subs(definitions)
+            system = system.subs(definitions)
 
         # Add the constraints.  These mention parameters only, so they cannot be refused.
         for lhs, rhs in constraints.items():
@@ -1109,7 +1168,7 @@ class ODESystem(object):
                     'Substituting definitions into one another is not implemented: the '
                     'result would depend on the order they were applied in, and mutually '
                     'referring definitions have no result at all.  Substitute by hand '
-                    'with diff_subs, in the order you intend.'.format(
+                    'with subs, in the order you intend.'.format(
                         lhs, ', '.join(sorted(map(str, chained))),
                         'is' if len(chained) == 1 else 'are'))
 

@@ -142,7 +142,7 @@ Translate
 Now we have a system, but the names of symbols don't match.  We'll do substitutions.
     
     >>> to_sub =  {'c0': 'epsilon', 'c1': 'L', 'c2':'K-L', 'c3':'K'}
-    >>> reduced_system.diff_subs(to_sub, subs_constraints=True)
+    >>> reduced_system.subs(to_sub, subs_constraints=True)
     dtau/dtau = 1
     du/dtau = K*v - L*v + u*v - u
     dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
