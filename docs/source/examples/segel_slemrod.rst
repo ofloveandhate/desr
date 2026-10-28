@@ -56,7 +56,7 @@ the Michaelis constant
 
 Choose a variable order, with initial conditions at end so the algorithm will normalize by them.
 
-    >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
+    >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
     >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
     >>> translator.multiplier_add_columns(2, -1, 1)  # Multiply time by epsilon
@@ -115,7 +115,7 @@ The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), an
 
 Choose a variable order, with initial conditions at end so the algorithm will normalize by them.
 
-    >>> system.reorder_variables(['t', 's', 'c', 'epsilon', 'k_m1', 'k_2', 'k_1', 'K_m', 'e_0', 's_0'])
+    >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
 
 A sanity check
 
@@ -283,7 +283,7 @@ We can work with the expression :math:`s_0 + K_m` systematically by adding a new
 
 Check that if we keep :math:`L` near the end, we have the same reduced system as before
 
-    >>> system_l.reorder_variables(['t', 's', 'c', 'K_m', 'k_2', 'k_1', 'e_0', 'L', 's_0'])
+    >>> system_l.reorder_variables(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
     >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
     >>> translator.scaling_matrix
     Matrix([
@@ -301,7 +301,7 @@ Check that if we keep :math:`L` near the end, we have the same reduced system as
 
 Putting :math:`K_m` at the end, we have
 
-    >>> system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
+    >>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
     >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
     >>> # Scale t correctly to t/t_C = k_1 L t
     >>> translator.multiplier_add_columns(2, -1, 1)

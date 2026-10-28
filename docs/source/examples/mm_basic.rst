@@ -38,7 +38,7 @@ First we make the system in Python from LaTeX code.
     >>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
     >>> system = ODESystem.from_tex(system_tex)
-    >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0'])
+    >>> system.reorder_variables(['e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
     >>> system
     dt/dt = 1
     ds/dt = c*k_1*s + c*k_m1 - e_0*k_1*s

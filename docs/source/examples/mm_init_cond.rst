@@ -68,7 +68,7 @@ To match the analysis in Murray, We need to add in our initial condition for :ma
 
 Choose the variable order.
 
-    >>> system.reorder_variables(['t', 's', 'c', 'K_m', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
+    >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 't', 's', 'c'])
 
 Compute the reduced system by making an `ODETranslator` from the original system,
 
