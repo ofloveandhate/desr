@@ -72,21 +72,15 @@ And nondimensionalize.
 
     >>> translator = ODETranslator.from_ode_system(system)
     >>> translator.invariants()
-    Matrix([[t*z1**3, z1**5*z2]])
-    >>> translator.auxiliaries()
-    Matrix([[z1**4*z2]])
-
-Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
-:math:`t z_1^2`.  Those are products of integer powers of desr's invariants, and correspondingly, desr's of theirs.  
-HL's :math:`y_2` is desr's :math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
-desr onto the paper's basis, so that everything below can be compared with p. 504 directly.
-
-    >>> translator.multiplier_add_columns(2, 1, -1)   # y2  <-  y2 / y1
-    >>> translator.multiplier_add_columns(0, 2, -1)   # x   <-  x / y2
-    >>> translator.invariants()
     Matrix([[t*z1**3, z1**2*z2/t]])
     >>> translator.auxiliaries()
     Matrix([[t*z1**2]])
+
+Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
+:math:`t z_1^2`, which is what desr computes, so everything below can be compared with
+p. 504 directly.  Any other choice of basis would be a product of integer powers of these,
+and equally valid; :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns` is how
+one moves between such choices.
 
 Reducing the usual way keeps the auxiliary :math:`x_0` as a variable of the reduced system,
 and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
