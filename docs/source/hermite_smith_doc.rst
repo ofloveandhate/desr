@@ -31,7 +31,7 @@ Hermite Normal Forms
 Smith Normal Form
 -----------------
 
-.. autofunction:: desr.matrix_normal_forms.is_smf
+.. autofunction:: desr.matrix_normal_forms.is_smith_normal_form
     :noindex:
 
 .. autofunction:: desr.matrix_normal_forms.smith_normal_form
