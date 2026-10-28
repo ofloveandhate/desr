@@ -102,11 +102,11 @@ class TestDeclaringParameters(TestCase):
         # lands with the parameters.  make_parameter leaves it where it is, because the
         # ordering decides which parameters get normalised away and must not move silently.
         declared = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=['w'])
-        self.assertEqual(declared.variables, (t, z, a, w))
+        self.assertEqual(declared.variables, (a, w, t, z))
 
         made = with_conserved_w()
         made.make_parameter('w')
-        self.assertEqual(made.variables, (t, w, z, a))
+        self.assertEqual(made.variables, (a, t, w, z))
         made.default_order_variables()
         self.assertEqual(made.variables, declared.variables)
 
@@ -176,7 +176,7 @@ class TestClassificationIsCarriedAround(TestCase):
 
     def test_a_parsed_system_and_a_hand_built_one_agree(self):
         parsed = ODESystem.from_equations(['dz/dt = a*z'])
-        built = ODESystem([t, z, a], [sympy.sympify(1), a * z, None], indep_var=t)
+        built = ODESystem([a, t, z], [None, sympy.sympify(1), a * z], indep_var=t)
         self.assertEqual(parsed.variables, built.variables)
         self.assertEqual(parsed.derivatives, built.derivatives)
         self.assertEqual(parsed.parameters, built.parameters)
@@ -195,11 +195,14 @@ class TestClassificationIsCarriedAround(TestCase):
         self.assertEqual(set(system.parameters), {a})
         self.assertEqual(set(system.dependent_variables), {z, w})
 
-    def test_default_ordering_puts_parameters_last(self):
+    def test_default_ordering_puts_parameters_first(self):
+        # (parameters, independent, dependents) -- Hubert & Labahn's (c, t, z), which the
+        # Hermite normal form convention requires; see ODESystem.default_order_variables.
+        # A conserved variable is a dependent, so `w` sorts with `z` and not with `a`.
         system = with_conserved_w()
         system.reorder_variables(['a', 'w', 't', 'z'])
         system.default_order_variables()
-        self.assertEqual(system.variables, (t, w, z, a))
+        self.assertEqual(system.variables, (a, t, w, z))
 
 
 class TestConservedVariablesAndReduction(TestCase):

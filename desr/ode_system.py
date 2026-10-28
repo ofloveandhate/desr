@@ -1259,13 +1259,26 @@ class ODESystem(object):
 
     def default_order_variables(self):
         '''
-        Reorder the variables into (independent variable, dependent variables, parameters),
-        which generally gives the simplest reductions.
+        Reorder the variables into (parameters, independent variable, dependent variables),
+        which is the order the parameter scheme of translation requires.
         Variables of the same type are sorted by their string representations.
 
         A conserved variable is a dependent variable, so it sorts with the dependents rather
-        than with the parameters.  The parameter scheme of translation requires the
-        parameters to be the trailing variables, and this is what puts them there.
+        than with the parameters.
+
+        This is Hubert & Labahn's ordering: they write the system as :math:`F(c, t, z)` with
+        :math:`p` parameters, the one independent variable, and :math:`q` dependent
+        variables, so :math:`n = p + 1 + q`.  It goes with the Hermite normal form
+        convention -- see :data:`desr.matrix_normal_forms._CONVENTION` -- rather than being
+        a free choice beside it: the identity block of :math:`V_n` sits on the **last**
+        :math:`1 + q` rows, and only this order puts :math:`t` and the dependent variables
+        there.  Order the parameters last instead and the identity lands on *parameters*,
+        which satisfies the block conditions while giving each parameter its own invariant
+        and smearing the independent variable across several -- not a parameter reduction
+        at all.
+
+        desr used to order these as (independent, dependent, parameters), alongside the
+        mirrored normal form.
 
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
@@ -1284,8 +1297,8 @@ class ODESystem(object):
         dep_var = sorted(self.dependent_variables, key=str)
         parameters = sorted(self.parameters, key=str)
 
-        # Order variables as independent, dependent, parameters
-        variables = [self.indep_var] + dep_var + parameters
+        # Order variables as parameters, independent, dependent
+        variables = parameters + [self.indep_var] + dep_var
         assert len(variables) == len(set(variables)) # assures no duplicates
         self.reorder_variables(variables=variables)
 

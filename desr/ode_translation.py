@@ -866,30 +866,58 @@ class ODETranslator(object):
         return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
 
     def _is_translate_parameter_compatible(self, system):
-        ''' Check whether a system satisfies the conditions of the parameter scheme of translation '''
-        # First check our system's variables are in the required order
-        # Independent at the beginning
-        if system.indep_var_index != 0:
-            return False
-        # Parameters at the end.  Ask which variables are the parameters, rather than which
-        # trailing derivatives are zero: a conserved variable's derivative is also zero, so
-        # the old test called a system eligible as soon as one was ordered last.
-        if system.num_parameters:
-            if set(system.variables[-system.num_parameters:]) != set(system.parameters):
-                return False
+        '''
+        Check whether a system satisfies the conditions of the parameter scheme of translation.
 
-        # Now check our transformation is valid: that V and W have the required forms
-        # m is the number of variables that have an equation (including the independent one)
-        m = len(system.variables) - system.num_parameters
-        if not self.herm_mult_i[:m, :].is_zero_matrix:
+        The scheme needs each of the independent variable and the dependent variables to
+        contribute exactly one invariant of its own, and the surplus parameters to become
+        the reduced constants.  That is what the block form below says, reading
+        :math:`V = [V_i, V_n]` with :math:`p` parameters and :math:`m = 1 + q` the rest::
+
+                       r aux        p - r          m
+                     +-----------+-----------+-----------+
+            p rows   |     *     |     *     |     *     |
+                     +-----------+-----------+-----------+
+            m rows   |     0     |     0     |    I_m    |
+                     +-----------+-----------+-----------+
+
+        The zero block says the scaling acts only through the parameters, leaving the
+        independent and dependent variables unrescaled; the identity says each of them
+        appears in exactly one invariant, with exponent one and in no other.
+
+        Those rows are the **last** :math:`m`, which is why the variables must be ordered
+        :math:`(c, t, z)` -- see
+        :meth:`~desr.ode_system.ODESystem.default_order_variables`.  The order is not a
+        free choice beside the Hermite normal form convention but the other half of it:
+        under the mirrored convention the same blocks sit at the top and the order is
+        :math:`(t, z, c)`.  Ordering the parameters last *here* would satisfy every block
+        condition while putting the identity on parameters, so each parameter would get its
+        own invariant and the independent variable would be smeared across several.  The
+        test therefore pins which variables occupy those rows, not merely the shape.
+        '''
+        p = system.num_parameters
+        m = len(system.variables) - p
+
+        # First check our system's variables are in the required order:
+        # parameters, then the independent variable, then the dependents.
+        if system.indep_var_index != p:
             return False
-        if not self.herm_mult_n[:m, :m] == sympy.eye(m):
-            return False
-        if not self.herm_mult_n[:m, m:].is_zero_matrix:
+        # Ask which variables are the parameters, rather than which derivatives are zero: a
+        # conserved variable's derivative is also zero, so testing the derivative would call
+        # a system eligible as soon as one was ordered among the parameters.
+        if p and set(system.variables[:p]) != set(system.parameters):
             return False
 
-        if not (self.inv_herm_mult[self.r:self.r + m, :] ==
-                sympy.Matrix.hstack(sympy.eye(m), sympy.zeros(m, system.num_parameters))):
+        # Now check our transformation is valid: that V and W have the required forms.
+        if not self.herm_mult_i[p:, :].is_zero_matrix:
+            return False
+        if not self.herm_mult_n[p:, p - self.r:] == sympy.eye(m):
+            return False
+        if not self.herm_mult_n[p:, :p - self.r].is_zero_matrix:
+            return False
+
+        if not (self.inv_herm_mult[p:, :] ==
+                sympy.Matrix.hstack(sympy.zeros(m, p), sympy.eye(m))):
             return False
 
         return True
@@ -972,25 +1000,25 @@ class ODETranslator(object):
         {t: tau, n: nu1, p: nu2, K: kappa1, d: 1, h: kappa2, k: 1, r: kappa3, s: 1}
         '''
 
-        num_variables_wo_time = len(system.variables) - system.num_parameters - 1  # Excluding indep
-        m = num_variables_wo_time + 1  # Include indep
-
-        
+        p = system.num_parameters
+        m = len(system.variables) - p  # The independent variable and the dependents
 
         if not self._is_translate_parameter_compatible(system):
             err_str = ['System is not compatible for parameter translation.']
-            err_str.append('System may not be ordered properly. Must be independent, dependent, constants. Order is: {}'.format(system.variables))
-            err_str.append('Transformation may not be appropriate. Should be 0, I, 0. Transformation is:')
-            err_str.append(repr(self.herm_mult_i[:m, :]))
-            err_str.append(repr(self.herm_mult_n[:m, :m]))
-            err_str.append(repr(self.herm_mult_n[:m, m:]))
+            err_str.append('System may not be ordered properly. Must be parameters, independent, dependent. Order is: {}'.format(system.variables))
+            err_str.append('Transformation may not be appropriate. Should be 0, 0, I. Transformation is:')
+            err_str.append(repr(self.herm_mult_i[p:, :]))
+            err_str.append(repr(self.herm_mult_n[p:, :p - self.r]))
+            err_str.append(repr(self.herm_mult_n[p:, p - self.r:]))
             raise ValueError('\n'.join(err_str))
 
-        # Extract the right bits of W
-        inv_herm_mult_d = self.inv_herm_mult_d[m:, :]
-        W_t = inv_herm_mult_d[:, :1]
-        W_v = inv_herm_mult_d[:, 1:m]
-        W_c = inv_herm_mult_d[:, m:]
+        # Extract the right bits of W.  The rows of W_d that belong to the reduced constants
+        # are the first p - r of them, since those invariants are the leading columns of
+        # V_n under this ordering; the columns follow the variable order (c, t, z).
+        inv_herm_mult_d = self.inv_herm_mult_d[:p - self.r, :]
+        W_c = inv_herm_mult_d[:, :p]
+        W_t = inv_herm_mult_d[:, p:p + 1]
+        W_v = inv_herm_mult_d[:, p + 1:]
 
         variable_map = self.variable_map(system)
         # Form new constants
@@ -1003,14 +1031,14 @@ class ODETranslator(object):
 
         # Scale dependents
         scale = scale_action(new_consts, W_v)
-        assert len(system.variables[1:num_variables_wo_time + 1]) == len(scale.T)
-        for dep_var, _const_scale in zip(system.variables[1:num_variables_wo_time + 1], scale.T):
-            to_sub[dep_var] = _const_scale * variable_map[dep_var] 
+        assert len(system.dependent_variables) == len(scale.T)
+        for dep_var, _const_scale in zip(system.dependent_variables, scale.T):
+            to_sub[dep_var] = _const_scale * variable_map[dep_var]
 
         # Scale constants
         scale = scale_action(new_consts, W_c)
-        assert len(system.variables[- system.num_parameters:]) == len(scale.T)
-        for const, _const_scale in zip(system.variables[- system.num_parameters:], scale.T):
+        assert len(system.parameters) == len(scale.T)
+        for const, _const_scale in zip(system.parameters, scale.T):
             to_sub[const] = _const_scale
 
         return to_sub
