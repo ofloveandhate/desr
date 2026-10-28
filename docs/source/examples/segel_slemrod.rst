@@ -138,11 +138,11 @@ and translate the system
     dtau/dtau = 1
     dc/dtau = -c*c1 - c*c2 - c*s + c4*s
     ds/dtau = c*c1 + c*s - c4*s
+    dc0/dtau = 0
     dc1/dtau = 0
     dc2/dtau = 0
-    dc4/dtau = 0
     dc3/dtau = 0
-    dc0/dtau = 0
+    dc4/dtau = 0
     s(0) = 1
     c3 == c1 + c2
     c0 == c4/(c3 + 1)

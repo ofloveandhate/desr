@@ -2,10 +2,10 @@ import itertools
 import re
 
 import sympy
-from sympy.abc import _clash1
 
 from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
-from desr.sympy_helper import expressions_to_variables, unique_array_stable, monomial_to_powers
+from desr.sympy_helper import (expressions_to_variables, unique_array_stable,
+                               monomial_to_powers, sympify_expression, to_symbol)
 from desr.tex_tools import expr_to_tex, var_to_tex, tex_to_sympy
 
 class ODESystem(object):
@@ -129,7 +129,7 @@ class ODESystem(object):
         (tau, x, y, c_0, c_1, x_0)
         """
         if not isinstance(new_indep, sympy.Symbol):
-            new_indep = sympy.sympify(new_indep, locals=_clash1)
+            new_indep = sympify_expression(new_indep)
 
             expressions_to_variables
 
@@ -350,7 +350,7 @@ class ODESystem(object):
                 variable = sympy.Symbol(variable)
 
             if isinstance(init_cond, str):
-                init_cond = sympy.sympify(init_cond, locals=_clash1)
+                init_cond = sympify_expression(init_cond)
 
             # We can only set initial conditions for non-constant variables we already know about.
             if variable not in self.non_constant_variables:
@@ -405,7 +405,7 @@ class ODESystem(object):
                 var = sympy.Symbol(var)
 
             if isinstance(expr, str):
-                expr = sympy.sympify(expr, locals=_clash1)
+                expr = sympify_expression(expr)
 
             expr_vars = expressions_to_variables([expr])
 
@@ -464,9 +464,9 @@ class ODESystem(object):
         ValueError: Cannot express equality constraint with 0. (c_0 == 0)
         '''
         if isinstance(lhs, str):
-            lhs = sympy.sympify(lhs, locals=_clash1)
+            lhs = sympify_expression(lhs)
         if isinstance(rhs, str):
-            rhs = sympy.sympify(rhs, locals=_clash1)
+            rhs = sympify_expression(rhs)
         if (lhs == 0) or (rhs == 0):
             raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
@@ -548,7 +548,7 @@ class ODESystem(object):
         '''
 
         # sympify the dict of things to substitute
-        to_sub = {sympy.sympify(lhs, locals=_clash1): sympy.sympify(rhs, locals=_clash1) for lhs, rhs in to_sub.items()}
+        to_sub = {sympify_expression(lhs): sympify_expression(rhs) for lhs, rhs in to_sub.items()}
 
         variable_renamings = []
         
@@ -1092,8 +1092,9 @@ def parse_de(diff_eq, indep_var='t'):
         raise ValueError("Invalid differential equation: {}".format(diff_eq))
     if match.group(2) != indep_var:
         raise ValueError('We only work in ordinary DEs in {}'.format(indep_var))
-    # Feed in _clash1 so that we can use variables S, C, etc., which are special characters in sympy.
-    return sympy.var(match.group(1)), sympy.sympify(match.group(3), _clash1)
+    # Read every name as a symbol, so that a species called S, E, I, beta or pi is an
+    # ordinary variable rather than one of sympy's own objects.
+    return to_symbol(match.group(1)), sympify_expression(match.group(3))
 
 def rational_expr_to_exponent_matrix(expr, variables):
     '''
@@ -1125,6 +1126,13 @@ def rational_expr_to_exponent_matrix(expr, variables):
     [ 2, 1],
     [ 0, 0],
     [ 1, 1]])
+
+    A zero expression -- the equation of a conserved variable, such as a catalyst in a
+    reaction network -- has no monomials, and so constrains no scaling.  It contributes a
+    column of zeros, one entry per variable, rather than nothing at all:
+
+    >>> rational_expr_to_exponent_matrix(sympy.sympify(0), variables).T
+    Matrix([[0, 0, 0, 0, 0, 0, 0, 0]])
     '''
     expr = expr.cancel()
     num, denom = expr.as_numer_denom()
@@ -1153,6 +1161,15 @@ def rational_expr_to_exponent_matrix(expr, variables):
     powers = []
     for mon in itertools.chain(num_terms, denom_terms):
         powers.append(monomial_to_powers(mon / ref_power, variables))
+
+    if not powers:
+        # A zero expression has no monomials.  It constrains no scaling, so the honest
+        # answer is a column of zeros.  Building a matrix from the empty list instead would
+        # give a 0x0 one, which ignores `variables` and cannot be glued to the others:
+        # sympy's hstack absorbs a zero-row block on the left but raises on the right, so
+        # whether a system reduced at all would depend on where its conserved variables
+        # fell in the ordering -- that is, on what they were named.
+        return sympy.zeros(len(variables), 1)
 
     powers = sympy.Matrix(powers).T
     return powers
