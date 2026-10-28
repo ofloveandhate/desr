@@ -41,7 +41,7 @@ The variable order matters: the reduction algorithm tends to reduce away the var
 Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
 
     >>> translator = ODETranslator.from_ode_system(system,
-    ...                                              naming_scheme=('tau', ['u', 'v'], 'c'))
+    ...                                              naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
     >>> translator.invariants()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), k_1*s_0*t, s/s_0, c/s_0]])
     >>> reduced_system = translator.translate(system)

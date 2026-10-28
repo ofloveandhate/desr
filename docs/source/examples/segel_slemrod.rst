@@ -58,7 +58,7 @@ Choose a variable order, with initial conditions at the front so the algorithm w
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('H',['y','z'],'c'))
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
     >>> translator.multiplier_add_columns(6, 2, 1)  # Multiply time by e_0/s_0
     >>> translator.multiplier_add_columns(8, 2, -1)  # Scale c by e_0 rather than s_0
 
@@ -127,7 +127,7 @@ A sanity check
 
 Now we can construct the `ODETranslator`
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('tau',['s','c'],'c'))
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
     Matrix([
     [0, 0, 0, -1, -1, -1, 0, 1, 0, 0],
@@ -291,7 +291,7 @@ Check that if we keep :math:`L` out of the normalising positions -- here :math:`
 are the two parameters that get normalised -- we have the same reduced system as before
 
     >>> system_l.reorder_variables(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
-    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('t',['s','c'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
     Matrix([
     [0, 0, 0, -1, -1, 0, 1, 0, 0],
@@ -309,7 +309,7 @@ are the two parameters that get normalised -- we have the same reduced system as
 Putting :math:`K_m` at the front, we have
 
     >>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
-    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme=('tau',['s','c'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> # Scale t correctly to t/t_C = k_1 L t
     >>> translator.multiplier_add_columns(6, 2, 1)
     >>> # Scale s correctly to s / s_0
@@ -404,7 +404,7 @@ Inspect
 
 Translate and reduce the system
 
-    >>> reduced_system = translator.translate(system_l, naming_scheme=('T',['s','c'], 'c'))
+    >>> reduced_system = translator.translate(system_l, naming_scheme={'parameters': 'c', 'independent': 'T', 'dependents': ['s','c']})
     >>> reduced_system
     dT/dT = 1
     dc/dT = -c*c1*c3*s/c2 - c*c3/c2 + c0*c3*s/c2

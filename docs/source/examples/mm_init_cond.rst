@@ -72,7 +72,7 @@ just chosen, and one column per monomial appearing in the system.
 
 Compute the reduced system by making an `ODETranslator` from the original system,
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('t',['s','c'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
 
 Optionally, observe some properties.  First, the scaling matrix :math:`A`:
 
@@ -111,7 +111,7 @@ Returning back to the original system with initial conditions,
     s(0) = s_0
     K_m == (k_2 + k_m1)/k_1
     parameters: s_0, e_0, k_1, k_2, k_m1, K_m
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u','v']})
 
 Do some column operations on the Hermite multiplier
 

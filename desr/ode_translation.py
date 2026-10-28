@@ -5,6 +5,149 @@ from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
 
+#: The names a reduction may be asked to give the variables it creates.  A naming scheme is a
+#: dict over these keys; every key is optional, and an absent one takes the default for
+#: whichever reduction scheme runs.  The categories are the ones the invariants fall into:
+#: an invariant that is a monomial in the parameters alone, the one that carries the clock,
+#: and the ones that involve a dependent variable.  Under the general reduction scheme some
+#: of those categories are empty -- there may be no parameter invariants, and the clock may
+#: be entangled with a dependent variable, as in Hubert & Labahn 6.6 where `t z1^3` is an
+#: invariant -- and the names for them simply go unused.
+NAMING_SCHEME_KEYS = ('parameters', 'independent', 'dependents', 'auxiliaries')
+
+#: Defaults for the parameter reduction scheme: desr's own nondimensionalisation names.
+PARAMETER_SCHEME_NAMES = {'parameters': 'kappa', 'independent': 'tau', 'dependents': 'nu',
+                          'auxiliaries': 'x'}
+
+#: Defaults for the general and dependent-variable schemes: Hubert & Labahn's notation, where
+#: the auxiliaries are :math:`x` and the invariants :math:`y`, so that output can be compared
+#: with the paper directly.  `independent` is :const:`None`, meaning the independent variable
+#: keeps the name it already has.
+GENERAL_SCHEME_NAMES = {'parameters': 'kappa', 'independent': None, 'dependents': 'y',
+                        'auxiliaries': 'x'}
+
+
+def _normalise_naming_scheme(naming_scheme):
+    '''
+    Validate a naming scheme and return it as a dict, which may be partial.
+
+    Args:
+        naming_scheme (dict): A dict over some of :data:`NAMING_SCHEME_KEYS`.  :const:`None`
+            means "no preferences", and gives an empty dict.
+
+    Returns:
+        dict: The scheme, copied, with only the keys the caller actually set.
+
+    A tuple is refused.  Until 2.0 the scheme was a positional triple whose order followed
+    the variable order; the variable order changed, which would have silently re-pointed
+    every entry, so the positional form is gone rather than quietly re-read:
+
+    >>> _normalise_naming_scheme(('tau', 'nu', 'kappa'))
+    Traceback (most recent call last):
+        ...
+    ValueError: A naming scheme is a dict, not a tuple.  Write {'independent': 'tau', 'dependents': 'nu', 'parameters': 'kappa'} -- the keys are parameters, independent, dependents, auxiliaries, and any you leave out take their default.
+
+    >>> _normalise_naming_scheme({'independent': 'tau', 'dependents': ['u', 'v']}) == {
+    ...     'independent': 'tau', 'dependents': ['u', 'v']}
+    True
+
+    >>> _normalise_naming_scheme(None)
+    {}
+
+    >>> _normalise_naming_scheme({'indep': 'tau'})
+    Traceback (most recent call last):
+        ...
+    ValueError: Unknown naming scheme key 'indep'.  The keys are parameters, independent, dependents, auxiliaries.
+    '''
+    if naming_scheme is None:
+        return {}
+
+    if isinstance(naming_scheme, (tuple, list)):
+        raise ValueError(
+            "A naming scheme is a dict, not a {}.  Write {{'independent': 'tau', "
+            "'dependents': 'nu', 'parameters': 'kappa'}} -- the keys are {}, and any you "
+            "leave out take their default.".format(type(naming_scheme).__name__,
+                                                   ', '.join(NAMING_SCHEME_KEYS)))
+
+    if not isinstance(naming_scheme, dict):
+        raise ValueError('A naming scheme is a dict over the keys {}.  Got a {}.'.format(
+            ', '.join(NAMING_SCHEME_KEYS), type(naming_scheme).__name__))
+
+    for key in naming_scheme:
+        if key not in NAMING_SCHEME_KEYS:
+            raise ValueError("Unknown naming scheme key {!r}.  The keys are {}.".format(
+                key, ', '.join(NAMING_SCHEME_KEYS)))
+
+    for key in ('parameters', 'auxiliaries'):
+        value = naming_scheme.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(
+                "The naming scheme's {!r} must be a single string, used as a pattern: the "
+                "number of them is not known until the reduction runs.  Got a {}.".format(
+                    key, type(value).__name__))
+
+    return dict(naming_scheme)
+
+
+def _new_symbols(pattern, count, start_at):
+    '''
+    `count` symbols named `pattern` with consecutive indices appended, counting from `start_at`.
+    '''
+    return [sympy.Symbol('{}{}'.format(pattern, i + start_at)) for i in range(count)]
+
+
+def _names_for(pattern, count, start_at, what):
+    '''
+    Turn one entry of a naming scheme into exactly `count` symbols.
+
+    A string is a pattern and gets indices appended.  A list or tuple is taken literally, and
+    must have exactly the right length -- that is the one thing a caller can get wrong here
+    without the mistake showing up until much later.
+
+    Args:
+        pattern: A string pattern, or an explicit sequence of names.
+        count (int): How many symbols are needed.
+        start_at (int): Where appended indices begin.
+        what (str): What is being named, for the error message.
+
+    Returns:
+        list of sympy.Symbol
+    '''
+    if isinstance(pattern, str):
+        return _new_symbols(pattern, count, start_at)
+
+    names = list(pattern)
+    if len(names) != count:
+        raise ValueError(
+            'The naming scheme gives {} names for the {}, but this reduction has {} of '
+            'them: {}.'.format(len(names), what, count, names))
+    # sympy.Symbol rather than sympify: sympifying a name like 'S' or 'E' would resolve to a
+    # sympy singleton instead of a variable of that name.
+    return [name if isinstance(name, sympy.Symbol) else sympy.Symbol(str(name))
+            for name in names]
+
+
+def _rename_indep_var(system, new_name):
+    '''
+    Rename a reduced system's independent variable, or leave it alone if `new_name` is None.
+
+    The general and dependent-variable schemes keep the original clock, so their default is
+    to leave the name as it is.  A caller who sets `independent` is asking for it to be
+    renamed, and gets that -- it is only a relabelling, since under those schemes the clock
+    is the system's own independent variable either way.
+
+    Args:
+        system (ODESystem): The reduced system.
+        new_name: The name to give the independent variable, or :const:`None` to keep it.
+
+    :rtype: ODESystem
+    '''
+    if new_name is None or sympy.Symbol(str(new_name)) == system.indep_var:
+        return system
+    system.rename_indep_var(sympy.Symbol(str(new_name)))
+    return system
+
+
 def _rates_of_change(system):
     '''
     The rate of change of every variable of a system, in variable order, with a parameter's
@@ -85,11 +228,27 @@ class ODETranslator(object):
             :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
-        naming_scheme (tuple): A tuple of strings giving the names of the variables after reduction.  Default is `('tau', 'nu', 'kappa')`
-            The 0th element of the tuple is the new name of the independent (time) variable.  
-            The 1th is either a string for the pattern for names of independent variables, or a list of strings equal to the number of variables.  
-            The 2th element is the pattern for the scaling-invariant constants computed by the algorithm.  
-            Since we don't know how many constants there will be, only a pattern is usable, so the 2th element of the naming_scheme must be a single string.
+        naming_scheme (dict): What to call the variables the reduction creates.  Every key is
+            optional; one left out takes the default for whichever reduction scheme runs.
+
+            - `'independent'`: the new name of the independent (time) variable.  The general
+              and dependent-variable schemes keep the system's own clock, so their default is
+              to leave the name alone; setting this renames it.
+            - `'dependents'`: either a pattern, to which indices are appended, or an explicit
+              list of names.  A list must have exactly as many entries as the reduction
+              produces, which is the number of dependent variables under the parameter
+              scheme and the number of invariants under the general one.
+            - `'parameters'`: the pattern for the scaling-invariant constants the algorithm
+              computes.  How many there will be is not known until the reduction runs, so
+              this must be a single string rather than a list.
+            - `'auxiliaries'`: the pattern for the auxiliary variables, likewise a single
+              string.  Only the general and dependent-variable schemes make any.
+
+            The defaults are :data:`PARAMETER_SCHEME_NAMES` for the parameter scheme and
+            :data:`GENERAL_SCHEME_NAMES` for the other two, so that output under the general
+            scheme can be compared with Hubert & Labahn directly.  Anything set here is
+            honoured by all of them.  A positional tuple is refused; see
+            :func:`_normalise_naming_scheme`.
         new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
             Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
 
@@ -109,7 +268,7 @@ class ODETranslator(object):
         ...
     ValueError: The Hermite multiplier has determinant -2, so it is not unimodular.  Some invariants are then not products of integer powers of its invariant columns, and reversing the reduction would need roots of degree 2.  Choose invariants from which every invariant can be built with integer powers; see extend_from_invariants.
     '''
-    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
+    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme=None, new_indices_start_at=0):
         scaling_matrix = scaling_matrix.copy()
 
         self._scaling_matrix = scaling_matrix
@@ -144,13 +303,39 @@ class ODETranslator(object):
     def set_naming_scheme(self, naming_scheme):
         '''
         Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslator`.
+
+        Only the keys the caller sets are stored, so that the remainder can take whichever
+        reduction scheme's defaults apply when the reduction actually runs.
         '''
+        self._naming_scheme = _normalise_naming_scheme(naming_scheme)
 
-        # we start with some validation.
-        if len(naming_scheme)!= 3:
-            raise ValueError(f'renaming scheme must be a length-3 container')
+    @property
+    def naming_scheme(self):
+        '''
+        The naming scheme as set, holding only the keys that were given.
 
-        self._naming_scheme = naming_scheme
+        :rtype: dict
+        '''
+        return dict(self._naming_scheme)
+
+    def _resolved_naming_scheme(self, defaults):
+        '''
+        The naming scheme with unset keys filled in from `defaults`.
+
+        What the caller asked for always wins; `defaults` only supplies the rest.  This is
+        the one place the two sets of defaults meet, so that a scheme passed in is honoured
+        by whichever reduction runs, while the names a reduction falls back on stay its own
+        -- Hubert & Labahn's `x` and `y` for the general scheme, desr's `tau`, `nu` and
+        `kappa` for the parameter scheme.
+
+        Args:
+            defaults (dict): :data:`PARAMETER_SCHEME_NAMES` or :data:`GENERAL_SCHEME_NAMES`.
+
+        :rtype: dict
+        '''
+        resolved = dict(defaults)
+        resolved.update(self._naming_scheme)
+        return resolved
 
     def __repr__(self):
         return 'A=\n{}\nV=\n{}\nW=\n{}'.format(self.scaling_matrix.__repr__(),
@@ -337,7 +522,7 @@ class ODETranslator(object):
         return self._variables_domain
 
     @classmethod
-    def from_ode_system(cls, ode_system, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
+    def from_ode_system(cls, ode_system, naming_scheme=None, new_indices_start_at = 0):
         '''
         Create a :class:`ODETranslator` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
 
@@ -649,7 +834,8 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem): System to reduce.
-            naming_scheme: the scheme to use.  A tuple of length 3.  See 
+            naming_scheme (dict): the scheme to use, over the keys in
+                :data:`NAMING_SCHEME_KEYS`.  See
 
         :rtype: ODESystem
         '''
@@ -773,13 +959,16 @@ class ODETranslator(object):
 
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
+        scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
+        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+                                         self._new_indices_start_at, 'invariants')
 
         # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
+        auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+                                           self._new_indices_start_at)
 
         system_var_no_indep = list(system.variables)
         system_var_no_indep.pop(system.indep_var_index)
@@ -795,7 +984,8 @@ class ODETranslator(object):
         new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
         new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var, is_reduced=True)
+        reduced = ODESystem(new_variables, new_derivatives, indep_var=system.indep_var, is_reduced=True)
+        return _rename_indep_var(reduced, scheme['independent'])
 
     def translate_general(self, system, include_aux_vars = True):
         '''
@@ -836,14 +1026,17 @@ class ODETranslator(object):
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
         # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
+        scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
+        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+                                         self._new_indices_start_at, 'invariants')
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
             num_aux_var = self.herm_mult_i.shape[1]
-            auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
+            auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+                                               self._new_indices_start_at)
 
         to_sub = dict(zip(system.variables, scale_action(invariant_variables, self.inv_herm_mult_d)))
         system_derivatives = _rates_of_change(system)
@@ -869,7 +1062,8 @@ class ODETranslator(object):
             # see remark 3.2 in the second arxiv version of the paper, where we discuss this number
             assert len(new_variables) == len(new_derivatives) == len(system.variables) - self.r + 1
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
+        reduced = ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
+        return _rename_indep_var(reduced, scheme['independent'])
 
     def _is_translate_parameter_compatible(self, system):
         '''
@@ -936,27 +1130,15 @@ class ODETranslator(object):
 
         todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
         """
+        scheme = self._resolved_naming_scheme(PARAMETER_SCHEME_NAMES)
         num_variables_wo_time = len(system.variables) - system.num_parameters - 1  # Excluding indep
 
-        if (isinstance(self._naming_scheme[1], str)):
-            new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
-            new_vars = [sympy.Symbol(v) for v in new_vars]
-        else:
+        new_vars = _names_for(scheme['dependents'], num_variables_wo_time,
+                              self._new_indices_start_at, 'dependent variables')
 
-            if len(self._naming_scheme[1]) != system.num_dependent_variables:
-                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._naming_scheme[1])}!={system.num_dependent_variables}')
-
-
-            # silviana says:
-            # the reason I'm using `Symbol` here and not sympify: 
-            #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
-            #   and not the variable S.  
-            # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
-
-            # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
-            new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
-
-        the_map = {system.indep_var: sympy.Symbol(self._naming_scheme[0])}
+        independent = scheme['independent']
+        the_map = {system.indep_var: system.indep_var if independent is None
+                                     else sympy.Symbol(independent)}
 
         for v,V in zip(system.dependent_variables, new_vars):
             the_map[v] = V
@@ -977,8 +1159,9 @@ class ODETranslator(object):
 
         :rtype: list of sympy.Symbol
         '''
-        return [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at))
-                for i in range(system.num_parameters - self.r)]
+        scheme = self._resolved_naming_scheme(PARAMETER_SCHEME_NAMES)
+        return _new_symbols(scheme['parameters'], system.num_parameters - self.r,
+                            self._new_indices_start_at)
 
     def translate_parameter_substitutions(self, system):
         '''
@@ -1003,7 +1186,7 @@ class ODETranslator(object):
         {K: 1, d: kappa0, h: 1, k: 1, r: kappa1, s: kappa2, t: tau, n: nu0, p: nu1}
 
         >>> system = ODESystem.from_equations(equations)
-        >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
+        >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
         >>> translator.translate_parameter_substitutions(system=system)
         {K: 1, d: c0, h: 1, k: 1, r: c1, s: c2, t: t, n: n, p: p}
 
@@ -1144,7 +1327,7 @@ class ODETranslator(object):
         (K, d, h, k, r, s, t, n, p)
         >>> system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
         >>> translator = ODETranslator.from_ode_system(system,
-        ...                                            naming_scheme=('t',['n','p'], 'c'))
+        ...                                            naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
         >>> translator.translate_parameter(system)
         dt/dt = 1
         dn/dt = -c1*n*p/(c0 + n) - n**2 + n

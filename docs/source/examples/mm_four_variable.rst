@@ -29,7 +29,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> original_system.variables
     (k_1, k_2, k_m1, t, C, E, P, S)
-    >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print('Variable order: ', max_scal1.variables_domain)
     Variable order:  (k_1, k_2, k_m1, t, C, E, P, S)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
@@ -71,7 +71,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator
     >>> original_system_reorder.reorder_variables(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
     >>> original_system_reorder.variables
     (k_1, k_m1, k_2, t, C, E, P, S)
-    >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
     Invariants: k_2/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1
 
@@ -178,7 +178,7 @@ scheme wants: the parameter invariant first, then the independent variable, then
     [ 0, 0,  0,  0,  1,  0],
     [ 0, 0,  0,  0,  0,  1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal1.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslator(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme=('t',['C','E','P','S'], 'c'))
+    >>> max_scal3 = ODETranslator(max_scal1.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print(max_scal3.translate(original_system).subs({'c0':'alpha'}))
     dt/dt = 1
     dC/dt = -C - C/alpha + E*S
