@@ -11,6 +11,12 @@ class TestHermiteMethods(TestCase):
     def test_example_sage(self):
         ''' Example from the Sage website
             See: http://doc.sagemath.org/html/en/reference/matrices/sage/matrix/matrix_integer_dense.html
+
+            Sage reports the Havas-Majewski-Matthews form, so for a matrix with more than
+            one pivot its printed answer is the mirror of desr's; see
+            desr.matrix_normal_forms._CONVENTION.  Both are valid Hermite normal forms of
+            the same lattice.  The 2x2 below happens to be the same under either, since a
+            diagonal matrix is its own mirror.
         '''
         A = sympy.Matrix([[1,2],[3,4]])
         H, V = hnf_row_lll(A)
@@ -18,10 +24,13 @@ class TestHermiteMethods(TestCase):
         self.assertEqual(H, V * A)
         self.assertTrue(is_hnf_row(H))
 
+        # Sage prints [[5, 0, -5, -10, -15], [0, 1, 2, 3, 4]] above three zero rows; the
+        # pivots there are the leading entries of each row.  Here they are the trailing
+        # ones, so the rows and columns are reversed.
         A = sympy.Matrix(range(25)).reshape(5,5)
         H, V = hnf_row_lll(A)
-        H_A = sympy.Matrix.vstack(sympy.Matrix([[5,   0,  -5, -10, -15],
-                                                [0,   1,   2,   3,   4]]),
+        H_A = sympy.Matrix.vstack(sympy.Matrix([[20, 15, 10, 5, 0],
+                                                [5,   4,  3, 2, 1]]),
                                   sympy.zeros(3, 5))
         self.assertEqual(H, H_A)
         self.assertEqual(H, V * A)
@@ -87,47 +96,45 @@ class TestHermiteMethods(TestCase):
         self.assertEqual(U_bad * A, H_bad)       # invariant U * A == H preserved
 
     def test_example1(self):
-        ''' Example from Extended gcd and Hermite nomal form via lattice basis reduction '''
+        ''' Example from Extended gcd and Hermite normal form via lattice basis reduction.
+
+            The reference answer is from the Havas-Majewski-Matthews paper, so it is in
+            *their* convention -- which is the one the machinery here uses internally, and
+            the mirror of the one desr reports.  So the paper's matrix is asserted against
+            `_hnf_row_hmm`, and the public `hnf_row_lll` is checked against the property
+            that actually matters: it is a basis of the same row lattice, in the convention
+            desr reports.  Pushing either basis through the same canonical form has to give
+            the same answer, which is a stronger statement than hard-coding a second big
+            matrix and does not need one.
+
+            There is no simple relationship between the two forms *of the same matrix*:
+            reversing the columns changes the lattice, so desr's form is related to the
+            Havas-Majewski-Matthews form of `A . J`, not of `A`.
+        '''
+        from desr.matrix_normal_forms import _hnf_row_hmm, _is_hnf_row_hmm
 
         A = sympy.Matrix(10, 10, lambda i, j: (i + 1) ** 3 * (j + 1) ** 2 + i + j + 2)
 
         H_answer_paper = sympy.Matrix([[1, 0, 7, 22, 45, 76, 115, 162, 217, 280],
                                        [0, 1, 4, 9, 16, 25, 36, 49, 64, 81],
                                        [0, 0, 12, 36, 72, 120, 180, 252, 336, 432]])
-        H_answer_webcalc = sympy.Matrix([[1, 0, 7, 22, 45, 76, 115, 162, 217, 280],
-                                          [0, 1, 4, 9, 16, 25, 36, 49, 64, 81],
-                                          [0, 0, 12, 36, 72, 120, 180, 252, 336, 432]])
 
-        self.assertTrue(is_hnf_row(H_answer_webcalc))
-        self.assertTrue(is_hnf_row(sympy.Matrix.vstack(H_answer_webcalc, sympy.zeros(7, 10))))
+        self.assertTrue(_is_hnf_row_hmm(H_answer_paper))
+        self.assertTrue(_is_hnf_row_hmm(
+            sympy.Matrix.vstack(H_answer_paper, sympy.zeros(7, 10))))
 
-        V_answer_paper = sympy.Matrix([[-10, -8, -5, 1, 2, 3, 5, 3, 0, -4],
-                                       [-2, -1, 0, 1, -1, 0, 1, 0, 1, -1],
-                                       [-15, -11, -4, 0, 4, 5, 4, 3, 1, -5],
-                                       [1, -1, -1, 0, 2, -1, 0, 0, 0, 0],
-                                       [0, 1, -1, -1, 1, -1, 2, -1, 0, 0],
-                                       [1, 0, -1, -1, -1, 2, 0, 1, -1, 0],
-                                       [1, 0, -1, 1, -1, 1, -1, 1, 1, -1],
-                                       [-1, 0, 1, 0, 1, 1, -1, -2, 0, 1],
-                                       [1, -1, 0, -1, 1, 0, 0, -1, 2, -1],
-                                       [1, -2, 1, 1, -2, 0, 2, -1, 0, 0]])
+        # The internal convention reproduces the paper exactly.
+        H_hmm, U_hmm = _hnf_row_hmm(A)
+        self.assertEqual(H_hmm[:3, :], H_answer_paper)
+        self.assertTrue(H_hmm[3:, :].is_zero_matrix)
+        self.assertEqual(H_hmm, U_hmm * A)
 
-        V_answer_webcalc = sympy.Matrix([[-10, -8, -5, 1, 2, 3, 5, 3, 0, -4],
-                                         [-2, -1, 0, 1, -1, 0, 1, 0, 1, -1],
-                                         [-15, -11, -4, 0, 4, 5, 4, 3, 1, -5],
-                                         [-1, 2, -1, -1, 2, 0, -2, 1, 0, 0],
-                                         [-1, 1, 0, 1, -1, 0, 0, 1, -2, 1],
-                                         [1, 0, -1, 0, -1, -1, 1, 2, 0, -1],
-                                         [-1, 0, 2, -1, 1, -1, 1, -1, -1, 1],
-                                         [-1, 0, 1, 1, 1, -2, 0, -1, 1, 0],
-                                         [0, -1, 1, 1, -1, 1, -2, 1, 0, 0],
-                                         [-1, 1, 1, 0, -2, 1, 0, 0, 0, 0]])
-
+        # And what desr reports is a basis of the same lattice, in its own convention.
         H, V = hnf_row_lll(A)
-        H_nz, H_z = H[:3, :], H[3:, :]
-        self.assertTrue(H_z.is_zero_matrix)
-        self.assertEqual(H_nz, H_answer_webcalc)
+        self.assertTrue(is_hnf_row(H))
         self.assertEqual(H, V * A)
+        self.assertTrue(H[3:, :].is_zero_matrix)
+        self.assertEqual(_hnf_row_hmm(H)[0][:3, :], H_answer_paper)
 
     def test_wiki_example(self):
         ''' Test the examples from wikipedia
@@ -164,11 +171,25 @@ class TestHermiteMethods(TestCase):
                            [0, 3, 28,-2],
                            [0, 0, 61, -13]])
 
+        # Wikipedia prints the Havas-Majewski-Matthews form, the mirror of the one desr
+        # reports, so the reference answers are checked against the internal convention and
+        # desr's own output against the property that matters: a basis of the same row
+        # lattice, in desr's convention.  See desr.matrix_normal_forms._CONVENTION and the
+        # longer note in test_example1.
+        from desr.matrix_normal_forms import _hnf_row_hmm, _is_hnf_row_hmm
+
         for A, H in ((A1, H1), (A2, H2), (A3, H3)):
-            H_calc, V = hnf_row_lll(A)
-            self.assertTrue(is_hnf_row(H))
-            self.assertEqual(H, H_calc)
-            self.assertEqual(H, V * A)
+            with self.subTest(matrix=A.tolist()):
+                self.assertTrue(_is_hnf_row_hmm(H))
+                H_hmm, U_hmm = _hnf_row_hmm(A)
+                self.assertEqual(H, H_hmm)
+                self.assertEqual(H, U_hmm * A)
+
+                H_calc, V = hnf_row_lll(A)
+                self.assertTrue(is_hnf_row(H_calc))
+                self.assertEqual(H_calc, V * A)
+                # Same lattice: either basis put through the same canonical form agrees.
+                self.assertEqual(_hnf_row_hmm(H_calc)[0], H)
 
     def test_normal_hermite_multiplier_example(self):
         ''' Hubert & Labahn 2013, example 2.4, p. 486.

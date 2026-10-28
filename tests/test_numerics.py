@@ -24,14 +24,25 @@ class TestNumericTranslation(TestCase):
                      \\frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
         self.system = ODESystem.from_tex(system_tex)
         self.system.update_initial_conditions({'s': 's_0'})
-        self.system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
+        # Parameters first, then the independent variable, then the dependents -- Hubert &
+        # Labahn's (c, t, z); see ODESystem.default_order_variables.  Within the parameters
+        # the order decides which are normalised to 1: the leading ones are, so s_0 and e_0
+        # go first and k_2, k_m1 survive as the reduced constants.
+        self.system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
         self.translator = ODETranslator.from_ode_system(
             self.system, naming_scheme=('tau', ['u', 'v'], 'c'))
         self.numeric = NumericTranslation(self.system, self.translator)
 
-        self.t, self.s, self.c, self.k_m1, self.k_2, self.k_1, self.e_0, self.s_0 = \
-            self.system.variables
-        self.tau, self.u, self.v, self.c0, self.c1, self.c2 = self.numeric.reduced.variables
+        # Fetched by name rather than unpacked positionally, so that a change of variable
+        # order is not a change to every test in this class.
+        original = {str(v): v for v in self.system.variables}
+        self.t, self.s, self.c = original['t'], original['s'], original['c']
+        self.k_m1, self.k_2 = original['k_m1'], original['k_2']
+        self.k_1, self.e_0, self.s_0 = original['k_1'], original['e_0'], original['s_0']
+
+        reduced = {str(v): v for v in self.numeric.reduced.variables}
+        self.tau, self.u, self.v = reduced['tau'], reduced['u'], reduced['v']
+        self.c0, self.c1, self.c2 = reduced['c0'], reduced['c1'], reduced['c2']
 
         self.parameters = {self.k_1: 1.5, self.k_m1: 0.9, self.k_2: 0.4,
                            self.e_0: 0.3, self.s_0: 2.0}
@@ -233,9 +244,11 @@ class TestNumericTranslation(TestCase):
         # fixes the size of z0 but not its sign, and that is refused rather than guessed.
         system = ODESystem.from_equations(['dz/dt = a*z - b*z**3'])
         system.update_initial_conditions({'z': 'z0'})
-        system.reorder_variables(['t', 'z', 'a', 'b', 'z0'])
+        # update_initial_conditions appends z0 at the end, which leaves the system out of
+        # canonical order now that the parameters come first, so put it back.
+        system.reorder_variables(['a', 'b', 'z0', 't', 'z'])
         numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
-        t, z, a, b, z0 = system.variables
+        a, b, z0, t, z = system.variables
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
         with self.assertRaises(NotImplementedError) as caught:
             numeric.reverse(point, known_values={a: 2.0, b: 0.5})
