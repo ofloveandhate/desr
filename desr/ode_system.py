@@ -140,7 +140,7 @@ class ODESystem(object):
         parameters: c_0, c_1, x_0
 
         >>> system.variables
-        (tau, x, y, c_0, c_1, x_0)
+        (c_0, c_1, tau, x, y, x_0)
         """
         if not isinstance(new_indep, sympy.Symbol):
             new_indep = sympify_expression(new_indep)
@@ -295,7 +295,7 @@ class ODESystem(object):
         >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
         >>> system.make_parameter('w')
         >>> system.parameters
-        (w, a)
+        (a, w)
         >>> system.dependent_variables
         (z,)
 
@@ -1157,32 +1157,36 @@ class ODESystem(object):
         ... 'dc/dt = k_1*e_0*s - (k_1*s + k_m1 + k_2)*c'])
         >>> system = ODESystem.from_equations(eqns)
         >>> system.variables
-        (t, c, s, e_0, k_1, k_2, k_m1)
+        (e_0, k_1, k_2, k_m1, t, c, s)
         >>> system.exponent_matrix()
         Matrix([
-        [1, 1, 1,  1, 1, 1,  1],
-        [0, 0, 0, -1, 0, 1,  1],
-        [1, 0, 0,  1, 0, 0, -1],
         [0, 0, 0,  1, 1, 0,  0],
         [1, 0, 0,  1, 1, 1,  0],
         [0, 1, 0,  0, 0, 0,  0],
-        [0, 0, 1,  0, 0, 0,  1]])
+        [0, 0, 1,  0, 0, 0,  1],
+        [1, 1, 1,  1, 1, 1,  1],
+        [0, 0, 0, -1, 0, 1,  1],
+        [1, 0, 0,  1, 0, 0, -1]])
 
         While we get a different answer to the example in the paper, this is just due to choosing our reference exponent in a different way.
 
         Todo:
             * Change the code to agree with the paper.
 
+        The initial-condition constant is appended, so it lands after the dependent
+        variables rather than among the parameters where it belongs; see
+        :meth:`~desr.ode_system.ODESystem.default_order_variables`.
+
         >>> system.update_initial_conditions({'s': 's_0'})
         >>> system.exponent_matrix()
         Matrix([
-        [1, 1, 1,  1, 1, 1,  1,  0],
-        [0, 0, 0, -1, 0, 1,  1,  0],
-        [1, 0, 0,  1, 0, 0, -1,  1],
         [0, 0, 0,  1, 1, 0,  0,  0],
         [1, 0, 0,  1, 1, 1,  0,  0],
         [0, 1, 0,  0, 0, 0,  0,  0],
         [0, 0, 1,  0, 0, 0,  1,  0],
+        [1, 1, 1,  1, 1, 1,  1,  0],
+        [0, 0, 0, -1, 0, 1,  1,  0],
+        [1, 0, 0,  1, 0, 0, -1,  1],
         [0, 0, 0,  0, 0, 0,  0, -1]])
         '''
 
@@ -1206,8 +1210,8 @@ class ODESystem(object):
         >>> system = ODESystem.from_equations(eqns)
         >>> system.maximal_scaling_matrix()
         Matrix([
-        [1, 0, 0, 0, -1, -1, -1],
-        [0, 1, 1, 1, -1,  0,  0]])
+        [0, -1, -1, -1, 1, 0, 0],
+        [1, -1,  0,  0, 0, 1, 1]])
         '''
         exprs = self._expressions()
 
@@ -1217,6 +1221,15 @@ class ODESystem(object):
         '''
         Store the new variable order, and reorder the equations according to the new order of variables.
 
+        The order within the parameters is the one that changes the answer: the parameters
+        placed **first** tend to be the ones normalised to 1, and the rest become the
+        reduced constants.  "Tend to" rather than "are": :math:`r` of them are normalised,
+        the leading ones are the natural candidates, but the Hermite structure decides which
+        set actually can be, so a parameter that cannot participate is skipped over.  Put
+        the ones you would rather see disappear at the front, then check
+        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` to see
+        which went.
+
         Args:
             variables (str, iter):
                 Another ordering of the variables.
@@ -1224,13 +1237,13 @@ class ODESystem(object):
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
         >>> system.variables
-        (t, z_1, z_2, z_3)
+        (z_3, t, z_1, z_2)
 
-        `z_3` is a parameter, so it has no equation and its entry is :const:`None`.  The
-        classification travels with the variable through a reordering.
+        `z_3` is a parameter, so it comes first, has no equation, and its entry is
+        :const:`None`.  The classification travels with the variable through a reordering.
 
         >>> system.derivatives
-        (1, z_1*z_3, z_1*z_2/z_3**2, None)
+        (None, 1, z_1*z_3, z_1*z_2/z_3**2)
 
         >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
         >>> system.variables
@@ -1284,7 +1297,7 @@ class ODESystem(object):
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
         >>> system.variables
-        (t, z_1, z_2, z_3)
+        (z_3, t, z_1, z_2)
 
         >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
         >>> system.variables
@@ -1292,7 +1305,7 @@ class ODESystem(object):
 
         >>> system.default_order_variables()
         >>> system.variables
-        (t, z_1, z_2, z_3)
+        (z_3, t, z_1, z_2)
         '''
         dep_var = sorted(self.dependent_variables, key=str)
         parameters = sorted(self.parameters, key=str)
@@ -1411,7 +1424,7 @@ def maximal_scaling_matrix(exprs, variables=None):
     >>> exprs = ['z_1*z_3', 'z_1*z_2 / (z_3 ** 2)']
     >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
-    Matrix([[1, -3, -1]])
+    Matrix([[-1, 3, 1]])
 
     >>> exprs = ['(z_1 + z_2**2) / z_3']
     >>> exprs = list(map(sympy.sympify, exprs))

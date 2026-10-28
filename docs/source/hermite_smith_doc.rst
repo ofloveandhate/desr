@@ -34,7 +34,7 @@ Smith Normal Form
 .. autofunction:: desr.matrix_normal_forms.is_smf
     :noindex:
 
-.. autofunction:: desr.matrix_normal_forms.smf
+.. autofunction:: desr.matrix_normal_forms.smith_normal_form
     :noindex:
 
 

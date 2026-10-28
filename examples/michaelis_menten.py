@@ -15,7 +15,7 @@ articlerender.fcgi?artid=PMC3991559.
 
 import sympy
 from desr import ODESystem, ODETranslator, scale_action
-from desr.matrix_normal_forms import smf
+from desr.matrix_normal_forms import smith_normal_form
 from desr.tex_tools import expr_to_tex
 
 
@@ -136,7 +136,7 @@ def michaelis_menten_four_variables():
         ## Step 2: Try and extend the choices by a basis of invariants
         ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
         WdP = system_from_ode.inv_herm_mult_d * invariant_choice
-        smith_normal_form, row_ops, col_ops = smf(WdP)
+        normal_form, row_ops, col_ops = smith_normal_form(WdP)
 
         print('Smith normal form decomposition:')
         print('{}\n{}\n{}\n{}\n=\n{}'.format(*map(lambda x: x.__repr__(), (row_ops,

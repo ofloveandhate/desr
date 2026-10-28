@@ -766,7 +766,7 @@ def element_wise_lt(matrix_, other):
     else:
         return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: 1 if matrix_[i, j] < other else 0)
 
-def is_smf(matrix_):
+def is_smith_normal_form(matrix_):
     """
     Given a rectangular :math:`n \\times m` integer matrix, determine whether it is in Smith normal form or not.
 
@@ -782,28 +782,28 @@ def is_smf(matrix_):
 
 
     >>> matrix_ = sympy.diag(1, 1, 2)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     True
     >>> matrix_ = sympy.diag(-1, 1, 2)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
     >>> matrix_ = sympy.diag(2, 1, 1)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
     >>> matrix_ = sympy.diag(1, 2, 0)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     True
     >>> matrix_ = sympy.diag(2, 6, 0)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     True
     >>> matrix_ = sympy.diag(2, 5, 0)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
     >>> matrix_ = sympy.diag(0, 1, 1)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
     >>> matrix_ = sympy.diag(0)
-    >>> is_smf(sympy.diag(0)), is_smf(sympy.diag(1)), is_smf(sympy.Matrix()),
+    >>> is_smith_normal_form(sympy.diag(0)), is_smith_normal_form(sympy.diag(1)), is_smith_normal_form(sympy.Matrix()),
     (True, True, True)
 
     Check a real example:
@@ -811,21 +811,21 @@ def is_smf(matrix_):
     >>> matrix_ = sympy.Matrix([[2, 4, 4],
     ...                         [-6, 6, 12],
     ...                         [10, -4, -16]])
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
 
     >>> matrix_ = sympy.diag(2, 6, 12)
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     True
 
     Check it works for non-square matrices:
 
     >>> matrix_ = sympy.Matrix(4, 5, range(20))
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
 
     >>> matrix_ = sympy.Matrix([[1, 0], [1, 2]])
-    >>> is_smf(matrix_)
+    >>> is_smith_normal_form(matrix_)
     False
     """
     if len(matrix_) == 0:
@@ -854,7 +854,7 @@ def is_smf(matrix_):
         current_int = next_int
     return True
 
-def smf(matrix_):
+def smith_normal_form(matrix_):
     """
     Given a rectangular :math:`n \\times m` integer matrix, calculate the Smith Normal Form :math:`S` and multipliers
     :math:`U`, :math:`V` such that :math:`U \\textrm{matrix_} V = S`.
@@ -880,21 +880,21 @@ def smf(matrix_):
     >>> matrix_ = sympy.Matrix([[2, 4, 4],
     ...                         [-6, 6, 12],
     ...                         [10, -4, -16]])
-    >>> smf(matrix_)[0]
+    >>> smith_normal_form(matrix_)[0]
     Matrix([
     [2, 0,  0],
     [0, 6,  0],
     [0, 0, 12]])
 
     >>> matrix_ = sympy.diag(2, 1, 0)
-    >>> smf(matrix_)[0]
+    >>> smith_normal_form(matrix_)[0]
     Matrix([
     [1, 0, 0],
     [0, 2, 0],
     [0, 0, 0]])
 
     >>> matrix_ = sympy.diag(5, 2, 0)
-    >>> smf(matrix_)[0]
+    >>> smith_normal_form(matrix_)[0]
     Matrix([
     [1,  0, 0],
     [0, 10, 0],
@@ -903,17 +903,25 @@ def smf(matrix_):
     matrix_ = matrix_.copy()
     transformed = matrix_.copy()
 
-    if is_smf(transformed):
+    if is_smith_normal_form(transformed):
         row_actions = sympy.eye(matrix_.shape[0])
         col_actions = sympy.eye(matrix_.shape[1])
         return transformed, row_actions, col_actions
 
-    # First make a pivot in the top left corner
-    transformed, row_actions = hnf_row(matrix_=transformed)
-    transformed, col_actions = hnf_col(matrix_=transformed)
+    # First make a pivot in the top left corner.
+    #
+    # The Havas-Majewski-Matthews helpers, not the public ones: this uses a Hermite normal
+    # form as a *subroutine* and needs the pivot in the top-left corner so that the
+    # recursion below can work on transformed[1:, 1:].  The form desr reports puts pivots in
+    # the bottom-right instead -- see :data:`_CONVENTION` -- which would leave the recursion
+    # chewing on the wrong block.  The Smith normal form itself is diagonal with each entry
+    # dividing the next, so it does not depend on which Hermite convention got it there, and
+    # this function's answer is the same either way.
+    transformed, row_actions = _hnf_row_hmm(transformed)
+    transformed, col_actions = _hnf_col_hmm(transformed)
 
     # Now put the lower block into Smith normal form
-    block, _row_actions, _col_actions = smf(transformed[1:, 1:])
+    block, _row_actions, _col_actions = smith_normal_form(transformed[1:, 1:])
 
     # Compose the row and column actions found
     row_actions = row_actions * expand_matrix(_row_actions)
@@ -955,7 +963,9 @@ def smf(matrix_):
             col_actions[:, i] += col_actions[:, i+1]
             assert row_actions * matrix_ * col_actions == transformed
 
-            transformed, _row_actions = hnf_row(transformed)
+            # The Havas-Majewski-Matthews helper again, for the same reason as above: the
+            # reduction that follows reads the pivot at transformed[i, i].
+            transformed, _row_actions = _hnf_row_hmm(transformed)
             row_actions = _row_actions * row_actions
             assert row_actions * matrix_ * col_actions == transformed
 
@@ -972,7 +982,7 @@ def smf(matrix_):
     # _prod = row_actions * matrix_ *  col_actions
     assert row_actions * matrix_ *  col_actions == transformed
 
-    assert is_smf(transformed)
+    assert is_smith_normal_form(transformed)
     return transformed, row_actions, col_actions
 
 

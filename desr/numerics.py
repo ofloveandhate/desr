@@ -186,7 +186,7 @@ class NumericTranslation(object):
 
     You can translate a state of the original system into the reduced one.
 
-    >>> t, n, p, K, d, h, k, r, s = system.variables
+    >>> K, d, h, k, r, s, t, n, p = system.variables
     >>> original = {t: 2.0, n: 1.0, p: 0.5, K: 5.0, d: 0.7, h: 1.3, k: 0.9, r: 1.1, s: 0.4}
     >>> reduced_values = numeric.forward(original)
     >>> sorted(str(x) for x in reduced_values)
@@ -651,7 +651,7 @@ class NumericTranslation(object):
         >>> moving.auxiliaries_are_constant
         False
         >>> moving.auxiliary_growth_rates()
-        [(2*y0*(y1 + 1)/3 + y1)/(t*y0)]
+        [(2*y0*y1 - 1)/(3*t)]
         '''
         if self._growth_rates is None:
             if self.scheme == Scheme.PARAMETER:
