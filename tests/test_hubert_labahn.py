@@ -6,9 +6,9 @@ Reference: E. Hubert and G. Labahn, "Scaling Invariants and Symmetry Reduction o
 Dynamical Systems", Foundations of Computational Mathematics 13(4):479-516, 2013.
 
 These are **characterisation tests**: they say what desr must produce for a reader to be
-able to compare its output with the paper.  They are expected failures until the Hermite
-normal form convention is changed, because desr currently reports the mirror image of the
-paper's normal form.  The two conventions, in full:
+able to compare its output with the paper.  Until the Hermite normal form convention was
+corrected, desr reported the mirror image of the paper's normal form.  The two
+conventions, in full:
 
 ===============  ================================  ============  ===================
                  pivot of a column                 H             reduce on pivot row
@@ -18,19 +18,18 @@ Havas-Majewski-  **first** nonzero, zeros above it  lower tri.    to the **left*
 Matthews
 ===============  ================================  ============  ===================
 
-desr implements the second.  It arrived not as a choice about output but as a side effect:
+desr used to implement the second.  It arrived not as a choice about output but as a side effect:
 the original Hermite implementation was Havas-Majewski-Matthews' lattice-reduction method,
 whose own paper states that convention, and the library adopted it along with the
 algorithm.  That backend has since been replaced by FLINT, so the convention is now a
 vestige of a removed dependency, while the theory desr implements -- and the output a
 reader compares against -- is Hubert & Labahn's.
 
-Nothing in the library could detect the difference: condition (b) of Prop 2.3(ii) is not
-checked at all, and condition (c) is checked over the wrong rows, so
-`is_normal_hermite_multiplier` rejects the paper's own published multiplier.  Closing that
-hole is the companion to this change.
+Nothing in the library could detect the difference while it lasted: condition (c) of
+Prop 2.3(ii) was checked over the first `r` rows rather than over `V_n`'s pivot rows, so
+`is_normal_hermite_multiplier` rejected the paper's own published multiplier while
+accepting multipliers that were not normal.  Fixing that was the companion to this change.
 '''
-import unittest
 from unittest import TestCase
 
 import sympy
@@ -69,18 +68,15 @@ class TestExample24(TestCase):
         self.assertEqual(abs(self.V.det()), 1)
         self.assertEqual(self.A * self.V, self.H)
 
-    @unittest.expectedFailure
     def test_desr_computes_the_paper_multiplier(self):
         H, V = normal_hnf_col(self.A)
         self.assertEqual(H, self.H)
         self.assertEqual(V, self.V)
 
-    @unittest.expectedFailure
     def test_the_paper_multiplier_is_recognised_as_normal(self):
-        # Fails twice over at present: the convention, and the broken condition (c).
+        # This failed twice over before: the convention, and the broken condition (c).
         self.assertTrue(is_normal_hermite_multiplier(self.V, self.A))
 
-    @unittest.expectedFailure
     def test_the_invariant_columns_are_in_hermite_normal_form(self):
         # Condition (b) of Prop 2.3(ii).
         self.assertTrue(is_hnf_col(self.V[:, 2:]))
@@ -114,20 +110,17 @@ class TestExample66(TestCase):
         # why the disagreement stayed hidden for so long.
         self.assertEqual(self.system.maximal_scaling_matrix(), self.SCALING_MATRIX)
 
-    @unittest.expectedFailure
     def test_the_invariants_match(self):
-        # Today desr gives (t*z1**3, z1**5*z2).  The first agrees; the second is the
-        # paper's y2 multiplied by y1, which is why the documentation reaches the paper's
-        # answer only after a hand-applied multiplier_add_columns(2, 1, -1).
+        # desr used to give (t*z1**3, z1**5*z2).  The first agreed; the second was the
+        # paper's y2 multiplied by y1, which is why the documentation used to reach the
+        # paper's answer only after a hand-applied multiplier_add_columns(2, 1, -1).
         translator = ODETranslator.from_ode_system(self.system)
         self.assertEqual(tuple(translator.invariants()), self.INVARIANTS)
 
-    @unittest.expectedFailure
     def test_the_auxiliary_variable_matches(self):
         translator = ODETranslator.from_ode_system(self.system)
         self.assertEqual(tuple(translator.auxiliaries()), self.AUXILIARIES)
 
-    @unittest.expectedFailure
     def test_no_hand_applied_column_operations_are_needed(self):
         # The point of the change: the paper's answer should be what desr says by default.
         translator = ODETranslator.from_ode_system(self.system)
@@ -147,7 +140,7 @@ class TestTheConventionItself(TestCase):
                             [3, 2],
                             [0, 1]])
 
-    #: The mirror, which is what desr reports today: the pivot is the first nonzero entry,
+    #: The mirror, which is what desr used to report: the pivot is the first nonzero entry,
     #: the entries above it are zero, and the leading block is lower triangular.
     HMM_FORM = sympy.Matrix([[1, 0],
                              [3, 5],
@@ -161,9 +154,10 @@ class TestTheConventionItself(TestCase):
         self.assertTrue((A * self.HMM_FORM).is_zero_matrix)
         self.assertEqual(sympy.Matrix.hstack(self.HL_FORM, self.HMM_FORM).rank(), 2)
 
-    def test_today_desr_reports_the_mirror(self):
-        self.assertTrue(is_hnf_col(self.HMM_FORM))
-
-    @unittest.expectedFailure
-    def test_after_the_change_desr_reports_the_paper_form(self):
+    def test_desr_reports_the_paper_form(self):
         self.assertTrue(is_hnf_col(self.HL_FORM))
+
+    def test_desr_no_longer_accepts_the_mirror(self):
+        # Both are valid bases of the same lattice, so this is not a judgement about
+        # correctness -- only about which of the two canonical forms desr reports.
+        self.assertFalse(is_hnf_col(self.HMM_FORM))
