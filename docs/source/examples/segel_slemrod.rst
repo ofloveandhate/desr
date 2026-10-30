@@ -59,8 +59,18 @@ Choose a variable order, with initial conditions at the front so the algorithm w
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
     >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
-    >>> translator.multiplier_add_columns(6, 2, 1)  # Multiply time by e_0/s_0
-    >>> translator.multiplier_add_columns(8, 2, -1)  # Scale c by e_0 rather than s_0
+
+The column numbers come from :meth:`~desr.ode_translation.ODETranslator.column_of`, so the
+page says which invariant each operation acts on rather than carrying a bare index.
+
+    >>> clock = translator.column_of('k_1*s_0*t')
+    >>> scale = translator.column_of('e_0/s_0')
+    >>> concentration = translator.column_of('c/s_0')
+    >>> clock, scale, concentration
+    (6, 2, 8)
+
+    >>> translator.multiplier_add_columns(clock, scale)  # Multiply time by e_0/s_0
+    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0 rather than s_0
 
 The invariants match :cite:`Segel1989` (9):
 
@@ -157,27 +167,40 @@ To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :
 
 Note that indices in Python start at 0, but in math / the paper start at 1, so they're off-by-one.
 
+Name each column once, by the invariant it holds, and the five operations below read as what
+they do.  The numbers are printed because they are what the write-up quotes:
+
+    >>> clock = translator.column_of('k_1*s_0*t')
+    >>> scale = translator.column_of('e_0/s_0')
+    >>> eps = translator.column_of('epsilon')
+    >>> concentration = translator.column_of('c/s_0')
+    >>> michaelis = translator.column_of('K_m/s_0')
+    >>> k_m1_ratio = translator.column_of('k_m1/(k_1*s_0)')
+    >>> k_2_ratio = translator.column_of('k_2/(k_1*s_0)')
+    >>> clock, scale, eps, concentration, michaelis, k_m1_ratio, k_2_ratio
+    (7, 2, 6, 9, 3, 5, 4)
+
     >>> # Scale t correctly to t/t_C = k_1 L t = e_0 k_1 t / epsilon
-    >>> translator.multiplier_add_columns(7, 2, 1)
-    >>> translator.multiplier_add_columns(7, 6, -1)
+    >>> translator.multiplier_add_columns(clock, scale)
+    >>> translator.multiplier_add_columns(clock, eps, power=-1)
 
 To get :math:`v = \frac{c}{s_0 \epsilon}`, we need to modify the Hermite multiplier as :math:`V_{10}' = V_{10} - V_7`.  In code,
 
     >>> # Scale s correctly to s / s_0
     >>> # Scale c correctly to c / (e_0 s_0 / L) = c / (s_0 epsilon)
-    >>> translator.multiplier_add_columns(9, 6, -1)
+    >>> translator.multiplier_add_columns(concentration, eps, power=-1)
 
 
 We also want :math:`\sigma = \frac{s_0}{K_m}`, so :math:`V_4' = -V_4`.
 
     >>> # sigma = s_0 / K_m
-    >>> translator.multiplier_negate_column(3)
+    >>> translator.multiplier_negate_column(michaelis)
 
 
 To get :math:`\kappa = \frac{k_{-1}}{k_2}` in :cite:`Segel1989` (17), or :math:`\rho = \frac{k_{-1}}{k_2}` in :cite:`murray` (6.20), we need :math:`V_6' = V_6 - V_5`
 
     >>> # Find kappa = rho = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-    >>> translator.multiplier_add_columns(5, 4, -1)
+    >>> translator.multiplier_add_columns(k_m1_ratio, k_2_ratio, power=-1)
 
 
 We have the invariants up to this point of
@@ -233,9 +256,13 @@ and only the clock changes.  The three column operations act on the time column 
     >>> # Scale t correctly to t/t_S = k_2 epsilon t
     >>> import copy
     >>> translator_24 = copy.deepcopy(translator)
-    >>> translator_24.multiplier_add_columns(7, 4, 1)
-    >>> translator_24.multiplier_add_columns(7, 2, -1)
-    >>> translator_24.multiplier_add_columns(7, 6, 2)
+    >>> # the clock is now e_0*k_1*t/epsilon, the other three columns are unchanged
+    >>> clock_24 = translator_24.column_of('e_0*k_1*t/epsilon')
+    >>> clock_24, k_2_ratio, scale, eps
+    (7, 4, 2, 6)
+    >>> translator_24.multiplier_add_columns(clock_24, k_2_ratio)
+    >>> translator_24.multiplier_add_columns(clock_24, scale, power=-1)
+    >>> translator_24.multiplier_add_columns(clock_24, eps, power=2)
     >>> translator_24.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
     >>> reduced_system = translator_24.translate(system)
@@ -310,18 +337,28 @@ Putting :math:`K_m` at the front, we have
 
     >>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
     >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
+    >>> clock = translator.column_of('K_m*k_1*t')
+    >>> total = translator.column_of('L/K_m')
+    >>> substrate = translator.column_of('s/K_m')
+    >>> sigma = translator.column_of('s_0/K_m')
+    >>> complexed = translator.column_of('c/K_m')
+    >>> enzyme = translator.column_of('e_0/K_m')
+    >>> k_2_ratio = translator.column_of('k_2/(K_m*k_1)')
+    >>> clock, total, substrate, sigma, complexed, enzyme, k_2_ratio
+    (6, 2, 7, 3, 8, 4, 5)
+
     >>> # Scale t correctly to t/t_C = k_1 L t
-    >>> translator.multiplier_add_columns(6, 2, 1)
+    >>> translator.multiplier_add_columns(clock, total)
     >>> # Scale s correctly to s / s_0
-    >>> translator.multiplier_add_columns(7, 3, -1)
+    >>> translator.multiplier_add_columns(substrate, sigma, power=-1)
     >>> # Scale c correctly to c / (e_0 s_0 / L)
-    >>> translator.multiplier_add_columns(8, 2, 1)
-    >>> translator.multiplier_add_columns(8, 4, -1)
-    >>> translator.multiplier_add_columns(8, 3, -1)
+    >>> translator.multiplier_add_columns(complexed, total)
+    >>> translator.multiplier_add_columns(complexed, enzyme, power=-1)
+    >>> translator.multiplier_add_columns(complexed, sigma, power=-1)
     >>> # Find epsilon = e_0 / L
-    >>> translator.multiplier_add_columns(4, 2, -1)
+    >>> translator.multiplier_add_columns(enzyme, total, power=-1)
     >>> # Find kappa = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-    >>> translator.multiplier_negate_column(5)
+    >>> translator.multiplier_negate_column(k_2_ratio)
     >>> # sigma = s_0 / K_m needs no operation
     >>> translator.invariant_monomials()
     Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, L*k_1*t, s/s_0, L*c/(e_0*s_0)]])
@@ -390,9 +427,15 @@ To get the equations on the long/slow timescale :math:`t_c` from Murray, multipl
 
     >>> translator.herm_mult.shape
     (9, 9)
-    >>> translator.multiplier_add_columns(6, 4, 1)
-    >>> translator.multiplier_add_columns(6, 5, -1)
-    >>> translator.multiplier_add_columns(6, 2, -1)
+    >>> # the clock is now L*k_1*t; epsilon and kappa+1 sit where e_0/K_m and k_2/(K_m*k_1) did
+    >>> clock = translator.column_of('L*k_1*t')
+    >>> epsilon = translator.column_of('e_0/L')
+    >>> kappa_plus_one = translator.column_of('K_m*k_1/k_2')
+    >>> clock, epsilon, kappa_plus_one, total
+    (6, 4, 5, 2)
+    >>> translator.multiplier_add_columns(clock, epsilon)
+    >>> translator.multiplier_add_columns(clock, kappa_plus_one, power=-1)
+    >>> translator.multiplier_add_columns(clock, total, power=-1)
 
 Inspect
 

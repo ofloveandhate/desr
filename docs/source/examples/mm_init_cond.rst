@@ -115,8 +115,18 @@ Returning back to the original system with initial conditions,
 
 Do some column operations on the Hermite multiplier
 
-    >>> translator.multiplier_add_columns(6, 2, 1)  # Scale time by e_0 not s_0
-    >>> translator.multiplier_add_columns(8, 2, -1)  # Scale c by e_0
+Rather than writing the column numbers in directly, ask which column holds which invariant.
+The numbers are the same, and still worth knowing -- but now they are derived on the page
+instead of appearing from nowhere.
+
+    >>> clock = translator.column_of('k_1*s_0*t')
+    >>> scale = translator.column_of('e_0/s_0')
+    >>> concentration = translator.column_of('c/s_0')
+    >>> clock, scale, concentration
+    (6, 2, 8)
+
+    >>> translator.multiplier_add_columns(clock, scale)  # Scale time by e_0 not s_0
+    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0
 
 Optionally, see the invariants and substitutions
 
