@@ -1706,6 +1706,279 @@ class ODETranslator(object):
         variables = self._validate_variables(variables, self.n, 'x', True)
         return scale_action(variables, self.herm_mult_i)
 
+    def _dynamic_rows(self, system):
+        '''
+        The row indices of the scaling matrix that belong to variables which move: the
+        independent variable and the dependent variables.
+
+        The rest are parameter rows.  Every classification below is a question about which
+        of these rows an invariant's exponents touch.
+        '''
+        dynamic = set(system.dependent_variables) | {system.indep_var}
+        return [i for i, variable in enumerate(system.variables) if variable in dynamic]
+
+    def _kind_by_column(self, system):
+        '''
+        The kind of each invariant, by column index of :attr:`herm_mult_n`.
+
+        The kind is structural and so does not depend on which reduction scheme runs; only
+        the *name* an invariant ends up with does.  Kept separate for that reason.
+        '''
+        dynamic = self._dynamic_rows(system)
+        kinds = []
+        for column in range(self.herm_mult_n.shape[1]):
+            touches = any(self.herm_mult_n[row, column] != 0 for row in dynamic)
+            kinds.append('dependent' if touches else 'parameter')
+        return kinds
+
+    def invariant_kinds(self, system, scheme=None):
+        '''
+        What kind of symbol each variable of the reduced system is.
+
+        A dict from the reduced system's variable to ``'parameter'`` or ``'dependent'``.
+        The keys are the same as :meth:`named_invariants`', so the two join: one says what
+        a symbol *means*, the other says what it *is*.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (ReductionScheme, optional): The scheme that will be used, since the
+                names depend on it.  The kinds do not -- they are structural.
+
+        Returns:
+            dict: Reduced variable to its kind, in invariant order.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.invariant_kinds(system)
+        {kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', tau: 'dependent', nu0: 'dependent', nu1: 'dependent'}
+
+        The two faces of an invariant, together:
+
+        >>> meanings = translator.named_invariants(system)
+        >>> kinds = translator.invariant_kinds(system)
+        >>> [(str(name), str(meanings[name]), kinds[name]) for name in meanings][:2]
+        [('kappa0', 'd/K', 'parameter'), ('kappa1', 'h*r/k', 'parameter')]
+        '''
+        names = list(self.named_invariants(system, scheme))
+        return dict(zip(names, self._kind_by_column(system)))
+
+    def _invariants_by_kind(self, system, variables=None):
+        '''
+        The invariants grouped by what kind of symbol each is.
+
+        The rule is **structural**, read off the exponents in
+        :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`, and never off the rate of
+        change:
+
+        - :attr:`ReductionScheme.PARAMETER`'s value, ``'parameter'``, if the invariant's
+          exponents are zero on every *dynamic* row -- the independent variable's and the
+          dependent variables' -- so it is a monomial in the original parameters alone.
+        - ``'dependent'`` otherwise: it has at least one nonzero exponent on a dynamic row.
+
+        **Why not look at the rate.** A reduced parameter always has rate zero, and a
+        reduced dependent *may* have rate zero because it is conserved, so the rate cannot
+        tell them apart while the exponents always can.  The case is not hypothetical: a
+        catalyst in a reaction network gives an invariant like ``k_0_1*w/k_2_3``, which is
+        conserved because the catalyst is, and which must stay a dependent variable --
+        calling it a parameter would assert that it is a constant of the model rather than
+        a quantity conserved along the trajectory.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            dict: ``{'parameter': (...), 'dependent': (...)}``, each in invariant order.
+                Both keys are always present, so an empty group is an empty tuple rather
+                than a :exc:`KeyError`.
+
+        Private: :meth:`parameter_invariants` and :meth:`dependent_invariants` are the two
+        groups, and :meth:`invariant_kinds` is the per-symbol answer, so a third public way
+        to ask the same question would be sprawl.
+        '''
+        invariants = self.invariants(variables)
+        grouped = {'parameter': [], 'dependent': []}
+        for column, kind in enumerate(self._kind_by_column(system)):
+            grouped[kind].append(invariants[column])
+        return {kind: tuple(found) for kind, found in grouped.items()}
+
+    def parameter_invariants(self, system, variables=None):
+        '''
+        The invariants that are monomials in the original parameters alone.
+
+        These become the reduced system's parameters.  There are :math:`p - r` of them when
+        the parameter scheme applies, and there may be none at all -- Hubert & Labahn 6.6
+        has no parameters to begin with.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            tuple of sympy.Expr
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.parameter_invariants(system)
+        (d/K, h*r/k, h*s/k)
+        '''
+        return self._invariants_classified_as('parameter', system, variables)
+
+    def dependent_invariants(self, system, variables=None):
+        '''
+        The invariants that involve the independent variable or a dependent variable.
+
+        These become the reduced system's dependent variables.  Under the parameter scheme
+        there are :math:`1 + q` of them and the first is the new clock; under the general
+        scheme the clock may be entangled with a dependent variable, in which case there is
+        no separable clock and :meth:`indep_var_invariant` says so.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            tuple of sympy.Expr
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.dependent_invariants(system)
+        (k*t/h, n/K, h*p/K)
+        '''
+        return self._invariants_classified_as('dependent', system, variables)
+
+    def indep_var_invariant(self, system, variables=None):
+        '''
+        The invariant that carries the clock, or :const:`None` if there is not one.
+
+        It is the invariant whose exponents are nonzero on the independent variable's row
+        and zero on every dependent variable's row.  Under the parameter scheme there is
+        exactly one.  Under the general scheme there may be none, because the clock can be
+        entangled with a dependent variable: in Hubert & Labahn 6.6 the invariant is
+        :math:`t z_1^3`, and there is no invariant that is a function of :math:`t` and the
+        parameters alone.
+
+        :const:`None` states that rather than papering over it.  A caller that needs a new
+        independent variable and gets :const:`None` is being told something true about the
+        reduction, which is better than being handed an invariant that also moves.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            sympy.Expr or None
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.indep_var_invariant(system)
+        k*t/h
+
+        Hubert & Labahn 6.6 has no separable clock:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> translator = ODETranslator.from_ode_system(hl66)
+        >>> translator.invariants()
+        Matrix([[t*z1**3, z1**2*z2/t]])
+        >>> translator.indep_var_invariant(hl66) is None
+        True
+        '''
+        invariants = self.invariants(variables)
+        indep_row = system.indep_var_index
+        dependent_rows = [i for i, variable in enumerate(system.variables)
+                          if variable in set(system.dependent_variables)]
+
+        for column in range(self.herm_mult_n.shape[1]):
+            if self.herm_mult_n[indep_row, column] == 0:
+                continue
+            if any(self.herm_mult_n[row, column] != 0 for row in dependent_rows):
+                continue
+            return invariants[column]
+        return None
+
+    def _invariants_classified_as(self, kind, system, variables=None):
+        '''
+        The `kind` group of :meth:`_invariants_by_kind`.
+        '''
+        return self._invariants_by_kind(system, variables)[kind]
+
+    def named_invariants(self, system, scheme=None):
+        '''
+        What each variable of the reduced system stands for.
+
+        A dict from the reduced system's variable to the monomial in the original variables
+        that it denotes -- ``{kappa0: d/K, ..., tau: k*t/h, nu0: n/K, ...}``.  The keys are
+        plain symbols, so this is the map to reach for when you have a reduced system in
+        hand and want to know what one of its symbols means.
+
+        It is the inverse question to :meth:`invariants_by_kind`, which groups the monomials
+        by what kind of symbol each becomes.  Use that one before reducing, to see what the
+        reduction will consist of; use this one after, to read a reduced system.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (ReductionScheme, optional): The scheme that will be used, since the
+                names depend on it -- the parameter scheme gives `kappa`, `tau` and `nu`
+                while the general scheme gives `y`.  Inferred by :meth:`scheme` when left
+                out, with the caveat in :meth:`expected_variable_count`.
+
+        Returns:
+            dict: Reduced variable to the monomial it denotes, in invariant order.  The
+                auxiliary variables are not included; they are not invariants.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.named_invariants(system)
+        {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
+
+        So reading a reduced system needs no reconstruction of monomials:
+
+        >>> reduced = translator.translate(system)
+        >>> reduced.parameters
+        (kappa0, kappa1, kappa2)
+        >>> translator.named_invariants(system)[reduced.parameters[0]]
+        d/K
+
+        Under the general scheme the names are Hubert & Labahn's:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> translator = ODETranslator.from_ode_system(hl66)
+        >>> translator.named_invariants(hl66)
+        {y0: t*z1**3, y1: z1**2*z2/t}
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        invariants = list(self.invariants())
+
+        if scheme == ReductionScheme.PARAMETER:
+            # The columns of V_n run (parameter invariants, the clock, the dependents), the
+            # same order the reduced system's variables are built in.
+            variable_map = self.variable_map(system)
+            names = (list(self._new_constants(system))
+                     + [variable_map[system.indep_var]]
+                     + [variable_map[v] for v in system.dependent_variables])
+        else:
+            naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
+            names = _names_for(naming['dependents'], len(invariants),
+                               self._new_indices_start_at, 'invariants')
+
+        if len(names) != len(invariants):
+            raise ValueError(
+                'the {} scheme names {} invariants but there are {}'.format(
+                    scheme, len(names), len(invariants)))
+
+        return dict(zip(names, invariants))
+
     def rewrite_rules(self, variables=None):
         '''
         Given a set of variables, print the rewrite rules.

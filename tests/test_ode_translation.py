@@ -5,6 +5,7 @@ import sympy
 from desr.chemical_reaction_network import ChemicalReactionNetwork
 from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslator
+from desr.sympy_helper import sympify_expression
 
 
 class TestODETranslatorTraps(TestCase):
@@ -99,6 +100,162 @@ class TestODETranslatorTraps(TestCase):
                  sympy.sympify('t/(c1 - t)'))
         self.assertEqual(general.reverse_translate(exact),
                          general.reverse_translate_general(exact))
+
+
+class TestInvariantClassification(TestCase):
+    '''
+    Each invariant is a parameter or a dependent variable, decided **structurally** from
+    the exponents in the Hermite multiplier and never from its rate of change.
+
+    The rate cannot decide it.  A reduced parameter always has rate zero, and a reduced
+    dependent may have rate zero because it is conserved, so both print as `dy/dt = 0`.
+    '''
+
+    def setUp(self):
+        self.prey_predator = ODESystem.from_equations(
+            'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';'))
+        self.hl66 = ODESystem.from_equations(
+            ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+             'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+
+    def test_a_parameter_monomial_is_a_parameter(self):
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        self.assertEqual((sympy.sympify('d/K'), sympy.sympify('h*r/k'),
+                          sympy.sympify('h*s/k')),
+                         translator.parameter_invariants(self.prey_predator))
+
+    def test_an_invariant_touching_a_dynamic_row_is_a_dependent(self):
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        self.assertEqual((sympy.sympify('k*t/h'), sympy.sympify('n/K'),
+                          sympy.sympify('h*p/K')),
+                         translator.dependent_invariants(self.prey_predator))
+
+    def test_the_two_kinds_partition_the_invariants(self):
+        for system in (self.prey_predator, self.hl66):
+            with self.subTest(system=repr(system).splitlines()[1]):
+                translator = ODETranslator.from_ode_system(system)
+                parameters = translator.parameter_invariants(system)
+                dependents = translator.dependent_invariants(system)
+                self.assertEqual(len(translator.invariants()),
+                                 len(parameters) + len(dependents))
+                self.assertEqual(set(translator.invariants()),
+                                 set(parameters) | set(dependents))
+
+    def test_a_system_with_no_parameters_has_no_parameter_invariants(self):
+        translator = ODETranslator.from_ode_system(self.hl66)
+        self.assertEqual((), translator.parameter_invariants(self.hl66))
+
+    def test_an_entangled_clock_is_reported_as_none(self):
+        '''
+        HL 6.6's invariants are t*z1**3 and z1**2*z2/t.  Both move, so there is no
+        invariant that is a function of t and the parameters alone, and saying None is
+        better than handing back one that also moves.
+        '''
+        translator = ODETranslator.from_ode_system(self.hl66)
+        self.assertIsNone(translator.indep_var_invariant(self.hl66))
+
+    def test_the_clock_is_found_when_there_is_one(self):
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        self.assertEqual(sympy.sympify('k*t/h'),
+                         translator.indep_var_invariant(self.prey_predator))
+
+    def test_the_counting_law_holds_exactly_for_the_parameter_scheme(self):
+        '''
+        The user's remark, made testable: "the loss of symbols is in the parameters only,
+        and the invariant dependents involve the new invariant parameters but there's the
+        same number of them."
+        '''
+        catalyst = ChemicalReactionNetwork.from_diagram(
+            'E + S -> E + P \n P -> ').to_ode_system()
+        for system in (self.prey_predator, self.hl66, catalyst):
+            with self.subTest(system=tuple(map(str, system.variables))):
+                translator = ODETranslator.from_ode_system(system)
+                law = (len(translator.parameter_invariants(system))
+                       == system.num_parameters - translator.r
+                       and translator.indep_var_invariant(system) is not None
+                       and len(translator.dependent_invariants(system))
+                       == system.num_dependent_variables + 1)
+                self.assertEqual(translator.scheme(system) == 'parameter', law)
+
+    def test_a_catalyst_invariant_is_conserved_and_still_a_dependent(self):
+        '''
+        The case this rule exists for, and the one hand-written ODEs do not produce.  A
+        catalyst in a reaction network gives an invariant E*k_0_1/k_2_3 whose rate is zero
+        -- because the catalyst is conserved -- and which must stay a dependent variable.
+        Calling it a parameter would say it is a constant of the model rather than a
+        quantity conserved along the trajectory.
+        '''
+        system = ChemicalReactionNetwork.from_diagram(
+            'E + S -> E + P \n P -> ').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate_general(system)
+
+        # sympify_expression, not sympy.sympify: E is Exp1 to the latter.
+        conserved = sympify_expression('E*k_0_1/k_2_3')
+        self.assertIn(conserved, list(translator.invariants()))
+        self.assertIn(conserved, translator.dependent_invariants(system))
+        self.assertNotIn(conserved, translator.parameter_invariants(system))
+
+        # And its rate really is zero, so the rate could not have told us.
+        names = reduced.variables[1 + translator.r:]
+        rates = {invariant: reduced.derivative_dict[name]
+                 for name, invariant in zip(names, translator.invariants())}
+        self.assertEqual(0, rates[conserved])
+
+    def test_the_two_faces_of_an_invariant_share_their_keys(self):
+        '''
+        An invariant is both a new symbol and the monomial that symbol stands for, so the
+        map saying what it means and the map saying what kind it is are keyed alike and
+        join without reconstruction.
+        '''
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        meanings = translator.named_invariants(self.prey_predator)
+        kinds = translator.invariant_kinds(self.prey_predator)
+        self.assertEqual(list(meanings), list(kinds))
+        self.assertEqual({'kappa0': ('d/K', 'parameter'),
+                          'kappa1': ('h*r/k', 'parameter'),
+                          'kappa2': ('h*s/k', 'parameter'),
+                          'tau': ('k*t/h', 'dependent'),
+                          'nu0': ('n/K', 'dependent'),
+                          'nu1': ('h*p/K', 'dependent')},
+                         {str(name): (str(meanings[name]), kinds[name])
+                          for name in meanings})
+
+    def test_the_names_are_the_reduced_systems_own_variables(self):
+        ''' The keys must be lookup-friendly: the symbols the reduced system actually has. '''
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        reduced = translator.translate(self.prey_predator)
+        meanings = translator.named_invariants(self.prey_predator)
+        self.assertEqual(set(reduced.variables), set(meanings))
+        self.assertEqual(sympify_expression('d/K'), meanings[reduced.parameters[0]])
+
+    def test_the_kinds_agree_with_the_reduced_systems_classification(self):
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        reduced = translator.translate(self.prey_predator)
+        kinds = translator.invariant_kinds(self.prey_predator)
+        self.assertEqual(set(reduced.parameters),
+                         {name for name, kind in kinds.items() if kind == 'parameter'})
+
+    def test_the_general_scheme_names_follow_hubert_labahn(self):
+        translator = ODETranslator.from_ode_system(self.hl66)
+        self.assertEqual({'y0': 't*z1**3', 'y1': 'z1**2*z2/t'},
+                         {str(name): str(monomial) for name, monomial
+                          in translator.named_invariants(self.hl66).items()})
+
+    def test_the_scheme_may_be_said_rather_than_inferred(self):
+        '''
+        The names depend on the scheme, so a caller who will run `translate_general` on a
+        system `translate` would have given to the parameter scheme must be able to say so.
+        '''
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        inferred = translator.named_invariants(self.prey_predator)
+        general = translator.named_invariants(self.prey_predator, scheme='general')
+        self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
+                         tuple(str(n) for n in inferred))
+        self.assertEqual(('y0', 'y1', 'y2', 'y3', 'y4', 'y5'),
+                         tuple(str(n) for n in general))
+        # The monomials, and so the kinds, are the same either way.
+        self.assertEqual(list(inferred.values()), list(general.values()))
 
 
 class TestNamingScheme(TestCase):
