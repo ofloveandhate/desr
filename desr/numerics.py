@@ -22,8 +22,6 @@ back.  The reduction hides :math:`r` scaling symmetries in :math:`r` *auxiliary*
   them share the same reduction.
 """
 
-import enum
-
 import sympy
 
 try:
@@ -31,58 +29,15 @@ try:
 except ImportError:  # pragma: no cover
     raise ImportError('desr.numerics requires numpy.  Install it.')
 
-from .ode_translation import ODETranslator
+# ReductionScheme lives in ode_translation, next to the reductions it names, so that asking
+# a translator which scheme applies does not drag numpy in.  Re-exported here because this
+# is where it was first introduced and where it is most often wanted.
+from .ode_translation import ODETranslator, ReductionScheme
 from .ode_system import ODESystem
 from .sympy_helper import to_symbol
 
 __all__ = ['NumericTranslation', 'InsufficientKnownValues', 'ConflictingKnownValues',
-           'CONSISTENCY_TOLERANCE', 'Scheme']
-
-
-class Scheme(str, enum.Enum):
-    '''
-    Which of the three reductions of Hubert & Labahn a system was put through.
-
-    The scheme decides how many variables the reduced system has, whether it carries
-    auxiliary variables, and therefore what has to be known to translate values back.  It
-    is recorded rather than inferred: inferring it is only correct when
-    :meth:`~desr.ode_translation.ODETranslation.translate` did the choosing, and calling
-    :meth:`~desr.ode_translation.ODETranslation.translate_general` on a system that
-    `translate` would have handed to another scheme is perfectly legal.
-
-    A member is a :class:`str`, so ``scheme == 'general'`` holds and a plain string may be
-    passed wherever one of these is expected.
-
-    >>> from desr.numerics import Scheme
-    >>> Scheme.GENERAL
-    Scheme.GENERAL
-    >>> Scheme.GENERAL == 'general'
-    True
-    >>> print(Scheme.GENERAL)
-    general
-    '''
-
-    #: The parameter scheme: the reduced system has :math:`n - r` variables and no
-    #: auxiliaries, and it is the only scheme that handles initial conditions.
-    PARAMETER = 'parameter'
-
-    #: The dependent-variable scheme, where the scaling action ignores the independent
-    #: variable.  The reduced system has :math:`n` variables.
-    DEP_VAR = 'dep_var'
-
-    #: The general scheme, which always applies.  :math:`n + 1` variables with the
-    #: auxiliaries, :math:`n - r + 1` without.
-    GENERAL = 'general'
-
-    def __str__(self):
-        # Spelled out so that the printed form is the same on every Python version: the
-        # `str` mixin's __str__ and __format__ have changed between releases.
-        return self.value
-
-    def __repr__(self):
-        # `<Scheme.GENERAL: 'general'>` is the default and reads badly in documentation and
-        # in error messages, which is where this mostly appears.
-        return '{}.{}'.format(type(self).__name__, self.name)
+           'CONSISTENCY_TOLERANCE', 'ReductionScheme']
 
 
 class InsufficientKnownValues(ValueError):
@@ -174,7 +129,7 @@ class NumericTranslation(object):
     >>> translator = ODETranslator.from_ode_system(system)
     >>> numeric = NumericTranslation(system, translator)
     >>> numeric.scheme
-    Scheme.PARAMETER
+    ReductionScheme.PARAMETER
 
     The system has three scaling symmetries, so three values must be known to
     come back.  The value of `r` tells us this (for the parameter scheme it's exact).
@@ -232,14 +187,14 @@ class NumericTranslation(object):
         '''The schemes this system admits, in the order `translate` prefers them.'''
         schemes = []
         if self.translator._is_translate_parameter_compatible(self.system):
-            schemes.append(Scheme.PARAMETER)
+            schemes.append(ReductionScheme.PARAMETER)
         columns = self.translator.scaling_matrix.shape[1]
         if ((len(self.system.variables) == columns + 1)
                 or self.translator.scaling_matrix[
                     :, self.system.indep_var_index].is_zero_matrix):
-            schemes.append(Scheme.DEP_VAR)
+            schemes.append(ReductionScheme.DEP_VAR)
         if len(self.system.variables) == columns:
-            schemes.append(Scheme.GENERAL)
+            schemes.append(ReductionScheme.GENERAL)
         if not schemes:
             raise ValueError(
                 "System doesn't have the right number of variables for translation")
@@ -250,7 +205,7 @@ class NumericTranslation(object):
         Work out how the reduced system's variables correspond to the reduction's matrices
         under one scheme, or return None if they cannot.
         '''
-        if scheme == Scheme.PARAMETER:
+        if scheme == ReductionScheme.PARAMETER:
             source = self.translator
             # The reduced system carries no auxiliaries, and its variables line up
             # one-for-one with the columns of V_n -- the new independent variable among
@@ -260,7 +215,7 @@ class NumericTranslation(object):
             return (list(self.system.variables), source, [],
                     list(self.reduced.variables), False)
 
-        if scheme == Scheme.DEP_VAR:
+        if scheme == ReductionScheme.DEP_VAR:
             source = _dep_var_translator(self.system, self.translator)
             acted = [v for v in self.system.variables if v != self.system.indep_var]
         else:
@@ -630,7 +585,7 @@ class NumericTranslation(object):
         >>> autonomous = NumericTranslation(system, translator,
         ...                                 translator.translate_general(system))
         >>> autonomous.scheme
-        Scheme.GENERAL
+        ReductionScheme.GENERAL
         >>> autonomous.auxiliary_growth_rates()
         [0, 0, 0]
         >>> autonomous.auxiliaries_are_constant
@@ -654,14 +609,14 @@ class NumericTranslation(object):
         [(2*y0*y1 - 1)/(3*t)]
         '''
         if self._growth_rates is None:
-            if self.scheme == Scheme.PARAMETER:
+            if self.scheme == ReductionScheme.PARAMETER:
                 # The parameter scheme normalises only constants, so its auxiliaries never
                 # move, and the reduced system does not carry them to ask.
                 self._growth_rates = [sympy.Integer(0)] * self.r
             else:
                 if self.carries_auxiliaries:
                     carrier, auxiliaries = self.reduced, self._auxiliaries
-                elif self.scheme == Scheme.GENERAL:
+                elif self.scheme == ReductionScheme.GENERAL:
                     carrier = self.translator.translate_general(self.system,
                                                                  include_aux_vars=True)
                     auxiliaries = [v for v in carrier.variables

@@ -1,9 +1,56 @@
 
+import enum
+
 import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
+
+
+class ReductionScheme(str, enum.Enum):
+    '''
+    Which of the three reductions of Hubert & Labahn a system was put through.
+
+    The scheme decides how many variables the reduced system has, whether it carries
+    auxiliary variables, and therefore what has to be known to translate values back.  It
+    is recorded rather than inferred: inferring it is only correct when
+    :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing, and calling
+    :meth:`~desr.ode_translation.ODETranslator.translate_general` on a system that
+    `translate` would have handed to another scheme is perfectly legal.
+
+    A member is a :class:`str`, so ``scheme == 'general'`` holds and a plain string may be
+    passed wherever one of these is expected.
+
+    >>> ReductionScheme.GENERAL
+    ReductionScheme.GENERAL
+    >>> ReductionScheme.GENERAL == 'general'
+    True
+    >>> print(ReductionScheme.GENERAL)
+    general
+    '''
+
+    #: The parameter scheme: the reduced system has :math:`n - r` variables and no
+    #: auxiliaries, and it is the only scheme that handles initial conditions.
+    PARAMETER = 'parameter'
+
+    #: The dependent-variable scheme, where the scaling action ignores the independent
+    #: variable.  The reduced system has :math:`n` variables.
+    DEP_VAR = 'dep_var'
+
+    #: The general scheme, which always applies.  :math:`n + 1` variables with the
+    #: auxiliaries, :math:`n - r + 1` without.
+    GENERAL = 'general'
+
+    def __str__(self):
+        # Spelled out so that the printed form is the same on every Python version: the
+        # `str` mixin's __str__ and __format__ have changed between releases.
+        return self.value
+
+    def __repr__(self):
+        # `<ReductionScheme.GENERAL: 'general'>` is the default and reads badly in docs and
+        # in error messages, which is where this mostly appears.
+        return '{}.{}'.format(type(self).__name__, self.name)
 
 #: The names a reduction may be asked to give the variables it creates.  A naming scheme is a
 #: dict over these keys; every key is optional, and an absent one takes the default for
@@ -843,17 +890,128 @@ class ODETranslator(object):
         if naming_scheme is not None:
             self.set_naming_scheme(naming_scheme)
 
+        scheme = self.scheme(system)
 
-        if self._is_translate_parameter_compatible(system=system):
+        if scheme == ReductionScheme.PARAMETER:
             return self.translate_parameter(system=system)
 
-        elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
+        if scheme == ReductionScheme.DEP_VAR:
             return self.translate_dep_var(system=system)
 
-        elif (len(system.variables) == self.scaling_matrix.shape[1]):
-            return self.translate_general(system=system,include_aux_vars=include_aux_vars)
+        return self.translate_general(system=system, include_aux_vars=include_aux_vars)
+
+    def scheme(self, system):
+        '''
+        Which reduction :meth:`translate` would use for `system`.
+
+        The three are tried in order of how much they leave intact: the parameter scheme
+        first, then the dependent-variable scheme, then the general one, which always
+        applies.  :meth:`translate` asks this and dispatches on the answer, so there is one
+        copy of the decision rather than two that can disagree.
+
+        Args:
+            system (ODESystem): The system to be reduced.
+
+        Returns:
+            ReductionScheme
+
+        Raises:
+            ValueError: if the system's variables do not match the scaling matrix at all,
+                in which case no scheme applies.
+
+        >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.scheme(system)
+        ReductionScheme.PARAMETER
+
+        Hubert & Labahn 6.6 has no parameters at all, and its clock is entangled with a
+        dependent variable, so only the general scheme applies:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> ODETranslator.from_ode_system(hl66).scheme(hl66)
+        ReductionScheme.GENERAL
+        '''
+        if self._is_translate_parameter_compatible(system=system):
+            return ReductionScheme.PARAMETER
+
+        if ((len(system.variables) == self.scaling_matrix.shape[1] + 1)
+                or (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
+            return ReductionScheme.DEP_VAR
+
+        if len(system.variables) == self.scaling_matrix.shape[1]:
+            return ReductionScheme.GENERAL
 
         raise ValueError("System doesn't have the right number of variables for translation")
+
+    def expected_variable_count(self, system, scheme=None, include_aux_vars=True):
+        '''
+        How many variables the reduction of `system` will have.
+
+        The count is scheme-dependent, with :math:`n` the number of variables of `system`
+        -- the independent variable included -- and :math:`r` the number of scaling
+        symmetries:
+
+        =========================================  =================
+        scheme                                     variables
+        =========================================  =================
+        parameter                                  :math:`n - r`
+        dependent-variable                         :math:`n`
+        general, with auxiliaries                  :math:`n + 1`
+        general, ``include_aux_vars=False``        :math:`n - r + 1`
+        =========================================  =================
+
+        Args:
+            system (ODESystem): The system to be reduced.
+            scheme (ReductionScheme, optional): The scheme that will be used.  **Pass this
+                whenever you choose the scheme yourself.**  Left out, it is inferred by
+                :meth:`scheme`, which is only the right answer when :meth:`translate` does
+                the choosing: calling :meth:`translate_general` on a system that
+                :meth:`translate` would have given to another scheme is legal, and gives a
+                different count.  Inferring where the caller had already chosen is a
+                mistake that produces a plausible wrong number rather than an error, and it
+                has been made twice in this library's history.
+            include_aux_vars (bool): Whether the auxiliaries will be kept.  Only the general
+                scheme has any, so this is ignored by the other two.
+
+        Returns:
+            int
+
+        >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> len(system.variables), translator.r
+        (9, 3)
+        >>> translator.expected_variable_count(system)
+        6
+        >>> len(translator.translate(system).variables)
+        6
+
+        The general scheme on the same system gives a different count, which is why it has
+        to be said rather than inferred:
+
+        >>> translator.expected_variable_count(system, scheme=ReductionScheme.GENERAL)
+        10
+        >>> len(translator.translate_general(system).variables)
+        10
+        >>> translator.expected_variable_count(system, scheme='general', include_aux_vars=False)
+        7
+        >>> len(translator.translate_general(system, include_aux_vars=False).variables)
+        7
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        n = len(system.variables)
+
+        if scheme == ReductionScheme.PARAMETER:
+            return n - self.r
+        if scheme == ReductionScheme.DEP_VAR:
+            return n
+        return n + 1 if include_aux_vars else n - self.r + 1
 
 
 
@@ -1892,7 +2050,8 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
 
     return extended
 
-__all__ = ['ODETranslator', 'scale_action', 'extend_rectangular_matrix']
+__all__ = ['ODETranslator', 'ReductionScheme', 'scale_action', 'extend_rectangular_matrix',
+           'NAMING_SCHEME_KEYS', 'PARAMETER_SCHEME_NAMES', 'GENERAL_SCHEME_NAMES']
 
 if __name__ == '__main__':
     import doctest

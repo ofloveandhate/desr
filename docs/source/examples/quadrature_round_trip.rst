@@ -109,7 +109,7 @@ dropped.  We do need to pass the reduced system explicitly, since it was made wi
 
     >>> numeric_translation = NumericTranslation(system, translator, reduced_system)
     >>> numeric_translation.scheme
-    Scheme.GENERAL
+    ReductionScheme.GENERAL
     >>> numeric_translation.carries_auxiliaries
     False
     >>> numeric_translation.r
