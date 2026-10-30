@@ -5,15 +5,38 @@
 # declaring them above a distutils import would have had no effect whatsoever.
 from setuptools import setup
 
+import ast
+import pathlib
+
+
+def read_version():
+    """The version from desr/__init__.py, which is the one place it is written.
+
+    Parsed rather than imported: importing the package here would require sympy and
+    python-flint to be installed before the install that provides them.
+    """
+    source = pathlib.Path(__file__).parent / 'desr' / '__init__.py'
+    tree = ast.parse(source.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if getattr(target, 'id', None) == '__version__':
+                    return ast.literal_eval(node.value)
+    raise RuntimeError('no __version__ in {}'.format(source))
+
+
 setup(
     name='desr',
-    version='1.1.0',
+    version=read_version(),
     packages=['desr',],
     author='Richard Tanburn, Silviana Amethyst',
     author_email='richard.tanburn@gmail.com, amethyst@mpi-cbg.de',
     description='Simplify ordinary differential equations by finding scaling symmetries.',
     license='Apache License Version 2.0',
     long_description=open('README.md').read(),
+    # Without this the Markdown README is served as plain text by any index that renders
+    # long_description, since the default is text/plain.
+    long_description_content_type='text/markdown',
     install_requires=[
         'sympy',
         'python-flint >= 0.7',
