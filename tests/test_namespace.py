@@ -39,6 +39,39 @@ class TestPublicNames(TestCase):
         self.assertTrue(issubclass(ConflictingKnownValues, ValueError))
         self.assertTrue(callable(NumericTranslation))
 
+    def test_the_version_is_written_in_exactly_one_place(self):
+        '''
+        `desr.__version__` is the source; `setup.py` parses it and `docs/source/conf.py`
+        imports it.  They had drifted before this -- setup.py said 1.1.0 while the docs
+        said version 1, release 0 -- so the agreement is asserted rather than trusted.
+        '''
+        import ast
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).parent.parent
+        self.assertRegex(desr.__version__, r'^\d+\.\d+')
+
+        # setup.py must read it from the package, not carry its own literal.
+        setup_source = (root / 'setup.py').read_text()
+        self.assertIn('read_version()', setup_source)
+        self.assertNotRegex(setup_source, r"version\s*=\s*['\"]\d")
+
+        # And the parse setup.py performs must agree with the imported value.
+        tree = ast.parse((root / 'desr' / '__init__.py').read_text())
+        parsed = next(ast.literal_eval(node.value)
+                      for node in tree.body if isinstance(node, ast.Assign)
+                      for target in node.targets
+                      if getattr(target, 'id', None) == '__version__')
+        self.assertEqual(desr.__version__, parsed)
+
+        # conf.py must derive both of its strings from the package.
+        conf_source = (root / 'docs' / 'source' / 'conf.py').read_text()
+        self.assertIn('_desr.__version__', conf_source)
+        self.assertNotRegex(conf_source, r"^release\s*=\s*u?['\"]\d", )
+        self.assertFalse(re.search(r"^version\s*=\s*u?['\"]\d", conf_source,
+                                   flags=re.MULTILINE))
+
     def test_the_reduction_scheme_is_eager_because_it_needs_no_numpy(self):
         '''
         `ReductionScheme` names the three reductions, which is symbolic business, so it

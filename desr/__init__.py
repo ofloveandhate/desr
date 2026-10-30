@@ -16,6 +16,13 @@ The submodules remain available for the rest -- :mod:`desr.matrix_normal_forms` 
 integer matrix algorithms, :mod:`desr.sympy_helper` for the parsing convention,
 :mod:`desr.tex_tools` for LaTeX.
 '''
+
+#: The one place the version is written.  `setup.py` reads it from here without importing
+#: the package, and `docs/source/conf.py` reads it too, so a bump happens once and cannot
+#: leave the three of them disagreeing -- which is what had happened: `setup.py` said
+#: 1.1.0 while the docs said version 1, release 0.
+__version__ = '2.0.0'
+
 from . import ode_system
 from . import matrix_normal_forms
 from . import chemical_reaction_network
