@@ -32,7 +32,7 @@ def run_symmetry_reduction(sys):
 
     print('Dimension of scaling action: ', translator.r)
     # Print invariants
-    print('Invariants: ', translator.invariants())
+    print('Invariants: ', translator.invariant_monomials())
     print('Substitutions: ', translator.translate_parameter_substitutions(system=sys))
 
     # Print translated system

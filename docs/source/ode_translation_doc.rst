@@ -55,10 +55,16 @@ Extending from a set of Invariants
 Useful Attributes
 -----------------
 
-.. automethod:: desr.ode_translation.ODETranslator.invariants
+.. automethod:: desr.ode_translation.ODETranslator.invariant_monomials
     :noindex:
 
-.. automethod:: desr.ode_translation.ODETranslator.auxiliaries
+.. automethod:: desr.ode_translation.ODETranslator.invariant_names
+    :noindex:
+
+.. automethod:: desr.ode_translation.ODETranslator.auxiliary_monomials
+    :noindex:
+
+.. automethod:: desr.ode_translation.ODETranslator.auxiliary_names
     :noindex:
 
 .. automethod:: desr.ode_translation.ODETranslator.rewrite_rules

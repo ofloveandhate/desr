@@ -85,7 +85,7 @@ def michaelis_menten_four_variables():
         print(translator.scaling_matrix.__repr__())
 
         # Print invariants
-        print('Invariants: ', translator.invariants())
+        print('Invariants: ', translator.invariant_monomials())
 
         # Print translated result
         print('Reduced system:')
@@ -108,7 +108,7 @@ def michaelis_menten_four_variables():
         
         
         system_from_ode = ODETranslator.from_ode_system(system)
-        print('Invariants:', ', '.join(map(str, system_from_ode.invariants())))
+        print('Invariants:', ', '.join(map(str, system_from_ode.invariant_monomials())))
         
         # Now do the reduction
         reduced_system = system_from_ode.translate(system)
@@ -215,8 +215,8 @@ def michaelis_menten_two_variable(verbose=True):
         print(max_scal1.scaling_matrix.__repr__())
         
         # Print invariants
-        print('Invariants: ', max_scal1.invariants())
-        # print(',\quad '.join(map(expr_to_tex, max_scal1.invariants())))
+        print('Invariants: ', max_scal1.invariant_monomials())
+        # print(',\quad '.join(map(expr_to_tex, max_scal1.invariant_monomials())))
         
         # Print translated system
         print('Reduced system:')
@@ -227,7 +227,7 @@ def michaelis_menten_two_variable(verbose=True):
         reduced_system_km1.update_initial_conditions({'s': 's_0'})
         max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
         
-        print('Invariants: ', max_scal2.invariants())
+        print('Invariants: ', max_scal2.invariant_monomials())
         print('Hermite multiplier', max_scal2.herm_mult.__repr__())
 
 
@@ -236,7 +236,7 @@ def michaelis_menten_two_variable(verbose=True):
         max_scal2.multiplier_add_columns(2, -1, 1)
         max_scal2.multiplier_add_columns(4, -1, -1)
         
-        print('Invariants: ', max_scal2.invariants())
+        print('Invariants: ', max_scal2.invariant_monomials())
         print('Hermite multiplier', max_scal2.herm_mult.__repr__())
         
         # Print translated system
@@ -249,7 +249,7 @@ def michaelis_menten_two_variable(verbose=True):
         max_scal2.multiplier_add_columns(2, -1, -1)
         
         
-        print('Invariants: ', max_scal2.invariants())
+        print('Invariants: ', max_scal2.invariant_monomials())
         # print(max_scal2.herm_mult.__repr__())
         
         # Print translated system
@@ -281,8 +281,8 @@ def michaelis_menten_two_variable(verbose=True):
         
         # # Print invariants
         # print('Hermite multiplier', max_scal1.herm_mult.__repr__())
-        # print('Invariants: ', max_scal1.invariants())
-        # # print(',\quad '.join(map(expr_to_tex, max_scal1.invariants())))
+        # print('Invariants: ', max_scal1.invariant_monomials())
+        # # print(',\quad '.join(map(expr_to_tex, max_scal1.invariant_monomials())))
         
         # # Print translated system
         # print('Reduced system:')
@@ -302,7 +302,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Scaling matrix:',translator.scaling_matrix.__repr__())
 
         print('Hermite multiplier', translator.herm_mult.__repr__())
-        print('Invariants: ', translator.invariants())
+        print('Invariants: ', translator.invariant_monomials())
 
 
         print('Reduced system:')
@@ -315,7 +315,7 @@ def michaelis_menten_two_variable(verbose=True):
         translator.multiplier_add_columns(i=2, j=8, alpha=1)
         translator.multiplier_add_columns(i=4, j=8, alpha=-1)
         
-        print('Invariants: ', translator.invariants())
+        print('Invariants: ', translator.invariant_monomials())
         print('Hermite multiplier', translator.herm_mult.__repr__())
         
 
@@ -325,7 +325,7 @@ def michaelis_menten_two_variable(verbose=True):
         # translator.multiplier_add_columns(i=0, j=8, alpha=1)
         
         # print('Hermite multiplier', translator.herm_mult.__repr__())
-        # print('Invariants: ', translator.invariants())
+        # print('Invariants: ', translator.invariant_monomials())
         
         print('W:', translator.inv_herm_mult.__repr__())
         # Print translated system
@@ -372,7 +372,7 @@ def michaelis_menten_two_variable(verbose=True):
         print('Scaling matrix:',max_scal2.scaling_matrix.__repr__())
         print('Variable order: ', reduced_system_km1.symbols)
         print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        print('Invariants: ', max_scal2.invariants())
+        print('Invariants: ', max_scal2.invariant_monomials())
         print('W:', max_scal2.inv_herm_mult.__repr__())
         print('substitutions:',max_scal2.translate_parameter_substitutions(reduced_system_km1))
         print('Reduced system:', max_scal2.translate(reduced_system_km1))#.to_tex()
@@ -385,7 +385,7 @@ def michaelis_menten_two_variable(verbose=True):
         # max_scal2.multiplier_add_columns(i=4, j=8, alpha=-1)
         
         # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        # print('Invariants: ', max_scal2.invariants())
+        # print('Invariants: ', max_scal2.invariant_monomials())
         
         
         # # print('\nMichaelis-Menten Reparametrisation 2')
@@ -394,7 +394,7 @@ def michaelis_menten_two_variable(verbose=True):
         # # max_scal2.multiplier_add_columns(i=0, j=8, alpha=1)
         
         # # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        # # print('Invariants: ', max_scal2.invariants())
+        # # print('Invariants: ', max_scal2.invariant_monomials())
         
         # print('W:', max_scal2.inv_herm_mult.__repr__())
 
@@ -425,7 +425,7 @@ def michaelis_menten_two_variable(verbose=True):
 
         translator = ODETranslator.from_ode_system(reduced_system_l)
 
-        # print translator.invariants()
+        # print translator.invariant_monomials()
         # Scale t correctly to t/t_C = k_1 L t
         translator.multiplier_add_columns(2, -1, 1)
         # Scale s correctly to s / s_0
@@ -441,7 +441,7 @@ def michaelis_menten_two_variable(verbose=True):
         translator.multiplier_add_columns(6, -1, -1)
         # Find sigma = s_0 / K_m
 
-        print('invariants:', translator.invariants())
+        print('invariants:', translator.invariant_monomials())
 
         # silviana says: i dislike that these are hardcoded.  these should be computed.
         print('We now have:')

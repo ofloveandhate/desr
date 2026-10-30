@@ -41,7 +41,7 @@ numeric = NumericTranslation(system, translator, reduced)
 
 t, z1, z2 = system.symbols
 x0 = with_aux.symbols[1]
-y0, y1 = numeric.invariant_variables
+y0, y1 = numeric.invariant_names
 
 start_time, final_time = 1.0, 2.0
 initial_state = [0.5, 0.2]

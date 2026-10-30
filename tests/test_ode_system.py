@@ -180,7 +180,7 @@ class TestODESystemScaling(TestCase):
         # of the reduced system -- not dependents whose equation says zero.  They are also
         # the auxiliaries, which is a separate fact and recorded separately.
         self.assertEqual(('x0', 'x1'), tuple(map(str, translated.parameters)))
-        self.assertEqual(('x0', 'x1'), tuple(map(str, translated.auxiliary_variables)))
+        self.assertEqual(('x0', 'x1'), tuple(map(str, translated.auxiliary_names)))
         self.assertEqual((), translated.conserved_variables)
         self.assertEqual({'y0': 'y0/t', 'y1': 'y1*(-y0*y1 + y0)/t'},
                          {str(v): str(translated.derivative_dict[v])
@@ -228,7 +228,7 @@ class TestODESystemScaling(TestCase):
         t, n, p = named['t'], named['n'], named['p']
         K, d, h, k, r, s = (named[x] for x in ('K', 'd', 'h', 'k', 'r', 's'))
 
-        self.assertTupleEqual(tuple(max_scal.invariants()),
+        self.assertTupleEqual(tuple(max_scal.invariant_monomials()),
                               (d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
 
         def as_choice(monomials):
@@ -243,12 +243,12 @@ class TestODESystemScaling(TestCase):
 
         # Choose a new invariant
         max_scal2 = max_scal.extend_from_invariants(as_choice([r*t, h*p/d]))
-        self.assertTupleEqual(tuple(max_scal2.invariants()),
+        self.assertTupleEqual(tuple(max_scal2.invariant_monomials()),
                               (r*t, h*p/d, h*s/k, k*t/h, n/K, h*p/K))
 
         # This should work even if we move the time about
         max_scal3 = max_scal.extend_from_invariants(as_choice([h*p/d]))
-        self.assertTupleEqual(tuple(max_scal3.invariants()),
+        self.assertTupleEqual(tuple(max_scal3.invariant_monomials()),
                               (h*p/d, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
 
 

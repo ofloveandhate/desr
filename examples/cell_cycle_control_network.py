@@ -113,8 +113,8 @@ print('Scaling matrix size',translator.scaling_matrix.shape)
 
 print('\nHermite multiplier', translator.herm_mult.__repr__())
 
-print('\nInvariants: ', translator.invariants())
-print(f'{translator.invariants().shape} invariants')
+print('\nInvariants: ', translator.invariant_monomials())
+print(f'{translator.invariant_monomials().shape} invariants')
 
 print('\nsubstitutions:',translator.translate_parameter_substitutions(system))
 

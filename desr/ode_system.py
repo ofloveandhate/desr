@@ -76,7 +76,7 @@ class ODESystem(object):
     not vary at all, name it in `parameters` or call
     :meth:`~desr.ode_system.ODESystem.make_parameter`.  Both print as `0`, so only the
     classification tells them apart -- see
-    :meth:`~desr.ode_translation.ODETranslator.variable_kinds`.
+    :meth:`~desr.ode_translation.ODETranslator.symbol_kinds`.
 
     Args:
         variables (tuple of sympy.Symbol): Ordered tuple of symbols.  The argument keeps its
@@ -93,14 +93,14 @@ class ODESystem(object):
             :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing.
         num_scaling_symmetries (int, optional): For a reduced system, the :math:`r` scaling
             symmetries that were reduced away.
-        auxiliary_variables (iter of sympy.Symbol, optional): For a reduced system, which of
+        auxiliary_names (iter of sympy.Symbol, optional): For a reduced system, which of
             its symbols are auxiliaries -- normalised directions, free to be set to
             anything.  Also stored rather than inferred: auxiliary-ness is a fact about
             which block of the Hermite multiplier a symbol came from, and nothing in the
             reduced system's own equations records it.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_variables=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -115,7 +115,7 @@ class ODESystem(object):
         # What a reduced system cannot re-derive about itself, and so must carry.
         self._scheme = scheme
         self._num_scaling_symmetries = num_scaling_symmetries
-        self._auxiliary_variables = tuple(auxiliary_variables or ())
+        self._auxiliary_names = tuple(auxiliary_names or ())
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
@@ -184,7 +184,7 @@ class ODESystem(object):
                            is_reduced=self.is_reduced, same_units=self._requires_same_unit,
                            scheme=self._scheme,
                            num_scaling_symmetries=self._num_scaling_symmetries,
-                           auxiliary_variables=self._auxiliary_variables)
+                           auxiliary_names=self._auxiliary_names)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
@@ -407,7 +407,7 @@ class ODESystem(object):
         A conserved dependent and a parameter both print as `0` or are absent from the
         equations, so nothing in the printed system tells them apart.  What does is the
         classification: see :attr:`~parameters` and
-        :meth:`~desr.ode_translation.ODETranslator.variable_kinds`.
+        :meth:`~desr.ode_translation.ODETranslator.symbol_kinds`.
 
         Returns:
             tuple: The conserved dependents, in symbol order.
@@ -447,7 +447,7 @@ class ODESystem(object):
         return self._num_scaling_symmetries
 
     @property
-    def auxiliary_variables(self):
+    def auxiliary_names(self):
         '''
         The symbols that are auxiliaries: normalised directions, free to take any value.
 
@@ -464,7 +464,7 @@ class ODESystem(object):
         Returns:
             tuple: The auxiliaries, in symbol order.
         '''
-        return self._auxiliary_variables
+        return self._auxiliary_names
 
     def is_auxiliary(self, variable):
         '''
@@ -477,7 +477,7 @@ class ODESystem(object):
         '''
         if isinstance(variable, str):
             variable = sympy.Symbol(variable)
-        return variable in self._auxiliary_variables
+        return variable in self._auxiliary_names
 
     @property
     def derivatives(self):
@@ -1016,8 +1016,8 @@ class ODESystem(object):
         # parameter with no equation keeps its old name.  Keeping both is what stops it
         # being dropped instead; see ODESystem.subs' note on renaming an equation-less
         # parameter.
-        extant_vars |= set(self._auxiliary_variables)
-        extant_vars |= {to_sub.get(aux, aux) for aux in self._auxiliary_variables}
+        extant_vars |= set(self._auxiliary_names)
+        extant_vars |= {to_sub.get(aux, aux) for aux in self._auxiliary_names}
 
         for v in variables_to_inspect:
 
@@ -1040,9 +1040,9 @@ class ODESystem(object):
                                 is_reduced = self.is_reduced,
                                 scheme=self._scheme,
                                 num_scaling_symmetries=self._num_scaling_symmetries,
-                                auxiliary_variables=[
+                                auxiliary_names=[
                                     aux if aux in new_vars else to_sub.get(aux)
-                                    for aux in self._auxiliary_variables
+                                    for aux in self._auxiliary_names
                                     if aux in new_vars or to_sub.get(aux) in new_vars])
 
         subs_system._variable_sanity_check()

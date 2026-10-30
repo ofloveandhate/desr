@@ -193,7 +193,7 @@ def main():
 
         translator = ODETranslator(max_scal)
         print('Hermite multiplier:\n{}\n'.format(translator.herm_mult))
-        print('Invariants of the system:\n{}\n'.format(translator.invariants(system.symbols)))
+        print('Invariants of the system:\n{}\n'.format(translator.invariant_monomials(system.symbols)))
         print('Substitutions:',translator.translate_parameter_substitutions(system))
 
         reduced = translator.translate(system)

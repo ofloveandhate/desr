@@ -40,7 +40,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
 
 Inspect the scaling invariants:
 
-    >>> print('Invariants: ', max_scal1.invariants())
+    >>> print('Invariants: ', max_scal1.invariant_monomials())
     Invariants:  Matrix([[k_m1/k_2, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
 
 Finding the reduced system is also easy.
@@ -72,7 +72,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator
     >>> original_system_reorder.symbols
     (k_1, k_m1, k_2, t, C, E, P, S)
     >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
-    >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
+    >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariant_monomials())))
     Invariants: k_2/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1
 
 Now we can reduce to find another, equivalent system.
@@ -140,7 +140,7 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
 :meth:`~desr.ode_translation.ODETranslator.translate` will use the dependent reduction scheme implemented in
 :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`.
 
-    >>> max_scal2.invariants()
+    >>> max_scal2.invariant_monomials()
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate(original_system)
     dt/dt = 1
@@ -155,7 +155,7 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
 Here, :code:`x0` and :code:`x1` are auxiliary variables, which can be fixed at any value at all.
 They are reported as *parameters* because each is a monomial in the original parameters alone
 and so cannot vary; being auxiliaries is a separate fact, recorded in
-:attr:`~desr.ode_system.ODESystem.auxiliary_variables`.
+:attr:`~desr.ode_system.ODESystem.auxiliary_names`.
 The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
 

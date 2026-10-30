@@ -83,7 +83,7 @@ Optionally, observe some properties.  First, the scaling matrix :math:`A`:
 
 The corresponding scaling invariants:
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, k_1*s_0*t, s/s_0, c/s_0]])
 
 These don't match those from Murray, but they are very close.   We'll recover it next.
@@ -120,7 +120,7 @@ Do some column operations on the Hermite multiplier
 
 Optionally, see the invariants and substitutions
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, e_0*k_1*t, s/s_0, c/e_0]])
 
 We have substitutions to make.  Note that many get normalized to :math:`1`.

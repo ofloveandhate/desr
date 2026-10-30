@@ -115,16 +115,16 @@ class TestExample66(TestCase):
         # paper's y2 multiplied by y1, which is why the documentation used to reach the
         # paper's answer only after a hand-applied multiplier_add_columns(2, 1, -1).
         translator = ODETranslator.from_ode_system(self.system)
-        self.assertEqual(tuple(translator.invariants()), self.INVARIANTS)
+        self.assertEqual(tuple(translator.invariant_monomials()), self.INVARIANTS)
 
     def test_the_auxiliary_variable_matches(self):
         translator = ODETranslator.from_ode_system(self.system)
-        self.assertEqual(tuple(translator.auxiliaries()), self.AUXILIARIES)
+        self.assertEqual(tuple(translator.auxiliary_monomials()), self.AUXILIARIES)
 
     def test_no_hand_applied_column_operations_are_needed(self):
         # The point of the change: the paper's answer should be what desr says by default.
         translator = ODETranslator.from_ode_system(self.system)
-        self.assertEqual(tuple(translator.auxiliaries()) + tuple(translator.invariants()),
+        self.assertEqual(tuple(translator.auxiliary_monomials()) + tuple(translator.invariant_monomials()),
                          self.AUXILIARIES + self.INVARIANTS)
 
 

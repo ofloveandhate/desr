@@ -799,11 +799,11 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.auxiliaries(), translator.invariants()
+        >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t*z1**2]]), Matrix([[t*z1**3, z1**2*z2/t]]))
         >>> translator.multiplier_add_columns(2, 1, -1)
         >>> translator.multiplier_add_columns(0, 2, -1)
-        >>> translator.auxiliaries(), translator.invariants()
+        >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t**3*z1**3/z2]]), Matrix([[t*z1**3, z2/(t**2*z1)]]))
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
@@ -1182,27 +1182,27 @@ class ODETranslator(object):
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+        invariant_names = _names_for(scheme['dependents'], num_inv_var,
                                          self._new_indices_start_at, 'invariants')
 
         # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+        auxiliary_names = _new_symbols(scheme['auxiliaries'], num_aux_var,
                                            self._new_indices_start_at)
 
         system_var_no_indep = list(system.symbols)
         system_var_no_indep.pop(system.independent_variable_index)
-        to_sub = dict(zip(system_var_no_indep, scale_action(invariant_variables, reduced_scaling.inv_herm_mult_d)))
+        to_sub = dict(zip(system_var_no_indep, scale_action(invariant_names, reduced_scaling.inv_herm_mult_d)))
         system_derivatives = _rates_of_change(system)
         # fywd = F(y^(W_d)) in Hubert Labahn
         fywd = sympy.Matrix([(f / v).subs(to_sub, simultaneous=True).expand() for v, f in
                             zip(system.symbols, system_derivatives)]).T
         fywd.col_del(system.independent_variable_index)
-        dydt = _scaled_rates(invariant_variables, fywd * reduced_scaling.herm_mult_n)
-        dxdt = _scaled_rates(auxiliary_variables, fywd * reduced_scaling.herm_mult_i)
+        dydt = _scaled_rates(invariant_names, fywd * reduced_scaling.herm_mult_n)
+        dxdt = _scaled_rates(auxiliary_names, fywd * reduced_scaling.herm_mult_i)
 
-        new_variables = [system.independent_variable] + list(auxiliary_variables) + list(invariant_variables)
+        new_variables = [system.independent_variable] + list(auxiliary_names) + list(invariant_names)
 
         # The dependent-variable scheme's columns are indexed by the symbols other than the
         # independent variable, so that is what the monomials are built from -- and why none
@@ -1211,7 +1211,7 @@ class ODETranslator(object):
         monomials = (list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_i))
                      + list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_n)))
         rates = _classify_reduced_derivatives(
-            list(auxiliary_variables) + list(invariant_variables), monomials,
+            list(auxiliary_names) + list(invariant_names), monomials,
             list(dxdt) + list(dydt), dynamic)
         new_derivatives = [sympy.sympify(1)] + rates
 
@@ -1219,7 +1219,7 @@ class ODETranslator(object):
                             indep_var=system.independent_variable, is_reduced=True,
                             scheme=ReductionScheme.DEP_VAR,
                             num_scaling_symmetries=self.r,
-                            auxiliary_variables=auxiliary_variables)
+                            auxiliary_names=auxiliary_names)
         return _rename_indep_var(reduced, scheme['independent'])
 
     def translate_general(self, system, include_aux_vars = True):
@@ -1257,7 +1257,7 @@ class ODETranslator(object):
         The auxiliaries are recorded whatever kind they turn out to be:
 
         >>> reduced = translator.translate_general(system=system)
-        >>> reduced.auxiliary_variables
+        >>> reduced.auxiliary_names
         (x0, x1, x2)
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
@@ -1268,37 +1268,37 @@ class ODETranslator(object):
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+        invariant_names = _names_for(scheme['dependents'], num_inv_var,
                                          self._new_indices_start_at, 'invariants')
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
             #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
             num_aux_var = self.herm_mult_i.shape[1]
-            auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+            auxiliary_names = _new_symbols(scheme['auxiliaries'], num_aux_var,
                                                self._new_indices_start_at)
 
-        to_sub = dict(zip(system.symbols, scale_action(invariant_variables, self.inv_herm_mult_d)))
+        to_sub = dict(zip(system.symbols, scale_action(invariant_names, self.inv_herm_mult_d)))
         system_derivatives = _rates_of_change(system)
 
         # fywd = F(y^(W_d)) in Hubert Labahn
         fywd = sympy.Matrix([(system.independent_variable * f / v).subs(to_sub, simultaneous=True).expand() for v, f in
                             zip(system.symbols, system_derivatives)]).T
-        dydt = _scaled_rates(invariant_variables, fywd * self.herm_mult_n,
+        dydt = _scaled_rates(invariant_names, fywd * self.herm_mult_n,
                              divide_by=system.independent_variable)
 
         if include_aux_vars:
-            dxdt = _scaled_rates(auxiliary_variables, fywd * self.herm_mult_i,
+            dxdt = _scaled_rates(auxiliary_names, fywd * self.herm_mult_i,
                                  divide_by=system.independent_variable)
 
         dynamic = set(system.dependents) | {system.independent_variable}
 
-        # scale_action against system.symbols, not self.auxiliaries()/self.invariants():
+        # scale_action against system.symbols, not the *_monomials() accessors:
         # those go through _validate_variables and fall back to placeholder x_i and y_i
         # names when symbols_domain is unset, which would pair each name with somebody
         # else's monomial.
         if include_aux_vars:
-            named = list(auxiliary_variables) + list(invariant_variables)
+            named = list(auxiliary_names) + list(invariant_names)
             monomials = (list(scale_action(system.symbols, self.herm_mult_i))
                          + list(scale_action(system.symbols, self.herm_mult_n)))
             rates = list(dxdt) + list(dydt)
@@ -1306,7 +1306,7 @@ class ODETranslator(object):
             assert len(new_variables) == len(rates) + 1 == len(system.symbols) + 1
         else:
             # don't include the aux vars.
-            named = list(invariant_variables)
+            named = list(invariant_names)
             monomials = list(scale_action(system.symbols, self.herm_mult_n))
             rates = list(dydt)
             new_variables = [system.independent_variable] + named
@@ -1320,7 +1320,7 @@ class ODETranslator(object):
                             indep_var=system.independent_variable, is_reduced=True,
                             scheme=ReductionScheme.GENERAL,
                             num_scaling_symmetries=self.r,
-                            auxiliary_variables=auxiliary_variables if include_aux_vars else ())
+                            auxiliary_names=auxiliary_names if include_aux_vars else ())
         return _rename_indep_var(reduced, scheme['independent'])
 
     def _is_translate_parameter_compatible(self, system):
@@ -1771,40 +1771,153 @@ class ODETranslator(object):
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
         return variables
 
-    def invariants(self, variables=None):
+    def invariant_monomials(self, variables=None):
         '''
-        The invariants of the system, as determined by :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`.
+        The scaling invariants, as monomials in the original symbols, read off
+        :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`.
+
+        **Monomials, and the name says so**, because that is what a scaling reduction
+        produces and the distinction matters when reading a reduced system.  Each column of
+        :math:`V_n` is an exponent vector, so each invariant is a Laurent monomial --
+        :math:`d/K`, :math:`k t / h` -- never a sum.  That is not a limitation of this
+        implementation but what makes the reduction work: Hubert & Labahn's result is that
+        these monomials *generate*, so every rational invariant of the scaling action is a
+        rational function of them.  A quantity like :math:`E + C` may well be invariant, but
+        it is expressed **through** these generators rather than appearing among them.
+
+        The companion is :meth:`invariant_names`, the names the reduction gives these
+        monomials -- :math:`\\kappa_0`, :math:`\\tau`, :math:`\\nu_0`.  Monomial and name are
+        the two faces of one invariant, and :meth:`named_symbols` pairs them up.
+
+        Args:
+            variables (iter of sympy.Symbol, optional): The symbols to write the monomials
+                in.  Defaults to :attr:`~desr.ode_translation.ODETranslator.symbols_domain`,
+                and failing that to placeholder :math:`y_i`.
 
         Returns:
-            tuple: The invariants of the system, in terms of :attr:`~desr.ode_translation.ODETranslator.symbols_domain` if not :code:`None`.
-                Otherwise, use :code:`variables` and failing that use :math:`y_i`.
+            sympy.Matrix: A :math:`1 \\times (n - r)` row of monomials, in the column order
+                of :math:`V_n` -- so it reads directly against the scaling matrix.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.invariants()
+        >>> translator.invariant_monomials()
         Matrix([[d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K]])
         '''
         variables = self._validate_variables(variables, self.n, 'y', True)
         return scale_action(variables, self.herm_mult_n)
 
-    def auxiliaries(self, variables=None):
+    def invariant_names(self, system=None, scheme=None):
         '''
-        The auxiliary variables of the system, as determined by :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.
+        The names the reduction gives its invariants, in the same order as
+        :meth:`invariant_monomials`.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`named_symbols`.
 
         Returns:
-            tuple: The auxiliary variables of the system,
-                in terms of :attr:`~desr.ode_translation.ODETranslator.symbols_domain` if not :code:`None`.
-                Otherwise, use :code:`variables` and failing that use :math:`x_i`.
+            tuple of sympy.Symbol: Names -- :math:`\\kappa_0`, :math:`\\tau`,
+                :math:`\\nu_0` -- as sympy symbols, not strings.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.auxiliaries()
+        >>> translator.invariant_names(system)
+        (kappa0, kappa1, kappa2, tau, nu0, nu1)
+        >>> translator.invariant_monomials()
+        Matrix([[d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K]])
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        count = self.herm_mult_n.shape[1]
+
+        if scheme == ReductionScheme.PARAMETER:
+            # The columns of V_n run (parameter invariants, the clock, the dependents), and
+            # the reduced system's symbols are built in that order.
+            variable_map = self.variable_map(system)
+            names = (list(self._new_constants(system))
+                     + [variable_map[system.independent_variable]]
+                     + [variable_map[v] for v in system.dependents])
+        else:
+            naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
+            names = _names_for(naming['dependents'], count,
+                               self._new_indices_start_at, 'invariants')
+
+        if len(names) != count:
+            raise ValueError('the {} scheme names {} invariants but there are {}'.format(
+                scheme, len(names), count))
+        return tuple(names)
+
+    def auxiliary_monomials(self, variables=None):
+        '''
+        The auxiliaries, as monomials in the original symbols, read off
+        :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.
+
+        Monomials for the same reason as :meth:`invariant_monomials`: each column of
+        :math:`V_i` is an exponent vector.  These are the :math:`r` normalised directions --
+        the reduction is free to set each to any value, and the parameter scheme sets them
+        all to 1 and discards them.
+
+        The companion is :meth:`auxiliary_names`.
+
+        Args:
+            variables (iter of sympy.Symbol, optional): The symbols to write the monomials
+                in.  Defaults to :attr:`~desr.ode_translation.ODETranslator.symbols_domain`,
+                and failing that to placeholder :math:`x_i`.
+
+        Returns:
+            sympy.Matrix: A :math:`1 \\times r` row of monomials, in the column order of
+                :math:`V_i`.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.auxiliary_monomials()
         Matrix([[h/k, K, K/h]])
         '''
         variables = self._validate_variables(variables, self.n, 'x', True)
         return scale_action(variables, self.herm_mult_i)
+
+    def auxiliary_names(self, system=None, scheme=None):
+        '''
+        The names the reduction gives its auxiliaries, in the same order as
+        :meth:`auxiliary_monomials`.
+
+        Empty under the parameter scheme, which normalises its auxiliaries to 1 and keeps
+        none of them, so there is nothing to name.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`named_symbols`.
+
+        Returns:
+            tuple of sympy.Symbol
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.auxiliary_names(system, scheme='general')
+        (x0, x1, x2)
+        >>> translator.auxiliary_names(system, scheme='parameter')
+        ()
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        if scheme == ReductionScheme.PARAMETER:
+            return ()
+
+        naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
+        return tuple(_new_symbols(naming['auxiliaries'], self.herm_mult_i.shape[1],
+                                  self._new_indices_start_at))
 
     def _dynamic_rows(self, system):
         '''
@@ -1847,12 +1960,12 @@ class ODETranslator(object):
                 kinds.append('parameter')
         return kinds
 
-    def variable_kinds(self, system, scheme=None, include_aux_vars=True):
+    def symbol_kinds(self, system, scheme=None, include_aux_vars=True):
         '''
         What kind of symbol each variable of the reduced system is.
 
         A dict over **every** variable the reduction produces, mapping it to one of four
-        kinds.  The keys are the same as :meth:`named_variables`', so the two join: one
+        kinds.  The keys are the same as :meth:`named_symbols`', so the two join: one
         says what a symbol *means*, the other says what it *is*.
 
         - ``'independent'`` -- the variable to integrate against.  There is always exactly
@@ -1890,12 +2003,12 @@ class ODETranslator(object):
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.variable_kinds(system)
+        >>> translator.symbol_kinds(system)
         {kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', tau: 'independent', nu0: 'dependent', nu1: 'dependent'}
 
         Under the general scheme the auxiliaries appear, and `t` is kept as the clock:
 
-        >>> translator.variable_kinds(system, scheme='general')
+        >>> translator.symbol_kinds(system, scheme='general')
         {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
 
         Which is what the reduced system turns out to have:
@@ -1909,12 +2022,12 @@ class ODETranslator(object):
         >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         >>> hl = ODETranslator.from_ode_system(hl66)
-        >>> hl.variable_kinds(hl66)
+        >>> hl.symbol_kinds(hl66)
         {t: 'independent', x0: 'auxiliary', y0: 'dependent', y1: 'dependent'}
         >>> hl.indep_var_invariant(hl66) is None
         True
         '''
-        names = list(self.named_variables(system, scheme, include_aux_vars))
+        names = list(self.named_symbols(system, scheme, include_aux_vars))
         return dict(zip(names, self._kind_by_variable(system, scheme, include_aux_vars)))
 
     def _kind_by_variable(self, system, scheme=None, include_aux_vars=True):
@@ -1975,10 +2088,10 @@ class ODETranslator(object):
                 than a :exc:`KeyError`.
 
         Private: :meth:`parameter_invariants` and :meth:`dependent_invariants` are the two
-        groups, and :meth:`invariant_kinds` is the per-symbol answer, so a third public way
+        groups, and :meth:`symbol_kinds` is the per-symbol answer, so a third public way
         to ask the same question would be sprawl.
         '''
-        invariants = self.invariants(variables)
+        invariants = self.invariant_monomials(variables)
         grouped = {'parameter': [], 'independent': [], 'dependent': []}
         for column, kind in enumerate(self._kind_by_column(system)):
             grouped[kind].append(invariants[column])
@@ -2070,12 +2183,12 @@ class ODETranslator(object):
         >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         >>> translator = ODETranslator.from_ode_system(hl66)
-        >>> translator.invariants()
+        >>> translator.invariant_monomials()
         Matrix([[t*z1**3, z1**2*z2/t]])
         >>> translator.indep_var_invariant(hl66) is None
         True
         '''
-        invariants = self.invariants(variables)
+        invariants = self.invariant_monomials(variables)
         indep_row = system.independent_variable_index
         dependent_rows = [i for i, variable in enumerate(system.symbols)
                           if variable in set(system.dependents)]
@@ -2094,7 +2207,7 @@ class ODETranslator(object):
         '''
         return self._invariants_by_kind(system, variables)[kind]
 
-    def named_variables(self, system, scheme=None, include_aux_vars=True):
+    def named_symbols(self, system, scheme=None, include_aux_vars=True):
         '''
         What each variable of the reduced system stands for.
 
@@ -2104,7 +2217,7 @@ class ODETranslator(object):
         hand and want to know what one of its symbols means: an invariant is both a new
         name and the monomial that name stands for, and this is the two of them together.
 
-        :meth:`variable_kinds` is keyed the same way and says what each symbol *is*.
+        :meth:`symbol_kinds` is keyed the same way and says what each symbol *is*.
 
         Args:
             system (ODESystem): The system being reduced.
@@ -2122,7 +2235,7 @@ class ODETranslator(object):
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.named_variables(system)
+        >>> translator.named_symbols(system)
         {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
 
         So reading a reduced system needs no reconstruction of monomials:
@@ -2130,12 +2243,12 @@ class ODETranslator(object):
         >>> reduced = translator.translate(system)
         >>> reduced.parameters
         (kappa0, kappa1, kappa2)
-        >>> translator.named_variables(system)[reduced.parameters[0]]
+        >>> translator.named_symbols(system)[reduced.parameters[0]]
         d/K
 
         Under the general scheme the auxiliaries are included, and `t` maps to itself:
 
-        >>> translator.named_variables(system, scheme='general')
+        >>> translator.named_symbols(system, scheme='general')
         {t: t, x0: h/k, x1: K, x2: K/h, y0: d/K, y1: h*r/k, y2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
         '''
         if scheme is None:
@@ -2143,32 +2256,29 @@ class ODETranslator(object):
         else:
             scheme = ReductionScheme(scheme)
 
-        invariants = list(self.invariants())
+        # Built from the per-block accessors rather than repeating their naming logic, so
+        # that the pairing here cannot disagree with what invariant_names and
+        # auxiliary_names say on their own.
+        invariant_names = list(self.invariant_names(system, scheme))
+        invariant_monomials = list(self.invariant_monomials())
 
         if scheme == ReductionScheme.PARAMETER:
-            # The columns of V_n run (parameter invariants, the clock, the dependents), the
-            # same order the reduced system's variables are built in.
-            variable_map = self.variable_map(system)
-            names = (list(self._new_constants(system))
-                     + [variable_map[system.independent_variable]]
-                     + [variable_map[v] for v in system.dependents])
-            monomials = invariants
+            names, monomials = invariant_names, invariant_monomials
         else:
-            naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
-            invariant_names = _names_for(naming['dependents'], len(invariants),
-                                         self._new_indices_start_at, 'invariants')
-            auxiliaries = list(self.auxiliaries())
+            # These two schemes keep the original independent variable, which maps to
+            # itself, then the auxiliaries, then the invariants.
             if include_aux_vars:
-                auxiliary_names = _new_symbols(naming['auxiliaries'], len(auxiliaries),
-                                               self._new_indices_start_at)
+                auxiliary_names = list(self.auxiliary_names(system, scheme))
+                auxiliary_monomials = list(self.auxiliary_monomials())
             else:
-                auxiliary_names, auxiliaries = [], []
-            names = [system.independent_variable] + auxiliary_names + invariant_names
-            monomials = [system.independent_variable] + auxiliaries + invariants
+                auxiliary_names, auxiliary_monomials = [], []
+            names = ([system.independent_variable] + auxiliary_names + invariant_names)
+            monomials = ([system.independent_variable] + auxiliary_monomials
+                         + invariant_monomials)
 
         if len(names) != len(monomials):
             raise ValueError(
-                'the {} scheme names {} variables but there are {}'.format(
+                'the {} scheme names {} symbols but there are {}'.format(
                     scheme, len(names), len(monomials)))
 
         return dict(zip(names, monomials))
@@ -2331,7 +2441,7 @@ class ODETranslator(object):
         >>> ode_translator = ODETranslator(sympy.Matrix([[1, 0, 3, 0, 2, 2],
         ...                                                [0, 2, 0, 1, 0, 1],
         ...                                                [2, 0, 0, 3, 0, 0]]))
-        >>> ode_translator.invariants(variables=variables)
+        >>> ode_translator.invariant_monomials(variables=variables)
         Matrix([[y2*y3**2/(y0**3*y1), y4**3/y2**2, y4*y5**2/(y1*y2**2)]])
 
         Now we can express two new invariants, which we think are more interesting, as a matrix.
@@ -2342,7 +2452,7 @@ class ODETranslator(object):
         ...                         [0, 1, 2, 0, -1, -2]]).T
 
         >>> new_translator = ode_translator.extend_from_invariants(new_inv)
-        >>> new_translator.invariants(variables=variables)
+        >>> new_translator.invariant_monomials(variables=variables)
         Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y4**3/y2**2]])
         '''
         ## Step 1: Check we have invariants

@@ -64,7 +64,7 @@ One reduces by first making a `ODETranslator`.  One can query the properties/res
     Matrix([
     [0, -1, -1, -1, 1, 0, 0],
     [1, -1,  0,  0, 0, 1, 1]])
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, s/e_0, c/e_0]])
 
 Actually do the reduction by calling the `translate` function on the `ODETranslator` instance.
