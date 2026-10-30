@@ -175,7 +175,7 @@ class TestLineClassification(TestCase):
 
     def test_derivative_lines_become_the_system(self):
         system = ODESystem.from_tex(self.DYNAMIC)
-        self.assertEqual(set(map(str, system.dependent_variables)), {'x', 'y'})
+        self.assertEqual(set(map(str, system.dependents)), {'x', 'y'})
         self.assertEqual(set(map(str, system.parameters)), {'k_1', 'k_2', 'k_3'})
 
     def test_a_relation_among_parameters_only_is_a_constraint(self):
@@ -195,7 +195,7 @@ class TestLineClassification(TestCase):
     def test_sub_defns_substitutes_the_definition_away(self):
         tex = self.DYNAMIC + '\\\\\n' + r'z &= k_1 - x'
         system = ODESystem.from_tex(tex, sub_defns=True)
-        self.assertNotIn(sympy.Symbol('z'), system.variables)
+        self.assertNotIn(sympy.Symbol('z'), system.symbols)
 
     def test_a_definition_referring_to_another_definition_is_not_implemented(self):
         # Substitution order would decide the answer, and cycles would have to be caught.
@@ -233,7 +233,7 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
 
     def test_the_dynamic_lines_parse(self):
         system = ODESystem.from_tex(self.DERIVATIVE_LINES)
-        self.assertEqual(set(map(str, system.dependent_variables)), set(self.SPECIES))
+        self.assertEqual(set(map(str, system.dependents)), set(self.SPECIES))
 
     def test_a_fraction_inside_a_fraction_survives(self):
         # The Cdc25P line is a difference of two quotients, each with a `\left(...\right)`
@@ -247,7 +247,7 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
 
     def test_the_species_names_come_through_intact(self):
         system = ODESystem.from_tex(self.DERIVATIVE_LINES)
-        names = set(map(str, system.variables))
+        names = set(map(str, system.symbols))
         for expected in self.SPECIES + ('Cdk', 'k_wee', 'k_25', 'totalCdc25'):
             with self.subTest(name=expected):
                 self.assertIn(expected, names)
@@ -264,8 +264,8 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
     def test_the_whole_thing_with_definitions_substituted(self):
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         gone = {sympy.Symbol(n) for n in ('Cdk', 'k_25', 'k_wee', 'k_2')}
-        self.assertFalse(gone & set(system.variables))
-        self.assertEqual(set(map(str, system.dependent_variables)), set(self.SPECIES))
+        self.assertFalse(gone & set(system.symbols))
+        self.assertEqual(set(map(str, system.dependents)), set(self.SPECIES))
         # The primes are names here, so both forms of each enzyme survive as parameters.
         for expected in ('V_25prime', 'V_25primeprime', 'V_weeprime', 'V_2primeprime'):
             with self.subTest(name=expected):
@@ -275,7 +275,7 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         from desr import ODETranslator
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         translator = ODETranslator.from_ode_system(system)
-        self.assertTrue(translator.translate(system).variables)
+        self.assertTrue(translator.translate(system).symbols)
 
 
 class TestMultiLine(TestCase):

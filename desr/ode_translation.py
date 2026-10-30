@@ -1,9 +1,239 @@
 
+import enum
+
 import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
 from desr.tex_tools import matrix_to_tex
+
+
+class ReductionScheme(str, enum.Enum):
+    '''
+    Which of the three reductions of Hubert & Labahn a system was put through.
+
+    The scheme decides how many variables the reduced system has, whether it carries
+    auxiliary variables, and therefore what has to be known to translate values back.  It
+    is recorded rather than inferred: inferring it is only correct when
+    :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing, and calling
+    :meth:`~desr.ode_translation.ODETranslator.translate_general` on a system that
+    `translate` would have handed to another scheme is perfectly legal.
+
+    A member is a :class:`str`, so ``scheme == 'general'`` holds and a plain string may be
+    passed wherever one of these is expected.
+
+    >>> ReductionScheme.GENERAL
+    ReductionScheme.GENERAL
+    >>> ReductionScheme.GENERAL == 'general'
+    True
+    >>> print(ReductionScheme.GENERAL)
+    general
+    '''
+
+    #: The parameter scheme: the reduced system has :math:`n - r` variables and no
+    #: auxiliaries, and it is the only scheme that handles initial conditions.
+    PARAMETER = 'parameter'
+
+    #: The dependent-variable scheme, where the scaling action ignores the independent
+    #: variable.  The reduced system has :math:`n` variables.
+    DEP_VAR = 'dep_var'
+
+    #: The general scheme, which always applies.  :math:`n + 1` variables with the
+    #: auxiliaries, :math:`n - r + 1` without.
+    GENERAL = 'general'
+
+    def __str__(self):
+        # Spelled out so that the printed form is the same on every Python version: the
+        # `str` mixin's __str__ and __format__ have changed between releases.
+        return self.value
+
+    def __repr__(self):
+        # `<ReductionScheme.GENERAL: 'general'>` is the default and reads badly in docs and
+        # in error messages, which is where this mostly appears.
+        return '{}.{}'.format(type(self).__name__, self.name)
+
+#: The names a reduction may be asked to give the variables it creates.  A naming scheme is a
+#: dict over these keys; every key is optional, and an absent one takes the default for
+#: whichever reduction scheme runs.  The categories are the ones the invariants fall into:
+#: an invariant that is a monomial in the parameters alone, the one that carries the clock,
+#: and the ones that involve a dependent variable.  Under the general reduction scheme some
+#: of those categories are empty -- there may be no parameter invariants, and the clock may
+#: be entangled with a dependent variable, as in Hubert & Labahn 6.6 where `t z1^3` is an
+#: invariant -- and the names for them simply go unused.
+NAMING_SCHEME_KEYS = ('parameters', 'independent', 'dependents', 'auxiliaries')
+
+#: Defaults for the parameter reduction scheme: desr's own nondimensionalisation names.
+PARAMETER_SCHEME_NAMES = {'parameters': 'kappa', 'independent': 'tau', 'dependents': 'nu',
+                          'auxiliaries': 'x'}
+
+#: Defaults for the general and dependent-variable schemes: Hubert & Labahn's notation, where
+#: the auxiliaries are :math:`x` and the invariants :math:`y`, so that output can be compared
+#: with the paper directly.  `independent` is :const:`None`, meaning the independent variable
+#: keeps the name it already has.
+GENERAL_SCHEME_NAMES = {'parameters': 'kappa', 'independent': None, 'dependents': 'y',
+                        'auxiliaries': 'x'}
+
+
+def _normalise_naming_scheme(naming_scheme):
+    '''
+    Validate a naming scheme and return it as a dict, which may be partial.
+
+    Args:
+        naming_scheme (dict): A dict over some of :data:`NAMING_SCHEME_KEYS`.  :const:`None`
+            means "no preferences", and gives an empty dict.
+
+    Returns:
+        dict: The scheme, copied, with only the keys the caller actually set.
+
+    A tuple is refused.  Until 2.0 the scheme was a positional triple whose order followed
+    the variable order; the variable order changed, which would have silently re-pointed
+    every entry, so the positional form is gone rather than quietly re-read:
+
+    >>> _normalise_naming_scheme(('tau', 'nu', 'kappa'))
+    Traceback (most recent call last):
+        ...
+    ValueError: A naming scheme is a dict, not a tuple.  Write {'independent': 'tau', 'dependents': 'nu', 'parameters': 'kappa'} -- the keys are parameters, independent, dependents, auxiliaries, and any you leave out take their default.
+
+    >>> _normalise_naming_scheme({'independent': 'tau', 'dependents': ['u', 'v']}) == {
+    ...     'independent': 'tau', 'dependents': ['u', 'v']}
+    True
+
+    >>> _normalise_naming_scheme(None)
+    {}
+
+    >>> _normalise_naming_scheme({'indep': 'tau'})
+    Traceback (most recent call last):
+        ...
+    ValueError: Unknown naming scheme key 'indep'.  The keys are parameters, independent, dependents, auxiliaries.
+    '''
+    if naming_scheme is None:
+        return {}
+
+    if isinstance(naming_scheme, (tuple, list)):
+        raise ValueError(
+            "A naming scheme is a dict, not a {}.  Write {{'independent': 'tau', "
+            "'dependents': 'nu', 'parameters': 'kappa'}} -- the keys are {}, and any you "
+            "leave out take their default.".format(type(naming_scheme).__name__,
+                                                   ', '.join(NAMING_SCHEME_KEYS)))
+
+    if not isinstance(naming_scheme, dict):
+        raise ValueError('A naming scheme is a dict over the keys {}.  Got a {}.'.format(
+            ', '.join(NAMING_SCHEME_KEYS), type(naming_scheme).__name__))
+
+    for key in naming_scheme:
+        if key not in NAMING_SCHEME_KEYS:
+            raise ValueError("Unknown naming scheme key {!r}.  The keys are {}.".format(
+                key, ', '.join(NAMING_SCHEME_KEYS)))
+
+    for key in ('parameters', 'auxiliaries'):
+        value = naming_scheme.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(
+                "The naming scheme's {!r} must be a single string, used as a pattern: the "
+                "number of them is not known until the reduction runs.  Got a {}.".format(
+                    key, type(value).__name__))
+
+    return dict(naming_scheme)
+
+
+def _new_symbols(pattern, count, start_at):
+    '''
+    `count` symbols named `pattern` with consecutive indices appended, counting from `start_at`.
+    '''
+    return [sympy.Symbol('{}{}'.format(pattern, i + start_at)) for i in range(count)]
+
+
+def _names_for(pattern, count, start_at, what):
+    '''
+    Turn one entry of a naming scheme into exactly `count` symbols.
+
+    A string is a pattern and gets indices appended.  A list or tuple is taken literally, and
+    must have exactly the right length -- that is the one thing a caller can get wrong here
+    without the mistake showing up until much later.
+
+    Args:
+        pattern: A string pattern, or an explicit sequence of names.
+        count (int): How many symbols are needed.
+        start_at (int): Where appended indices begin.
+        what (str): What is being named, for the error message.
+
+    Returns:
+        list of sympy.Symbol
+    '''
+    if isinstance(pattern, str):
+        return _new_symbols(pattern, count, start_at)
+
+    names = list(pattern)
+    if len(names) != count:
+        raise ValueError(
+            'The naming scheme gives {} names for the {}, but this reduction has {} of '
+            'them: {}.'.format(len(names), what, count, names))
+    # sympy.Symbol rather than sympify: sympifying a name like 'S' or 'E' would resolve to a
+    # sympy singleton instead of a variable of that name.
+    return [name if isinstance(name, sympy.Symbol) else sympy.Symbol(str(name))
+            for name in names]
+
+
+def _classify_reduced_derivatives(names, monomials, rates, dynamic):
+    '''
+    Replace the rate of every parameter-monomial with :const:`None`, so the reduced system
+    records it as a parameter rather than as a dependent whose equation says zero.
+
+    A column whose monomial involves none of the original system's *variables* -- its
+    independent variable and its dependents -- is a monomial in the parameters alone.  It
+    cannot vary under any trajectory, so it is a parameter of the reduced system, and
+    storing it as `dy/dt = 0` would assert the different and false thing: that it happens
+    to stay constant along the solution.
+
+    This applies to both blocks of the Hermite multiplier.  An auxiliary that is a monomial
+    in the parameters is a parameter too -- auxiliary-ness is about being free to choose a
+    value, not about whether the value varies.
+
+    Args:
+        names (iter of sympy.Symbol): The reduced system's symbols, in order.
+        monomials (iter of sympy.Expr): What each one denotes, in the same order.
+        rates (iter of sympy.Expr): The computed rate of each, in the same order.
+        dynamic (set of sympy.Symbol): The original system's variables.
+
+    Returns:
+        list: The rates, with :const:`None` wherever the symbol is a parameter.
+    '''
+    classified = []
+    for name, monomial, rate in zip(names, monomials, rates):
+        if monomial.free_symbols & dynamic:
+            classified.append(rate)
+            continue
+        # Proved, and worth failing loudly on: a monomial in the parameters alone has no
+        # time dependence, so its computed rate must already be zero.  A nonzero one here
+        # would mean the monomial and the rate disagree about what this symbol is.
+        if rate != 0:
+            raise AssertionError(
+                '{} = {} involves no variable of the original system, so it cannot change, '
+                'but its computed rate is {}'.format(name, monomial, rate))
+        classified.append(None)
+    return classified
+
+
+def _rename_indep_var(system, new_name):
+    '''
+    Rename a reduced system's independent variable, or leave it alone if `new_name` is None.
+
+    The general and dependent-variable schemes keep the original clock, so their default is
+    to leave the name as it is.  A caller who sets `independent` is asking for it to be
+    renamed, and gets that -- it is only a relabelling, since under those schemes the clock
+    is the system's own independent variable either way.
+
+    Args:
+        system (ODESystem): The reduced system.
+        new_name: The name to give the independent variable, or :const:`None` to keep it.
+
+    :rtype: ODESystem
+    '''
+    if new_name is None or sympy.Symbol(str(new_name)) == system.independent_variable:
+        return system
+    system.rename_indep_var(sympy.Symbol(str(new_name)))
+    return system
+
 
 def _rates_of_change(system):
     '''
@@ -78,18 +308,34 @@ class ODETranslator(object):
 
     Args:
         scaling_matrix (sympy.Matrix): Matrix that defines the torus action on the system.
-        variables_domain (iter of sympy.Symbol, optional): An ordering of the variables we expect to act upon.
+        symbols_domain (iter of sympy.Symbol, optional): An ordering of the variables we expect to act upon.
             If this is not given, we will act on a system according to the position of the variables in
-            :attr:`~desr.ode_system.ODESystem.variables`, as long as there is the correct number of variables.
+            :attr:`~desr.ode_system.ODESystem.symbols`, as long as there is the correct number of variables.
         hermite_multiplier (sympy.Matrix, optional): User-defined Hermite multiplier, that puts
             :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
-        naming_scheme (tuple): A tuple of strings giving the names of the variables after reduction.  Default is `('tau', 'nu', 'kappa')`
-            The 0th element of the tuple is the new name of the independent (time) variable.  
-            The 1th is either a string for the pattern for names of independent variables, or a list of strings equal to the number of variables.  
-            The 2th element is the pattern for the scaling-invariant constants computed by the algorithm.  
-            Since we don't know how many constants there will be, only a pattern is usable, so the 2th element of the naming_scheme must be a single string.
+        naming_scheme (dict): What to call the variables the reduction creates.  Every key is
+            optional; one left out takes the default for whichever reduction scheme runs.
+
+            - `'independent'`: the new name of the independent (time) variable.  The general
+              and dependent-variable schemes keep the system's own clock, so their default is
+              to leave the name alone; setting this renames it.
+            - `'dependents'`: either a pattern, to which indices are appended, or an explicit
+              list of names.  A list must have exactly as many entries as the reduction
+              produces, which is the number of dependent variables under the parameter
+              scheme and the number of invariants under the general one.
+            - `'parameters'`: the pattern for the scaling-invariant constants the algorithm
+              computes.  How many there will be is not known until the reduction runs, so
+              this must be a single string rather than a list.
+            - `'auxiliaries'`: the pattern for the auxiliary variables, likewise a single
+              string.  Only the general and dependent-variable schemes make any.
+
+            The defaults are :data:`PARAMETER_SCHEME_NAMES` for the parameter scheme and
+            :data:`GENERAL_SCHEME_NAMES` for the other two, so that output under the general
+            scheme can be compared with Hubert & Labahn directly.  Anything set here is
+            honoured by all of them.  A positional tuple is refused; see
+            :func:`_normalise_naming_scheme`.
         new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
             Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
 
@@ -109,16 +355,16 @@ class ODETranslator(object):
         ...
     ValueError: The Hermite multiplier has determinant -2, so it is not unimodular.  Some invariants are then not products of integer powers of its invariant columns, and reversing the reduction would need roots of degree 2.  Choose invariants from which every invariant can be built with integer powers; see extend_from_invariants.
     '''
-    def __init__(self, scaling_matrix, variables_domain=None, hermite_multiplier=None, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at=0):
+    def __init__(self, scaling_matrix, symbols_domain=None, hermite_multiplier=None, naming_scheme=None, new_indices_start_at=0):
         scaling_matrix = scaling_matrix.copy()
 
         self._scaling_matrix = scaling_matrix
-        self._variables_domain = variables_domain
+        self._symbols_domain = symbols_domain
         self._new_indices_start_at = new_indices_start_at
         self.set_naming_scheme(naming_scheme)
 
-        if (variables_domain is not None) and (self.n != len(self.variables_domain)):
-            raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.variables_domain), self.n))
+        if (symbols_domain is not None) and (self.n != len(self.symbols_domain)):
+            raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.symbols_domain), self.n))
 
         if hermite_multiplier is not None:
             determinant = hermite_multiplier.det()
@@ -144,13 +390,39 @@ class ODETranslator(object):
     def set_naming_scheme(self, naming_scheme):
         '''
         Set the renaming scheme for the reduced system after translation.  See documentation for the constructor for `ODETranslator`.
+
+        Only the keys the caller sets are stored, so that the remainder can take whichever
+        reduction scheme's defaults apply when the reduction actually runs.
         '''
+        self._naming_scheme = _normalise_naming_scheme(naming_scheme)
 
-        # we start with some validation.
-        if len(naming_scheme)!= 3:
-            raise ValueError(f'renaming scheme must be a length-3 container')
+    @property
+    def naming_scheme(self):
+        '''
+        The naming scheme as set, holding only the keys that were given.
 
-        self._naming_scheme = naming_scheme
+        :rtype: dict
+        '''
+        return dict(self._naming_scheme)
+
+    def _resolved_naming_scheme(self, defaults):
+        '''
+        The naming scheme with unset keys filled in from `defaults`.
+
+        What the caller asked for always wins; `defaults` only supplies the rest.  This is
+        the one place the two sets of defaults meet, so that a scheme passed in is honoured
+        by whichever reduction runs, while the names a reduction falls back on stay its own
+        -- Hubert & Labahn's `x` and `y` for the general scheme, desr's `tau`, `nu` and
+        `kappa` for the parameter scheme.
+
+        Args:
+            defaults (dict): :data:`PARAMETER_SCHEME_NAMES` or :data:`GENERAL_SCHEME_NAMES`.
+
+        :rtype: dict
+        '''
+        resolved = dict(defaults)
+        resolved.update(self._naming_scheme)
+        return resolved
 
     def __repr__(self):
         return 'A=\n{}\nV=\n{}\nW=\n{}'.format(self.scaling_matrix.__repr__(),
@@ -168,15 +440,15 @@ class ODETranslator(object):
         4 & 5 & 6 & 7 \\\\
         8 & 9 & 10 & 11 \\\\
         V=
-        0 & 0 & 1 & 0 \\\\
+        -1 & 1 & 2 & 1 \\\\
+        1 & 0 & -3 & -2 \\\\
         0 & 0 & 0 & 1 \\\\
-        -1 & 3 & -3 & -2 \\\\
-        1 & -2 & 2 & 1 \\\\
+        0 & 0 & 1 & 0 \\\\
         W=
         0 & 1 & 2 & 3 \\\\
         1 & 1 & 1 & 1 \\\\
-        1 & 0 & 0 & 0 \\\\
-        0 & 1 & 0 & 0 \\\\
+        0 & 0 & 0 & 1 \\\\
+        0 & 0 & 1 & 0 \\\\
 
         '''
         to_print = (self.scaling_matrix, self.herm_mult, self.inv_herm_mult)
@@ -274,19 +546,24 @@ class ODETranslator(object):
         Returns:
             sympy.Matrix: The Hermite multiplier :math:`V`, ignoring the independent variable.
 
+        The independent variable's row of :math:`V` must have exactly one nonzero entry, as
+        it does for the normal Hermite multiplier of an actual system -- that is what leaves
+        :math:`n - 1` columns and so a square result.  Given a row with more, the result is
+        rectangular and inverting it fails with a `NonSquareMatrixError` from somewhere
+        further on, which says nothing useful.
 
         >>> translator = ODETranslator(sympy.Matrix(range(12)).reshape(3, 4))
         >>> translator.herm_mult
         Matrix([
-        [ 0,  0,  1,  0],
-        [ 0,  0,  0,  1],
-        [-1,  3, -3, -2],
-        [ 1, -2,  2,  1]])
-        >>> translator.dep_var_herm_mult(1)
+        [-1, 1,  2,  1],
+        [ 1, 0, -3, -2],
+        [ 0, 0,  0,  1],
+        [ 0, 0,  1,  0]])
+        >>> translator.dep_var_herm_mult(2)
         Matrix([
-        [ 0,  0,  1],
-        [-1,  3, -3],
-        [ 1, -2,  2]])
+        [-1, 1,  2],
+        [ 1, 0, -3],
+        [ 0, 0,  1]])
         '''
         new_herm_mult = self.herm_mult.copy()
         col_to_delete = new_herm_mult[indep_var_index, :]
@@ -310,13 +587,13 @@ class ODETranslator(object):
         Matrix([
         [0, 1, 2, 3],
         [1, 1, 1, 1],
-        [1, 0, 0, 0],
-        [0, 1, 0, 0]])
-        >>> translator.dep_var_inv_herm_mult(1)
+        [0, 0, 0, 1],
+        [0, 0, 1, 0]])
+        >>> translator.dep_var_inv_herm_mult(2)
         Matrix([
-        [0, 2, 3],
+        [0, 1, 3],
         [1, 1, 1],
-        [1, 0, 0]])
+        [0, 0, 1]])
         '''
         if indep_var_index not in self._dep_var_inv_herm_mult_cache:
             self._dep_var_inv_herm_mult_cache[indep_var_index] = \
@@ -324,15 +601,15 @@ class ODETranslator(object):
         return self._dep_var_inv_herm_mult_cache[indep_var_index].copy()
 
     @property
-    def variables_domain(self):
+    def symbols_domain(self):
         '''
         Returns:
             tuple, None: The variables that the scaling action acts on.
         '''
-        return self._variables_domain
+        return self._symbols_domain
 
     @classmethod
-    def from_ode_system(cls, ode_system, naming_scheme = ('tau', 'nu', 'kappa'), new_indices_start_at = 0):
+    def from_ode_system(cls, ode_system, naming_scheme=None, new_indices_start_at = 0):
         '''
         Create a :class:`ODETranslator` given an :class:`ode_system.ODESystem` instance, by taking the maximal scaling matrix.
 
@@ -341,7 +618,7 @@ class ODETranslator(object):
 
         :rtype: ODETranslator
         '''
-        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), variables_domain=ode_system.variables, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
+        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), symbols_domain=ode_system.symbols, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
 
     def multiplier_swap_columns(self, i, j):
         '''
@@ -360,28 +637,28 @@ class ODETranslator(object):
         [0, 1, 0, 0, 0]])
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0, 0],
-        [0, 0,  0,  1, 0],
-        [1, 1, -1, -1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1,  0, -1, 1]])
+        [1, 0, -1, -1,  1],
+        [0, 1,  0,  1, -1],
+        [0, 0,  1,  0,  0],
+        [0, 0,  0,  1,  0],
+        [0, 0,  0,  0,  1]])
         >>> translator.inv_herm_mult
         Matrix([
         [1, 0, 1,  1, -1],
         [0, 1, 0, -1,  1],
-        [1, 0, 0,  0,  0],
-        [0, 1, 0,  0,  0],
-        [0, 0, 0,  1,  0]])
+        [0, 0, 1,  0,  0],
+        [0, 0, 0,  1,  0],
+        [0, 0, 0,  0,  1]])
 
         >>> translator.multiplier_swap_columns(2, 3)
 
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  0,  1, 0],
-        [0, 0,  1,  0, 0],
-        [1, 1, -1, -1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1, -1,  0, 1]])
+        [1, 0, -1, -1,  1],
+        [0, 1,  1,  0, -1],
+        [0, 0,  0,  1,  0],
+        [0, 0,  1,  0,  0],
+        [0, 0,  0,  0,  1]])
 
         Check we have recalculated the inverse after a column operation.
 
@@ -389,9 +666,9 @@ class ODETranslator(object):
         Matrix([
         [1, 0, 1,  1, -1],
         [0, 1, 0, -1,  1],
-        [0, 1, 0,  0,  0],
-        [1, 0, 0,  0,  0],
-        [0, 0, 0,  1,  0]])
+        [0, 0, 0,  1,  0],
+        [0, 0, 1,  0,  0],
+        [0, 0, 0,  0,  1]])
 
         >>> translator.multiplier_swap_columns(1, 3)
         Traceback (most recent call last):
@@ -408,17 +685,17 @@ class ODETranslator(object):
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0],
-        [0, 0,  0,  1],
         [1, 0, -1,  0],
-        [0, 1,  0, -1]])
+        [0, 1,  0, -1],
+        [0, 0,  1,  0],
+        [0, 0,  0,  1]])
         >>> translator.multiplier_swap_columns(2, -1)
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  0,  1],
-        [0, 0,  1,  0],
         [1, 0,  0, -1],
-        [0, 1, -1,  0]])
+        [0, 1, -1,  0],
+        [0, 0,  0,  1],
+        [0, 0,  1,  0]])
         '''
         if i < 0: i += self.herm_mult.cols
         if j < 0: j += self.herm_mult.cols
@@ -458,44 +735,44 @@ class ODETranslator(object):
         [0, 1, 0, 0, 0]])
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0, 0],
-        [0, 0,  0,  1, 0],
-        [1, 1, -1, -1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1,  0, -1, 1]])
+        [1, 0, -1, -1,  1],
+        [0, 1,  0,  1, -1],
+        [0, 0,  1,  0,  0],
+        [0, 0,  0,  1,  0],
+        [0, 0,  0,  0,  1]])
         >>> translator.inv_herm_mult
         Matrix([
         [1, 0, 1,  1, -1],
         [0, 1, 0, -1,  1],
-        [1, 0, 0,  0,  0],
-        [0, 1, 0,  0,  0],
-        [0, 0, 0,  1,  0]])
+        [0, 0, 1,  0,  0],
+        [0, 0, 0,  1,  0],
+        [0, 0, 0,  0,  1]])
         >>> translator.multiplier_add_columns(2, 3, 1)
 
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0, 0],
-        [0, 0,  1,  1, 0],
-        [1, 1, -2, -1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1, -1, -1, 1]])
+        [1, 0, -2, -1,  1],
+        [0, 1,  1,  1, -1],
+        [0, 0,  1,  0,  0],
+        [0, 0,  1,  1,  0],
+        [0, 0,  0,  0,  1]])
 
         Check we have recalculated the inverse after a column operation.
 
         >>> translator.inv_herm_mult
         Matrix([
-        [ 1, 0, 1,  1, -1],
-        [ 0, 1, 0, -1,  1],
-        [ 1, 0, 0,  0,  0],
-        [-1, 1, 0,  0,  0],
-        [ 0, 0, 0,  1,  0]])
+        [1, 0,  1,  1, -1],
+        [0, 1,  0, -1,  1],
+        [0, 0,  1,  0,  0],
+        [0, 0, -1,  1,  0],
+        [0, 0,  0,  0,  1]])
 
         An invariant column may be added to an auxiliary column too; that changes which
         auxiliary is used, and leaves :math:`AV` alone.
 
         >>> translator.multiplier_add_columns(1, 3, 1)
         >>> translator.herm_mult.col(1).T
-        Matrix([[0, 1, 0, 0, 0]])
+        Matrix([[-1, 2, 0, 1, 0]])
         >>> translator.scaling_matrix * translator.herm_mult == translator.herm_form
         True
 
@@ -512,9 +789,10 @@ class ODETranslator(object):
             ...
         ValueError: Cannot add column 3 to itself
 
-        This is how a particular choice of auxiliary is reached.  Example 6.6 of
-        :cite:`Hubert2013c` uses the auxiliary :math:`t z_1^2` where desr's normal form
-        picks :math:`z_1^4 z_2`; the two differ by an invariant.
+        This is how a choice of invariants other than the normal one is reached.  The normal
+        Hermite multiplier of example 6.6 of :cite:`Hubert2013c` gives the paper's own
+        answer, so there is nothing to correct here any more -- these operations move *away*
+        from it, to an equally valid choice differing by an invariant.
 
         >>> equations = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
@@ -522,28 +800,28 @@ class ODETranslator(object):
         >>> system.reorder_variables(['t', 'z1', 'z2'])
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.auxiliaries(), translator.invariants()
-        (Matrix([[z1**4*z2]]), Matrix([[t*z1**3, z1**5*z2]]))
-        >>> translator.multiplier_add_columns(2, 1, -1)   # the paper's second invariant
-        >>> translator.multiplier_add_columns(0, 2, -1)   # and its auxiliary
-        >>> translator.auxiliaries(), translator.invariants()
         (Matrix([[t*z1**2]]), Matrix([[t*z1**3, z1**2*z2/t]]))
+        >>> translator.multiplier_add_columns(2, 1, -1)
+        >>> translator.multiplier_add_columns(0, 2, -1)
+        >>> translator.auxiliaries(), translator.invariants()
+        (Matrix([[t**3*z1**3/z2]]), Matrix([[t*z1**3, z2/(t**2*z1)]]))
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0],
-        [0, 0,  0,  1],
         [1, 0, -1,  0],
-        [0, 1,  0, -1]])
+        [0, 1,  0, -1],
+        [0, 0,  1,  0],
+        [0, 0,  0,  1]])
         >>> translator.multiplier_add_columns(2, -1, 1)
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0],
-        [0, 0,  1,  1],
         [1, 0, -1,  0],
-        [0, 1, -1, -1]])
+        [0, 1, -1, -1],
+        [0, 0,  1,  0],
+        [0, 0,  1,  1]])
         '''
         if i < 0: i += self.herm_mult.cols
         if j < 0: j += self.herm_mult.cols
@@ -575,37 +853,37 @@ class ODETranslator(object):
         [0, 1, 0, 0, 0]])
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0, 0],
-        [0, 0,  0,  1, 0],
-        [1, 1, -1, -1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1,  0, -1, 1]])
+        [1, 0, -1, -1,  1],
+        [0, 1,  0,  1, -1],
+        [0, 0,  1,  0,  0],
+        [0, 0,  0,  1,  0],
+        [0, 0,  0,  0,  1]])
         >>> translator.inv_herm_mult
         Matrix([
         [1, 0, 1,  1, -1],
         [0, 1, 0, -1,  1],
-        [1, 0, 0,  0,  0],
-        [0, 1, 0,  0,  0],
-        [0, 0, 0,  1,  0]])
+        [0, 0, 1,  0,  0],
+        [0, 0, 0,  1,  0],
+        [0, 0, 0,  0,  1]])
         >>> translator.multiplier_negate_column(3)
 
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1,  0, 0],
-        [0, 0,  0, -1, 0],
-        [1, 1, -1,  1, 0],
-        [0, 0,  0,  0, 1],
-        [0, 1,  0,  1, 1]])
+        [1, 0, -1,  1,  1],
+        [0, 1,  0, -1, -1],
+        [0, 0,  1,  0,  0],
+        [0, 0,  0, -1,  0],
+        [0, 0,  0,  0,  1]])
 
         Check we have recalculated the inverse after a column operation.
 
         >>> translator.inv_herm_mult
         Matrix([
-        [1,  0, 1,  1, -1],
-        [0,  1, 0, -1,  1],
-        [1,  0, 0,  0,  0],
-        [0, -1, 0,  0,  0],
-        [0,  0, 0,  1,  0]])
+        [1, 0, 1,  1, -1],
+        [0, 1, 0, -1,  1],
+        [0, 0, 1,  0,  0],
+        [0, 0, 0, -1,  0],
+        [0, 0, 0,  0,  1]])
 
         >>> translator.multiplier_negate_column(1)
         Traceback (most recent call last):
@@ -617,15 +895,15 @@ class ODETranslator(object):
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1], [0, 1, 0]]))
         >>> translator.herm_mult
         Matrix([
-        [0, 0,  1],
+        [1, 0, -1],
         [0, 1,  0],
-        [1, 0, -1]])
+        [0, 0,  1]])
         >>> translator.multiplier_negate_column(-1)
         >>> translator.herm_mult
         Matrix([
-        [0, 0, -1],
+        [1, 0,  1],
         [0, 1,  0],
-        [1, 0,  1]])
+        [0, 0, -1]])
         '''
         if i < 0: i += self.herm_mult.cols
         if not self.herm_form.col(i).is_zero_matrix:
@@ -643,7 +921,8 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem): System to reduce.
-            naming_scheme: the scheme to use.  A tuple of length 3.  See 
+            naming_scheme (dict): the scheme to use, over the keys in
+                :data:`NAMING_SCHEME_KEYS`.  See
 
         :rtype: ODESystem
         '''
@@ -651,17 +930,147 @@ class ODETranslator(object):
         if naming_scheme is not None:
             self.set_naming_scheme(naming_scheme)
 
+        scheme = self.scheme(system)
 
-        if self._is_translate_parameter_compatible(system=system):
+        if scheme == ReductionScheme.PARAMETER:
             return self.translate_parameter(system=system)
 
-        elif ((len(system.variables) == self.scaling_matrix.shape[1] + 1) or (self.scaling_matrix[:, system.indep_var_index].is_zero_matrix)):
+        if scheme == ReductionScheme.DEP_VAR:
             return self.translate_dep_var(system=system)
 
-        elif (len(system.variables) == self.scaling_matrix.shape[1]):
-            return self.translate_general(system=system,include_aux_vars=include_aux_vars)
+        return self.translate_general(system=system, include_aux_vars=include_aux_vars)
+
+    def scheme(self, system):
+        '''
+        Which reduction :meth:`translate` would use for `system`.
+
+        The three are tried in order of how much they leave intact: the parameter scheme
+        first, then the dependent-variable scheme, then the general one, which always
+        applies.  :meth:`translate` asks this and dispatches on the answer, so there is one
+        copy of the decision rather than two that can disagree.
+
+        Args:
+            system (ODESystem): The system to be reduced.
+
+        Returns:
+            ReductionScheme
+
+        Raises:
+            ValueError: if the system's variables do not match the scaling matrix at all,
+                in which case no scheme applies.
+
+        >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.scheme(system)
+        ReductionScheme.PARAMETER
+
+        Hubert & Labahn 6.6 has no parameters at all, and its clock is entangled with a
+        dependent variable, so only the general scheme applies:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> ODETranslator.from_ode_system(hl66).scheme(hl66)
+        ReductionScheme.GENERAL
+        '''
+        if self._is_translate_parameter_compatible(system=system):
+            return ReductionScheme.PARAMETER
+
+        if ((len(system.symbols) == self.scaling_matrix.shape[1] + 1)
+                or (self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix)):
+            return ReductionScheme.DEP_VAR
+
+        if len(system.symbols) == self.scaling_matrix.shape[1]:
+            return ReductionScheme.GENERAL
 
         raise ValueError("System doesn't have the right number of variables for translation")
+
+    def expected_variable_count(self, system, scheme=None, include_aux_vars=True):
+        '''
+        How many variables the reduction of `system` will have.
+
+        The count is scheme-dependent, with :math:`n` the number of variables of `system`
+        -- the independent variable included -- and :math:`r` the number of scaling
+        symmetries:
+
+        =========================================  =================
+        scheme                                     variables
+        =========================================  =================
+        parameter                                  :math:`n - r`
+        dependent-variable                         :math:`n`
+        general, with auxiliaries                  :math:`n + 1`
+        general, ``include_aux_vars=False``        :math:`n - r + 1`
+        =========================================  =================
+
+        **Where the general scheme's extra one comes from.**  It keeps the original
+        independent variable, and that is the :math:`+1`.  The remaining :math:`n` are a
+        full change of variables -- :math:`r` auxiliaries and :math:`n - r` invariants --
+        so the count is :math:`1 + r + (n - r)`.  Dropping the auxiliaries removes exactly
+        :math:`r`, giving :math:`n - r + 1`.
+
+        The parameter scheme has no :math:`+1` because nothing is kept: its :math:`r`
+        auxiliaries are normalised to 1 and discarded, and the invariant that is a rescaled
+        clock *becomes* the new independent variable rather than joining one.  So
+        :math:`(p - r)` parameters, one clock and :math:`q` dependents, which is
+        :math:`n - r`.
+
+        Under the general scheme a rescaled clock can therefore appear *alongside* the
+        original one -- prey-predator keeps :math:`t` and also carries :math:`k t / h` as a
+        variable with an equation.  It need not: in Hubert & Labahn 6.6 both invariants
+        involve a dependent variable, so there is no second clock, and the :math:`+1` is
+        the retained :math:`t` all the same.  :meth:`indep_var_invariant` is what tells the
+        two situations apart.
+
+        Args:
+            system (ODESystem): The system to be reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be used.  **Pass this
+                whenever you choose the scheme yourself.**  Left out, it is inferred by
+                :meth:`scheme`, which is only the right answer when :meth:`translate` does
+                the choosing: calling :meth:`translate_general` on a system that
+                :meth:`translate` would have given to another scheme is legal, and gives a
+                different count.  Inferring where the caller had already chosen is a
+                mistake that produces a plausible wrong number rather than an error, and it
+                has been made twice in this library's history.
+            include_aux_vars (bool): Whether the auxiliaries will be kept.  Only the general
+                scheme has any, so this is ignored by the other two.
+
+        Returns:
+            int
+
+        >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> len(system.symbols), translator.r
+        (9, 3)
+        >>> translator.expected_variable_count(system)
+        6
+        >>> len(translator.translate(system).symbols)
+        6
+
+        The general scheme on the same system gives a different count, which is why it has
+        to be said rather than inferred:
+
+        >>> translator.expected_variable_count(system, scheme=ReductionScheme.GENERAL)
+        10
+        >>> len(translator.translate_general(system).symbols)
+        10
+        >>> translator.expected_variable_count(system, scheme='general', include_aux_vars=False)
+        7
+        >>> len(translator.translate_general(system, include_aux_vars=False).symbols)
+        7
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        n = len(system.symbols)
+
+        if scheme == ReductionScheme.PARAMETER:
+            return n - self.r
+        if scheme == ReductionScheme.DEP_VAR:
+            return n
+        return n + 1 if include_aux_vars else n - self.r + 1
 
 
 
@@ -672,7 +1081,7 @@ class ODETranslator(object):
         to_sub = self.translate_parameter_substitutions(system=system)
 
         variable_map = self.variable_map(system)
-        new_indep = variable_map[system.indep_var]
+        new_indep = variable_map[system.independent_variable]
 
         new_deriv_dict = {}
         # derivative_dict holds only the variables that have an equation, so the parameters
@@ -680,7 +1089,7 @@ class ODETranslator(object):
         for var, deriv in system.derivative_dict.items():
             Var = variable_map[var]
             # the chain rule makes substitution more complicated
-            derivative_factor = (to_sub[var] / Var) * (new_indep / to_sub[system.indep_var])
+            derivative_factor = (to_sub[var] / Var) * (new_indep / to_sub[system.independent_variable])
 
             new_deriv_dict[Var] = (deriv.subs(to_sub) / derivative_factor).expand()
 
@@ -690,15 +1099,19 @@ class ODETranslator(object):
         # the reduced system -- it is one of the n - r coordinates, and the substitutions
         # returned by translate_parameter_substitutions refer to it -- but inferring the
         # variables from the expressions, as ODESystem.from_dict does, would lose it.
-        dependent_variables = [variable_map[var] for var in system.dependent_variables]
+        dependents = [variable_map[var] for var in system.dependents]
         new_constants = self._new_constants(system)
-        new_variables = [new_indep] + dependent_variables + new_constants
+        new_variables = [new_indep] + dependents + new_constants
         new_derivatives = ([new_deriv_dict[new_indep]]
-                           + [new_deriv_dict[var] for var in dependent_variables]
+                           + [new_deriv_dict[var] for var in dependents]
                            + [None] * len(new_constants))
 
+        # The parameter scheme normalises its auxiliaries to 1 and discards them, so there
+        # are none to record.
         reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
-                                   is_reduced=True)
+                                   is_reduced=True,
+                                   scheme=ReductionScheme.PARAMETER,
+                                   num_scaling_symmetries=self.r)
         reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
@@ -734,62 +1147,80 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.translate_dep_var(system=system)
         dt/dt = 1
-        dx0/dt = x0*(y0 - 1/t)
+        dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
         '''
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
-        if self.n == len(system.variables):
-            if not self.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
+        if self.n == len(system.symbols):
+            if not self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix:
                 raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
             scaling_matrix = self.scaling_matrix.copy()
-            scaling_matrix.col_del(system.indep_var_index)
-            new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.indep_var_index)
+            scaling_matrix.col_del(system.independent_variable_index)
+            new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.independent_variable_index)
         else:
-            assert self.scaling_matrix.shape[1] == len(system.variables) - 1
+            assert self.scaling_matrix.shape[1] == len(system.symbols) - 1
             scaling_matrix = self.scaling_matrix.copy()
-            new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.indep_var_index)
+            new_herm_mult = self.dep_var_herm_mult(indep_var_index=system.independent_variable_index)
             assert new_herm_mult[-1, :].is_zero_matrix
-            new_herm_mult.col_del(system.indep_var_index)
-            new_herm_mult.row_del(system.indep_var_index)
+            new_herm_mult.col_del(system.independent_variable_index)
+            new_herm_mult.row_del(system.independent_variable_index)
 
-        if self.variables_domain is not None:
-            variables_domain = list(self.variables_domain)
-            variables_domain.pop(system.indep_var_index)
+        if self.symbols_domain is not None:
+            symbols_domain = list(self.symbols_domain)
+            symbols_domain.pop(system.independent_variable_index)
         else:
-            variables_domain = None
+            symbols_domain = None
 
         # silviana says: i think it is weird that an ODETranslator is made here.  we're already in one.  why make another one?
         reduced_scaling = ODETranslator(scaling_matrix=scaling_matrix,
-                                         variables_domain=variables_domain,
+                                         symbols_domain=symbols_domain,
                                          hermite_multiplier=new_herm_mult)
 
-        # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
-        #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
+        # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
+        #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
+        scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
+        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+                                         self._new_indices_start_at, 'invariants')
 
-        # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
-        #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
+        # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
+        #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
         num_aux_var = reduced_scaling.herm_mult_i.shape[1]
-        auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
+        auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+                                           self._new_indices_start_at)
 
-        system_var_no_indep = list(system.variables)
-        system_var_no_indep.pop(system.indep_var_index)
+        system_var_no_indep = list(system.symbols)
+        system_var_no_indep.pop(system.independent_variable_index)
         to_sub = dict(zip(system_var_no_indep, scale_action(invariant_variables, reduced_scaling.inv_herm_mult_d)))
         system_derivatives = _rates_of_change(system)
         # fywd = F(y^(W_d)) in Hubert Labahn
         fywd = sympy.Matrix([(f / v).subs(to_sub, simultaneous=True).expand() for v, f in
-                            zip(system.variables, system_derivatives)]).T
-        fywd.col_del(system.indep_var_index)
+                            zip(system.symbols, system_derivatives)]).T
+        fywd.col_del(system.independent_variable_index)
         dydt = _scaled_rates(invariant_variables, fywd * reduced_scaling.herm_mult_n)
         dxdt = _scaled_rates(auxiliary_variables, fywd * reduced_scaling.herm_mult_i)
 
-        new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
-        new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
+        new_variables = [system.independent_variable] + list(auxiliary_variables) + list(invariant_variables)
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var, is_reduced=True)
+        # The dependent-variable scheme's columns are indexed by the symbols other than the
+        # independent variable, so that is what the monomials are built from -- and why none
+        # of them can involve the clock.
+        dynamic = set(system.dependents)
+        monomials = (list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_i))
+                     + list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_n)))
+        rates = _classify_reduced_derivatives(
+            list(auxiliary_variables) + list(invariant_variables), monomials,
+            list(dxdt) + list(dydt), dynamic)
+        new_derivatives = [sympy.sympify(1)] + rates
+
+        reduced = ODESystem(new_variables, new_derivatives,
+                            indep_var=system.independent_variable, is_reduced=True,
+                            scheme=ReductionScheme.DEP_VAR,
+                            num_scaling_symmetries=self.r,
+                            auxiliary_variables=auxiliary_variables)
+        return _rename_indep_var(reduced, scheme['independent'])
 
     def translate_general(self, system, include_aux_vars = True):
         '''
@@ -805,91 +1236,146 @@ class ODETranslator(object):
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
+
+        Six of the ten symbols are monomials in the original parameters alone, so they are
+        reported as parameters and only three equations need integrating:
+
         >>> translator.translate_general(system=system)
         dt/dt = 1
-        dx0/dt = 0
-        dx1/dt = 0
-        dx2/dt = 0
-        dy0/dt = y0/t
-        dy1/dt = y1*(-y0*y1*y5/y3 - y0*y2/(y1 + 1) + y0*y5)/t
-        dy2/dt = y2*(y0 - y0*y2*y4/y1)/t
-        dy3/dt = 0
-        dy4/dt = 0
-        dy5/dt = 0
+        dy3/dt = y3/t
+        dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
+        dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
+        parameters: x0, x1, x2, y0, y1, y2
 
         >>> translator.translate_general(system=system, include_aux_vars=False)
         dt/dt = 1
-        dy0/dt = y0/t
-        dy1/dt = y1*(-y0*y1*y5/y3 - y0*y2/(y1 + 1) + y0*y5)/t
-        dy2/dt = y2*(y0 - y0*y2*y4/y1)/t
-        dy3/dt = 0
-        dy4/dt = 0
-        dy5/dt = 0
+        dy3/dt = y3/t
+        dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
+        dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
+        parameters: y0, y1, y2
+
+        The auxiliaries are recorded whatever kind they turn out to be:
+
+        >>> reduced = translator.translate_general(system=system)
+        >>> reduced.auxiliary_variables
+        (x0, x1, x2)
+        >>> reduced.scheme, reduced.num_scaling_symmetries
+        (ReductionScheme.GENERAL, 3)
         '''
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
-        # y = sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
-        #print 'y = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_n))
+        # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
+        #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
+        scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
         num_inv_var = self.herm_mult_n.shape[1]
-        invariant_variables = [sympy.Symbol('y{}'.format(i + self._new_indices_start_at)) for i in range(num_inv_var)]
+        invariant_variables = _names_for(scheme['dependents'], num_inv_var,
+                                         self._new_indices_start_at, 'invariants')
 
         if include_aux_vars:
-            # x = sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
-            #print 'x = ', sympy.Matrix(scale_action(system.variables, self.herm_mult_i))
+            # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
+            #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
             num_aux_var = self.herm_mult_i.shape[1]
-            auxiliary_variables = [sympy.Symbol('x{}'.format(i + self._new_indices_start_at)) for i in range(num_aux_var)]
+            auxiliary_variables = _new_symbols(scheme['auxiliaries'], num_aux_var,
+                                               self._new_indices_start_at)
 
-        to_sub = dict(zip(system.variables, scale_action(invariant_variables, self.inv_herm_mult_d)))
+        to_sub = dict(zip(system.symbols, scale_action(invariant_variables, self.inv_herm_mult_d)))
         system_derivatives = _rates_of_change(system)
 
         # fywd = F(y^(W_d)) in Hubert Labahn
-        fywd = sympy.Matrix([(system.indep_var * f / v).subs(to_sub, simultaneous=True).expand() for v, f in
-                            zip(system.variables, system_derivatives)]).T
+        fywd = sympy.Matrix([(system.independent_variable * f / v).subs(to_sub, simultaneous=True).expand() for v, f in
+                            zip(system.symbols, system_derivatives)]).T
         dydt = _scaled_rates(invariant_variables, fywd * self.herm_mult_n,
-                             divide_by=system.indep_var)
+                             divide_by=system.independent_variable)
 
         if include_aux_vars:
             dxdt = _scaled_rates(auxiliary_variables, fywd * self.herm_mult_i,
-                                 divide_by=system.indep_var)
+                                 divide_by=system.independent_variable)
 
+        dynamic = set(system.dependents) | {system.independent_variable}
+
+        # scale_action against system.symbols, not self.auxiliaries()/self.invariants():
+        # those go through _validate_variables and fall back to placeholder x_i and y_i
+        # names when symbols_domain is unset, which would pair each name with somebody
+        # else's monomial.
         if include_aux_vars:
-            new_variables = [system.indep_var] + list(auxiliary_variables) + list(invariant_variables)
-            new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
-            assert len(new_variables) == len(new_derivatives) == len(system.variables) + 1
+            named = list(auxiliary_variables) + list(invariant_variables)
+            monomials = (list(scale_action(system.symbols, self.herm_mult_i))
+                         + list(scale_action(system.symbols, self.herm_mult_n)))
+            rates = list(dxdt) + list(dydt)
+            new_variables = [system.independent_variable] + named
+            assert len(new_variables) == len(rates) + 1 == len(system.symbols) + 1
         else:
             # don't include the aux vars.
-            new_variables = [system.indep_var] + list(invariant_variables)
-            new_derivatives = [sympy.sympify(1)] + list(dydt)
+            named = list(invariant_variables)
+            monomials = list(scale_action(system.symbols, self.herm_mult_n))
+            rates = list(dydt)
+            new_variables = [system.independent_variable] + named
             # see remark 3.2 in the second arxiv version of the paper, where we discuss this number
-            assert len(new_variables) == len(new_derivatives) == len(system.variables) - self.r + 1
+            assert len(new_variables) == len(rates) + 1 == len(system.symbols) - self.r + 1
 
-        return ODESystem(new_variables, new_derivatives, indep_var=system.indep_var,is_reduced=True)
+        new_derivatives = ([sympy.sympify(1)]
+                           + _classify_reduced_derivatives(named, monomials, rates, dynamic))
+
+        reduced = ODESystem(new_variables, new_derivatives,
+                            indep_var=system.independent_variable, is_reduced=True,
+                            scheme=ReductionScheme.GENERAL,
+                            num_scaling_symmetries=self.r,
+                            auxiliary_variables=auxiliary_variables if include_aux_vars else ())
+        return _rename_indep_var(reduced, scheme['independent'])
 
     def _is_translate_parameter_compatible(self, system):
-        ''' Check whether a system satisfies the conditions of the parameter scheme of translation '''
-        # First check our system's variables are in the required order
-        # Independent at the beginning
-        if system.indep_var_index != 0:
-            return False
-        # Parameters at the end.  Ask which variables are the parameters, rather than which
-        # trailing derivatives are zero: a conserved variable's derivative is also zero, so
-        # the old test called a system eligible as soon as one was ordered last.
-        if system.num_parameters:
-            if set(system.variables[-system.num_parameters:]) != set(system.parameters):
-                return False
+        '''
+        Check whether a system satisfies the conditions of the parameter scheme of translation.
 
-        # Now check our transformation is valid: that V and W have the required forms
-        # m is the number of variables that have an equation (including the independent one)
-        m = len(system.variables) - system.num_parameters
-        if not self.herm_mult_i[:m, :].is_zero_matrix:
+        The scheme needs each of the independent variable and the dependent variables to
+        contribute exactly one invariant of its own, and the surplus parameters to become
+        the reduced constants.  That is what the block form below says, reading
+        :math:`V = [V_i, V_n]` with :math:`p` parameters and :math:`m = 1 + q` the rest::
+
+                       r aux        p - r          m
+                     +-----------+-----------+-----------+
+            p rows   |     *     |     *     |     *     |
+                     +-----------+-----------+-----------+
+            m rows   |     0     |     0     |    I_m    |
+                     +-----------+-----------+-----------+
+
+        The zero block says the scaling acts only through the parameters, leaving the
+        independent and dependent variables unrescaled; the identity says each of them
+        appears in exactly one invariant, with exponent one and in no other.
+
+        Those rows are the **last** :math:`m`, which is why the variables must be ordered
+        :math:`(c, t, z)` -- see
+        :meth:`~desr.ode_system.ODESystem.default_order_variables`.  The order is not a
+        free choice beside the Hermite normal form convention but the other half of it:
+        under the mirrored convention the same blocks sit at the top and the order is
+        :math:`(t, z, c)`.  Ordering the parameters last *here* would satisfy every block
+        condition while putting the identity on parameters, so each parameter would get its
+        own invariant and the independent variable would be smeared across several.  The
+        test therefore pins which variables occupy those rows, not merely the shape.
+        '''
+        p = system.num_parameters
+        m = len(system.symbols) - p
+
+        # First check our system's variables are in the required order:
+        # parameters, then the independent variable, then the dependents.
+        if system.independent_variable_index != p:
             return False
-        if not self.herm_mult_n[:m, :m] == sympy.eye(m):
-            return False
-        if not self.herm_mult_n[:m, m:].is_zero_matrix:
+        # Ask which variables are the parameters, rather than which derivatives are zero: a
+        # conserved variable's derivative is also zero, so testing the derivative would call
+        # a system eligible as soon as one was ordered among the parameters.
+        if p and set(system.symbols[:p]) != set(system.parameters):
             return False
 
-        if not (self.inv_herm_mult[self.r:self.r + m, :] ==
-                sympy.Matrix.hstack(sympy.eye(m), sympy.zeros(m, system.num_parameters))):
+        # Now check our transformation is valid: that V and W have the required forms.
+        if not self.herm_mult_i[p:, :].is_zero_matrix:
+            return False
+        if not self.herm_mult_n[p:, p - self.r:] == sympy.eye(m):
+            return False
+        if not self.herm_mult_n[p:, :p - self.r].is_zero_matrix:
+            return False
+
+        if not (self.inv_herm_mult[p:, :] ==
+                sympy.Matrix.hstack(sympy.zeros(m, p), sympy.eye(m))):
             return False
 
         return True
@@ -902,29 +1388,17 @@ class ODETranslator(object):
 
         todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
         """
-        num_variables_wo_time = len(system.variables) - system.num_parameters - 1  # Excluding indep
+        scheme = self._resolved_naming_scheme(PARAMETER_SCHEME_NAMES)
+        num_variables_wo_time = len(system.symbols) - system.num_parameters - 1  # Excluding indep
 
-        if (isinstance(self._naming_scheme[1], str)):
-            new_vars = ['{}{}'.format(self._naming_scheme[1],i+self._new_indices_start_at) for i in range(num_variables_wo_time)]
-            new_vars = [sympy.Symbol(v) for v in new_vars]
-        else:
+        new_vars = _names_for(scheme['dependents'], num_variables_wo_time,
+                              self._new_indices_start_at, 'dependent variables')
 
-            if len(self._naming_scheme[1]) != system.num_dependent_variables:
-                raise ValueError(f'renaming scheme is bad -- you indicated to use a given set of variable names, but lengths don\'t match.  {len(self._naming_scheme[1])}!={system.num_dependent_variables}')
+        independent = scheme['independent']
+        the_map = {system.independent_variable: system.independent_variable if independent is None
+                                     else sympy.Symbol(independent)}
 
-
-            # silviana says:
-            # the reason I'm using `Symbol` here and not sympify: 
-            #   if you sympify a string with S as a variable name, then S is the sympy.core.singleton.SingletonRegistry
-            #   and not the variable S.  
-            # See https://stackoverflow.com/questions/41860294/what-does-s-signify-in-sympy
-
-            # todo: use sympify so that erroneous naming schemes can be detected, but this requires using the _clash1 namespace or something.
-            new_vars = [sympy.Symbol(v) for v in self._naming_scheme[1]]
-
-        the_map = {system.indep_var: sympy.Symbol(self._naming_scheme[0])}
-
-        for v,V in zip(system.dependent_variables, new_vars):
+        for v,V in zip(system.dependents, new_vars):
             the_map[v] = V
 
         return the_map
@@ -943,8 +1417,9 @@ class ODETranslator(object):
 
         :rtype: list of sympy.Symbol
         '''
-        return [sympy.Symbol('{}{}'.format(self._naming_scheme[2], i + self._new_indices_start_at))
-                for i in range(system.num_parameters - self.r)]
+        scheme = self._resolved_naming_scheme(PARAMETER_SCHEME_NAMES)
+        return _new_symbols(scheme['parameters'], system.num_parameters - self.r,
+                            self._new_indices_start_at)
 
     def translate_parameter_substitutions(self, system):
         '''
@@ -954,64 +1429,72 @@ class ODETranslator(object):
             system (ODESystem):
                 The system in question.
 
+        The substitutions come back in the system's own variable order -- parameters, then
+        the independent variable, then the dependents -- so they can be read straight down
+        against :attr:`~desr.ode_system.ODESystem.symbols`.
+
         :rtype: dict
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
+        >>> system.symbols
+        (K, d, h, k, r, s, t, n, p)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: tau, n: nu0, p: nu1, K: kappa0, d: 1, h: kappa1, k: 1, r: kappa2, s: 1}
+        {K: 1, d: kappa0, h: 1, k: 1, r: kappa1, s: kappa2, t: tau, n: nu0, p: nu1}
 
         >>> system = ODESystem.from_equations(equations)
-        >>> translator = ODETranslator.from_ode_system(system, naming_scheme=('t', ['n','p'], 'c'))
+        >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: t, n: n, p: p, K: c0, d: 1, h: c1, k: 1, r: c2, s: 1}
+        {K: 1, d: c0, h: 1, k: 1, r: c1, s: c2, t: t, n: n, p: p}
 
         >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
         >>> translator.translate_parameter_substitutions(system=system)
-        {t: tau, n: nu1, p: nu2, K: kappa1, d: 1, h: kappa2, k: 1, r: kappa3, s: 1}
+        {K: 1, d: kappa1, h: 1, k: 1, r: kappa2, s: kappa3, t: tau, n: nu1, p: nu2}
         '''
 
-        num_variables_wo_time = len(system.variables) - system.num_parameters - 1  # Excluding indep
-        m = num_variables_wo_time + 1  # Include indep
-
-        
+        p = system.num_parameters
+        m = len(system.symbols) - p  # The independent variable and the dependents
 
         if not self._is_translate_parameter_compatible(system):
             err_str = ['System is not compatible for parameter translation.']
-            err_str.append('System may not be ordered properly. Must be independent, dependent, constants. Order is: {}'.format(system.variables))
-            err_str.append('Transformation may not be appropriate. Should be 0, I, 0. Transformation is:')
-            err_str.append(repr(self.herm_mult_i[:m, :]))
-            err_str.append(repr(self.herm_mult_n[:m, :m]))
-            err_str.append(repr(self.herm_mult_n[:m, m:]))
+            err_str.append('System may not be ordered properly. Must be parameters, independent, dependent. Order is: {}'.format(system.symbols))
+            err_str.append('Transformation may not be appropriate. Should be 0, 0, I. Transformation is:')
+            err_str.append(repr(self.herm_mult_i[p:, :]))
+            err_str.append(repr(self.herm_mult_n[p:, :p - self.r]))
+            err_str.append(repr(self.herm_mult_n[p:, p - self.r:]))
             raise ValueError('\n'.join(err_str))
 
-        # Extract the right bits of W
-        inv_herm_mult_d = self.inv_herm_mult_d[m:, :]
-        W_t = inv_herm_mult_d[:, :1]
-        W_v = inv_herm_mult_d[:, 1:m]
-        W_c = inv_herm_mult_d[:, m:]
+        # Extract the right bits of W.  The rows of W_d that belong to the reduced constants
+        # are the first p - r of them, since those invariants are the leading columns of
+        # V_n under this ordering; the columns follow the variable order (c, t, z).
+        inv_herm_mult_d = self.inv_herm_mult_d[:p - self.r, :]
+        W_c = inv_herm_mult_d[:, :p]
+        W_t = inv_herm_mult_d[:, p:p + 1]
+        W_v = inv_herm_mult_d[:, p + 1:]
 
         variable_map = self.variable_map(system)
         # Form new constants
         new_consts = self._new_constants(system)
 
+        # Built in the system's own variable order -- parameters, independent, dependents --
+        # so that reading the substitutions against system.symbols needs no reshuffling.
         to_sub = {}
 
+        # Scale parameters
+        scale = scale_action(new_consts, W_c)
+        assert len(system.parameters) == len(scale.T)
+        for const, _const_scale in zip(system.parameters, scale.T):
+            to_sub[const] = _const_scale
+
         # Scale t
-        to_sub[system.indep_var] = scale_action(new_consts, W_t)[0] * variable_map[system.indep_var]
+        to_sub[system.independent_variable] = scale_action(new_consts, W_t)[0] * variable_map[system.independent_variable]
 
         # Scale dependents
         scale = scale_action(new_consts, W_v)
-        assert len(system.variables[1:num_variables_wo_time + 1]) == len(scale.T)
-        for dep_var, _const_scale in zip(system.variables[1:num_variables_wo_time + 1], scale.T):
-            to_sub[dep_var] = _const_scale * variable_map[dep_var] 
-
-        # Scale constants
-        scale = scale_action(new_consts, W_c)
-        assert len(system.variables[- system.num_parameters:]) == len(scale.T)
-        for const, _const_scale in zip(system.variables[- system.num_parameters:], scale.T):
-            to_sub[const] = _const_scale
+        assert len(system.dependents) == len(scale.T)
+        for dep_var, _const_scale in zip(system.dependents, scale.T):
+            to_sub[dep_var] = _const_scale * variable_map[dep_var]
 
         return to_sub
 
@@ -1047,7 +1530,7 @@ class ODETranslator(object):
         ...                                                               [1, 0, 1],
         ...                                                               [0, 0, 1]]))
         >>> x0, y0 = sympy.var('x0 y0')
-        >>> translator.reverse_translate((x0, y0), system.indep_var_index)
+        >>> translator.reverse_translate((x0, y0), system.independent_variable_index)
         (x0, y0/x0)
 
         The general scheme, on example 6.6, dispatched on the independent variable coming
@@ -1085,43 +1568,34 @@ class ODETranslator(object):
 
         Example 7.5 (Prey-predator model) from :cite:`Hubert2013c`.
 
-        Use the matrices from the paper, which differ to ours as different conventions are used.
-
         .. math::
             \\frac{dn}{dt} = n  \\left( r \\left(1 - \\frac{n}{K} \\right) - \\frac{k p}{n + d} \\right)
 
             \\frac{dp}{dt} = s p \\left(1 - \\frac{h p}{n} \\right)
 
+        The paper normalises :math:`K`, :math:`h` and :math:`r` away and keeps :math:`d`,
+        :math:`k` and :math:`s` as the reduced constants.  Ordering those three first is all
+        it takes to reach that choice, since the leading parameters are the ones normalised;
+        this example used to hand-craft a nine by nine Hermite multiplier instead, because
+        desr reported the mirror of the paper's normal form and no ordering could get there.
+
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> system.variables
-        (t, n, p, K, d, h, k, r, s)
-        >>> maximal_scaling_matrix = system.maximal_scaling_matrix()
-        >>> # Hand craft a Hermite multiplier given the invariants from the paper.
-        >>> # This is done by placing the auxiliaries first, then rearranging the invariants and reading them off
-        >>> # individually from the Hermite multiplier given in the paper
-        >>> herm_mult = sympy.Matrix([[ 0, 0,  0,  1,  0,  0,  0,  0,  0],  # t
-        ...                           [ 0, 0,  0,  0,  1,  0,  0,  0,  0],  # n
-        ...                           [ 0, 0,  0,  0,  0,  1,  0,  0,  0],  # p
-        ...                           [ 0, 1,  1,  0, -1, -1, -1,  0,  0],  # K
-        ...                           [ 0, 0,  0,  0,  0,  0,  1,  0,  0],  # d
-        ...                           [ 0, 0, -1,  0,  0,  1,  0, -1,  0],  # h
-        ...                           [ 0, 0,  0,  0,  0,  0,  0,  1,  0],  # k
-        ...                           [-1, 0,  0,  1,  0,  0,  0, -1, -1],  # r
-        ...                           [ 0, 0,  0,  0,  0,  0,  0,  0,  1]])  # s
-        >>> translator = ODETranslator(maximal_scaling_matrix,
-        ...                              variables_domain=system.variables,
-        ...                              hermite_multiplier=herm_mult, naming_scheme=('t',['n','p'], 'c'))
+        >>> system.symbols
+        (K, d, h, k, r, s, t, n, p)
+        >>> system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        >>> translator = ODETranslator.from_ode_system(system,
+        ...                                            naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
         >>> translator.translate_parameter(system)
         dt/dt = 1
         dn/dt = -c1*n*p/(c0 + n) - n**2 + n
         dp/dt = c2*p - c2*p**2/n
         parameters: c0, c1, c2
         >>> translator.translate_parameter_substitutions(system)
-        {t: t, n: n, p: p, K: 1, d: c0, h: 1, k: c1, r: 1, s: c2}
+        {K: 1, h: 1, r: 1, d: c0, k: c1, s: c2, t: t, n: n, p: p}
         >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
         >>> translator.reverse_translate_parameter(soln_reduced)
-        Matrix([[t*x1, n*x2, p*x3, x2, c0*x2, x2/x3, c1*x2/(x1*x3), 1/x1, c2/x1]])
+        Matrix([[x2, x2/x3, 1/x1, t*x2, n*x2/(x1*x3), p/x1, c0*x1, c1*x2, c2*x3]])
         '''
         return scale_action(variables, self.inv_herm_mult)
 
@@ -1168,7 +1642,7 @@ class ODETranslator(object):
         >>> t_var, c1_var, c2_var = sympy.var('t c1 c2')
         >>> reduced_soln = (c2_var*sympy.exp(t_var+c1_var*(1-t_var)*sympy.exp(t_var)),
         ...                 c1_var * t_var * sympy.exp(t_var))
-        >>> original_soln = translator.reverse_translate_dep_var(reduced_soln, system.indep_var_index)
+        >>> original_soln = translator.reverse_translate_dep_var(reduced_soln, system.independent_variable_index)
         >>> original_soln == (reduced_soln[0], reduced_soln[1] / reduced_soln[0])
         True
         >>> original_soln
@@ -1178,7 +1652,7 @@ class ODETranslator(object):
         the first is :math:`t` itself -- rebuilds all three originals:
 
         >>> x0, y0 = sympy.var('x0 y0')
-        >>> translator.reverse_translate_dep_var((x0, t_var, y0), system.indep_var_index)
+        >>> translator.reverse_translate_dep_var((x0, t_var, y0), system.independent_variable_index)
         (t, x0, y0/x0)
         '''
         if len(variables) == self.scaling_matrix.shape[1]:
@@ -1247,7 +1721,7 @@ class ODETranslator(object):
         ...                 sympy.sympify('c3/(t**(1/3)*(ln(t-c1)-ln(t)+c2)**(2/3))'),  # x
         ...                 sympy.sympify('c1/(t*(ln(t-c1)-ln(t)+c2))'),  # y1
         ...                 sympy.sympify('t/(c1 - t)'))  # y2
-        >>> original_soln = translator.reverse_translate_general(reduced_soln, system.indep_var_index)
+        >>> original_soln = translator.reverse_translate_general(reduced_soln, system.independent_variable_index)
         >>> original_soln_answer = [#reduced_soln[1] ** 3 / (reduced_soln[2] ** 2)  # x^3 / y1^2
         ...                         reduced_soln[2] / reduced_soln[1],  # y1 / x
         ...                         reduced_soln[1] ** 5 * reduced_soln[3] / reduced_soln[2] ** 4]  # x^5 y2 / y1^4
@@ -1273,9 +1747,9 @@ class ODETranslator(object):
         if indep_var in indep_const_atoms:
             raise ValueError('{} is not independent of the independent variable'.format(indep_const))
         # And if we can, the original variables
-        if (self.variables_domain is not None) and len(set(self.variables_domain).intersection(indep_const_atoms)):
+        if (self.symbols_domain is not None) and len(set(self.symbols_domain).intersection(indep_const_atoms)):
             raise ValueError('{} is not independent of {}'.format(indep_const,
-                                                                  set(self.variables_domain).intersection(indep_const_atoms)))
+                                                                  set(self.symbols_domain).intersection(indep_const_atoms)))
 
 
         to_sub = {indep_var: indep_var / indep_const}
@@ -1288,8 +1762,8 @@ class ODETranslator(object):
         If use_domain_var is True, then use the domain variables before making up new ones.
         '''
         if variables is None:
-            if use_domain_var and (self.variables_domain is not None):
-                variables = self.variables_domain
+            if use_domain_var and (self.symbols_domain is not None):
+                variables = self.symbols_domain
             else:
                 variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in range(num_var)))
 
@@ -1302,14 +1776,14 @@ class ODETranslator(object):
         The invariants of the system, as determined by :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`.
 
         Returns:
-            tuple: The invariants of the system, in terms of :attr:`~desr.ode_translation.ODETranslator.variables_domain` if not :code:`None`.
+            tuple: The invariants of the system, in terms of :attr:`~desr.ode_translation.ODETranslator.symbols_domain` if not :code:`None`.
                 Otherwise, use :code:`variables` and failing that use :math:`y_i`.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.invariants()
-        Matrix([[s*t, n/d, k*p/(d*s), K/d, h*s/k, r/s]])
+        Matrix([[d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K]])
         '''
         variables = self._validate_variables(variables, self.n, 'y', True)
         return scale_action(variables, self.herm_mult_n)
@@ -1320,17 +1794,384 @@ class ODETranslator(object):
 
         Returns:
             tuple: The auxiliary variables of the system,
-                in terms of :attr:`~desr.ode_translation.ODETranslator.variables_domain` if not :code:`None`.
+                in terms of :attr:`~desr.ode_translation.ODETranslator.symbols_domain` if not :code:`None`.
                 Otherwise, use :code:`variables` and failing that use :math:`x_i`.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.auxiliaries()
-        Matrix([[1/s, d, d*s/k]])
+        Matrix([[h/k, K, K/h]])
         '''
         variables = self._validate_variables(variables, self.n, 'x', True)
         return scale_action(variables, self.herm_mult_i)
+
+    def _dynamic_rows(self, system):
+        '''
+        The row indices of the scaling matrix that belong to variables which move: the
+        independent variable and the dependent variables.
+
+        The rest are parameter rows.  Every classification below is a question about which
+        of these rows an invariant's exponents touch.
+        '''
+        dynamic = set(system.dependents) | {system.independent_variable}
+        return [i for i, variable in enumerate(system.symbols) if variable in dynamic]
+
+    def _kind_by_column(self, system):
+        '''
+        The kind of each invariant, by column index of :attr:`herm_mult_n`.
+
+        A three-way partition on which rows the column's exponents touch:
+
+        - ``'parameter'``   -- no dynamic row at all, so a monomial in the original
+          parameters alone.
+        - ``'independent'`` -- the independent variable's row but no dependent's, so it is
+          a rescaled clock and nothing else.
+        - ``'dependent'``   -- at least one dependent variable's row, whether or not it
+          also involves the independent variable.
+
+        The kind is structural and so does not depend on which reduction scheme runs; only
+        the *name* an invariant ends up with does.  Kept separate for that reason.
+        '''
+        indep_row = system.independent_variable_index
+        dependent_rows = [i for i, variable in enumerate(system.symbols)
+                          if variable in set(system.dependents)]
+
+        kinds = []
+        for column in range(self.herm_mult_n.shape[1]):
+            if any(self.herm_mult_n[row, column] != 0 for row in dependent_rows):
+                kinds.append('dependent')
+            elif self.herm_mult_n[indep_row, column] != 0:
+                kinds.append('independent')
+            else:
+                kinds.append('parameter')
+        return kinds
+
+    def variable_kinds(self, system, scheme=None, include_aux_vars=True):
+        '''
+        What kind of symbol each variable of the reduced system is.
+
+        A dict over **every** variable the reduction produces, mapping it to one of four
+        kinds.  The keys are the same as :meth:`named_variables`', so the two join: one
+        says what a symbol *means*, the other says what it *is*.
+
+        - ``'independent'`` -- the variable to integrate against.  There is always exactly
+          one.  Under the parameter scheme it is the rescaled clock, :math:`\\tau`; under
+          the general and dependent-variable schemes the reduction keeps the original
+          independent variable, so it is :math:`t` itself.
+        - ``'dependent'``   -- a variable of the reduced system with an equation.
+        - ``'parameter'``   -- an invariant that is a monomial in the original parameters
+          alone, so it does not change.
+        - ``'auxiliary'``   -- a normalised direction, from
+          :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`.  Only the general and
+          dependent-variable schemes produce any, and only when they are kept.
+
+        The distinction the kinds exist for is between the first three: a parameter and a
+        conserved dependent both have rate zero, and only the structure tells them apart.
+
+        A kind is the variable's **role in the reduced system**, which is not quite the same
+        as the structure of its monomial.  Under the general scheme an invariant can be a
+        rescaled clock -- :math:`k t / h` -- and still be a ``'dependent'`` here, because
+        it has an equation and evolves while :math:`t` is what the system is integrated
+        against.  :meth:`indep_var_invariant` answers the other question, whether any
+        invariant is a rescaled clock and nothing else, and returns :const:`None` when none
+        is.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be
+                used, since the names depend on it.  The kinds of the invariants do not --
+                those are structural.
+            include_aux_vars (bool): Whether the auxiliaries will be kept.
+
+        Returns:
+            dict: Reduced variable to its kind, in the reduced system's variable order.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.variable_kinds(system)
+        {kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', tau: 'independent', nu0: 'dependent', nu1: 'dependent'}
+
+        Under the general scheme the auxiliaries appear, and `t` is kept as the clock:
+
+        >>> translator.variable_kinds(system, scheme='general')
+        {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
+
+        Which is what the reduced system turns out to have:
+
+        >>> translator.translate_general(system).symbols
+        (t, x0, x1, x2, y0, y1, y2, y3, y4, y5)
+
+        Hubert & Labahn 6.6 has no invariant that is a rescaled clock alone -- both involve
+        a dependent variable -- but the reduction still integrates against `t`:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> hl = ODETranslator.from_ode_system(hl66)
+        >>> hl.variable_kinds(hl66)
+        {t: 'independent', x0: 'auxiliary', y0: 'dependent', y1: 'dependent'}
+        >>> hl.indep_var_invariant(hl66) is None
+        True
+        '''
+        names = list(self.named_variables(system, scheme, include_aux_vars))
+        return dict(zip(names, self._kind_by_variable(system, scheme, include_aux_vars)))
+
+    def _kind_by_variable(self, system, scheme=None, include_aux_vars=True):
+        '''
+        The kind of each variable of the reduced system, in its variable order.
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        invariant_kinds = self._kind_by_column(system)
+
+        if scheme == ReductionScheme.PARAMETER:
+            # The clock invariant *becomes* the reduced system's independent variable, so
+            # the structural kinds are already the roles.
+            return invariant_kinds
+
+        # The general and dependent-variable schemes keep the original independent variable
+        # and prepend it, then the auxiliaries, then the invariants.  So an invariant that
+        # is structurally a rescaled clock -- `k*t/h`, say -- is nonetheless a *dependent*
+        # variable of this reduced system: it has an equation and it evolves, while `t`
+        # remains what everything is integrated against.  Hence exactly one 'independent'
+        # either way, and it is the reduced system's own independent variable.
+        auxiliaries = ['auxiliary'] * (self.herm_mult_i.shape[1] if include_aux_vars else 0)
+        roles = ['dependent' if kind == 'independent' else kind
+                 for kind in invariant_kinds]
+        return ['independent'] + auxiliaries + roles
+
+    def _invariants_by_kind(self, system, variables=None):
+        '''
+        The invariants grouped by what kind of symbol each is.
+
+        The rule is **structural**, read off the exponents in
+        :attr:`~desr.ode_translation.ODETranslator.herm_mult_n`, and never off the rate of
+        change:
+
+        - :attr:`ReductionScheme.PARAMETER`'s value, ``'parameter'``, if the invariant's
+          exponents are zero on every *dynamic* row -- the independent variable's and the
+          dependent variables' -- so it is a monomial in the original parameters alone.
+        - ``'dependent'`` otherwise: it has at least one nonzero exponent on a dynamic row.
+
+        **Why not look at the rate.** A reduced parameter always has rate zero, and a
+        reduced dependent *may* have rate zero because it is conserved, so the rate cannot
+        tell them apart while the exponents always can.  The case is not hypothetical: a
+        catalyst in a reaction network gives an invariant like ``k_0_1*w/k_2_3``, which is
+        conserved because the catalyst is, and which must stay a dependent variable --
+        calling it a parameter would assert that it is a constant of the model rather than
+        a quantity conserved along the trajectory.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            dict: ``{'parameter': (...), 'dependent': (...)}``, each in invariant order.
+                Both keys are always present, so an empty group is an empty tuple rather
+                than a :exc:`KeyError`.
+
+        Private: :meth:`parameter_invariants` and :meth:`dependent_invariants` are the two
+        groups, and :meth:`invariant_kinds` is the per-symbol answer, so a third public way
+        to ask the same question would be sprawl.
+        '''
+        invariants = self.invariants(variables)
+        grouped = {'parameter': [], 'independent': [], 'dependent': []}
+        for column, kind in enumerate(self._kind_by_column(system)):
+            grouped[kind].append(invariants[column])
+        return {kind: tuple(found) for kind, found in grouped.items()}
+
+    def parameter_invariants(self, system, variables=None):
+        '''
+        The invariants that are monomials in the original parameters alone.
+
+        These become the reduced system's parameters.  There are :math:`p - r` of them when
+        the parameter scheme applies, and there may be none at all -- Hubert & Labahn 6.6
+        has no parameters to begin with.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            tuple of sympy.Expr
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.parameter_invariants(system)
+        (d/K, h*r/k, h*s/k)
+        '''
+        return self._invariants_classified_as('parameter', system, variables)
+
+    def dependent_invariants(self, system, variables=None):
+        '''
+        The invariants that involve the independent variable or a dependent variable.
+
+        These become the reduced system's dependent variables.  There are :math:`q` of
+        them, one per dependent variable of the original system -- the clock is reported
+        separately by :meth:`indep_var_invariant`, and the constants by
+        :meth:`parameter_invariants`.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            tuple of sympy.Expr
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.dependent_invariants(system)
+        (n/K, h*p/K)
+
+        There are exactly as many as the original system has dependent variables, which is
+        the precise sense in which a reduction loses symbols only among the parameters:
+
+        >>> len(translator.dependent_invariants(system)) == system.num_dependents
+        True
+        '''
+        return self._invariants_classified_as('dependent', system, variables)
+
+    def indep_var_invariant(self, system, variables=None):
+        '''
+        The invariant that carries the clock, or :const:`None` if there is not one.
+
+        It is the invariant whose exponents are nonzero on the independent variable's row
+        and zero on every dependent variable's row.  Under the parameter scheme there is
+        exactly one.  Under the general scheme there may be none, because the clock can be
+        entangled with a dependent variable: in Hubert & Labahn 6.6 the invariant is
+        :math:`t z_1^3`, and there is no invariant that is a function of :math:`t` and the
+        parameters alone.
+
+        :const:`None` states that rather than papering over it.  A caller that needs a new
+        independent variable and gets :const:`None` is being told something true about the
+        reduction, which is better than being handed an invariant that also moves.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            sympy.Expr or None
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.indep_var_invariant(system)
+        k*t/h
+
+        Hubert & Labahn 6.6 has no separable clock:
+
+        >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> translator = ODETranslator.from_ode_system(hl66)
+        >>> translator.invariants()
+        Matrix([[t*z1**3, z1**2*z2/t]])
+        >>> translator.indep_var_invariant(hl66) is None
+        True
+        '''
+        invariants = self.invariants(variables)
+        indep_row = system.independent_variable_index
+        dependent_rows = [i for i, variable in enumerate(system.symbols)
+                          if variable in set(system.dependents)]
+
+        for column in range(self.herm_mult_n.shape[1]):
+            if self.herm_mult_n[indep_row, column] == 0:
+                continue
+            if any(self.herm_mult_n[row, column] != 0 for row in dependent_rows):
+                continue
+            return invariants[column]
+        return None
+
+    def _invariants_classified_as(self, kind, system, variables=None):
+        '''
+        The `kind` group of :meth:`_invariants_by_kind`.
+        '''
+        return self._invariants_by_kind(system, variables)[kind]
+
+    def named_variables(self, system, scheme=None, include_aux_vars=True):
+        '''
+        What each variable of the reduced system stands for.
+
+        A dict from the reduced system's variable to the monomial in the original variables
+        that it denotes -- ``{kappa0: d/K, ..., tau: k*t/h, nu0: n/K, ...}``.  The keys are
+        plain symbols, so this is the map to reach for when you have a reduced system in
+        hand and want to know what one of its symbols means: an invariant is both a new
+        name and the monomial that name stands for, and this is the two of them together.
+
+        :meth:`variable_kinds` is keyed the same way and says what each symbol *is*.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be
+                used, since the names depend on it -- the parameter scheme gives `kappa`,
+                `tau` and `nu` while the general scheme gives `x` and `y`.  Inferred by :meth:`scheme`
+                when left out, with the caveat in :meth:`expected_variable_count`.
+            include_aux_vars (bool): Whether the auxiliaries will be kept.
+
+        Returns:
+            dict: Reduced variable to the monomial it denotes, in the reduced system's
+                variable order.  Under the general and dependent-variable schemes the
+                original independent variable is kept, and maps to itself.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.named_variables(system)
+        {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
+
+        So reading a reduced system needs no reconstruction of monomials:
+
+        >>> reduced = translator.translate(system)
+        >>> reduced.parameters
+        (kappa0, kappa1, kappa2)
+        >>> translator.named_variables(system)[reduced.parameters[0]]
+        d/K
+
+        Under the general scheme the auxiliaries are included, and `t` maps to itself:
+
+        >>> translator.named_variables(system, scheme='general')
+        {t: t, x0: h/k, x1: K, x2: K/h, y0: d/K, y1: h*r/k, y2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
+        '''
+        if scheme is None:
+            scheme = self.scheme(system)
+        else:
+            scheme = ReductionScheme(scheme)
+
+        invariants = list(self.invariants())
+
+        if scheme == ReductionScheme.PARAMETER:
+            # The columns of V_n run (parameter invariants, the clock, the dependents), the
+            # same order the reduced system's variables are built in.
+            variable_map = self.variable_map(system)
+            names = (list(self._new_constants(system))
+                     + [variable_map[system.independent_variable]]
+                     + [variable_map[v] for v in system.dependents])
+            monomials = invariants
+        else:
+            naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
+            invariant_names = _names_for(naming['dependents'], len(invariants),
+                                         self._new_indices_start_at, 'invariants')
+            auxiliaries = list(self.auxiliaries())
+            if include_aux_vars:
+                auxiliary_names = _new_symbols(naming['auxiliaries'], len(auxiliaries),
+                                               self._new_indices_start_at)
+            else:
+                auxiliary_names, auxiliaries = [], []
+            names = [system.independent_variable] + auxiliary_names + invariant_names
+            monomials = [system.independent_variable] + auxiliaries + invariants
+
+        if len(names) != len(monomials):
+            raise ValueError(
+                'the {} scheme names {} variables but there are {}'.format(
+                    scheme, len(names), len(monomials)))
+
+        return dict(zip(names, monomials))
 
     def rewrite_rules(self, variables=None):
         '''
@@ -1350,7 +2191,7 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.rewrite_rules()
-        {t: s*t, n: n/d, p: k*p/(d*s), K: K/d, d: 1, h: h*s/k, k: 1, r: r/s, s: 1}
+        {K: 1, d: d/K, h: 1, k: 1, r: h*r/k, s: h*s/k, t: k*t/h, n: n/K, p: h*p/K}
 
         For example, :math:`r t` is an invariant.
         Substituting in the above mapping gives us a way to write it in terms of our generating set of invariants:
@@ -1383,17 +2224,17 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> moving_frame = translator.moving_frame()
         >>> moving_frame
-        (z2,)
+        (z1,)
 
         Now we can check that the moving frame moves a point to the cross-section.
 
         >>> translator.rational_section()
-        Matrix([[1 - 1/z2]])
+        Matrix([[1 - 1/z1]])
         >>> scale_action(moving_frame, translator.scaling_matrix)  # \\rho(x)
-        Matrix([[1, z2, 1/z2]])
+        Matrix([[1, 1/z1, z1]])
         >>> # :math:`\\rho(x).x` should satisfy the equations of the rational section.
-        >>> scale_action(moving_frame, translator.scaling_matrix).multiply_elementwise(sympy.Matrix(system.variables).T)
-        Matrix([[t, z1*z2, 1]])
+        >>> scale_action(moving_frame, translator.scaling_matrix).multiply_elementwise(sympy.Matrix(system.symbols).T)
+        Matrix([[t, 1, z1*z2]])
 
 
         Another example:
@@ -1403,17 +2244,17 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> moving_frame = translator.moving_frame()
         >>> moving_frame
-        (s, 1/d, k/(d*s))
+        (k/h, 1/K, h/K)
 
         Now we can check that the moving frame moves a point to the cross-section.
 
         >>> translator.rational_section()
-        Matrix([[1 - 1/s, d - 1, d*s - 1/k]])
+        Matrix([[h - 1/k, K - 1, K - 1/h]])
         >>> scale_action(moving_frame, translator.scaling_matrix)  # \\rho(x)
-        Matrix([[s, 1/d, k/(d*s), 1/d, 1/d, s/k, 1/k, 1/s, 1/s]])
+        Matrix([[1/K, 1/K, 1/h, 1/k, h/k, h/k, k/h, 1/K, h/K]])
         >>> # :math:`\\rho(x).x` should satisfy the equations of the rational section.
-        >>> scale_action(moving_frame, translator.scaling_matrix).multiply_elementwise(sympy.Matrix(system.variables).T)
-        Matrix([[s*t, n/d, k*p/(d*s), K/d, 1, h*s/k, 1, r/s, 1]])
+        >>> scale_action(moving_frame, translator.scaling_matrix).multiply_elementwise(sympy.Matrix(system.symbols).T)
+        Matrix([[1, d/K, 1, 1, h*r/k, h*s/k, k*t/h, n/K, h*p/K]])
 
         See :cite:`Fels1999` for more details.
         '''
@@ -1441,14 +2282,14 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.rational_section()
-        Matrix([[1 - 1/z2]])
+        Matrix([[1 - 1/z1]])
 
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.rational_section()
-        Matrix([[1 - 1/s, d - 1, d*s - 1/k]])
+        Matrix([[h - 1/k, K - 1, K - 1/h]])
 
 
         See :cite:`Fels1999` for more details.
@@ -1491,7 +2332,7 @@ class ODETranslator(object):
         ...                                                [0, 2, 0, 1, 0, 1],
         ...                                                [2, 0, 0, 3, 0, 0]]))
         >>> ode_translator.invariants(variables=variables)
-        Matrix([[y0**3*y2*y5**2/(y3**2*y4**5), y1*y4**2/y5**2, y2**2/y4**3]])
+        Matrix([[y2*y3**2/(y0**3*y1), y4**3/y2**2, y4*y5**2/(y1*y2**2)]])
 
         Now we can express two new invariants, which we think are more interesting, as a matrix.
         We pick the product of the first two invariants, and the product of the last two invariants:
@@ -1502,7 +2343,7 @@ class ODETranslator(object):
 
         >>> new_translator = ode_translator.extend_from_invariants(new_inv)
         >>> new_translator.invariants(variables=variables)
-        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y0**3*y2*y5**2/(y3**2*y4**5)]])
+        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y4**3/y2**2]])
         '''
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
@@ -1516,7 +2357,7 @@ class ODETranslator(object):
         # Step 2b: Apply these column operations to the current Hermite multiplier
         hermite_multiplier = self.herm_mult.copy()
         hermite_multiplier[:, self.r:] = self.herm_mult_n * column_operations
-        max_scal = ODETranslator(scaling_matrix=self.scaling_matrix, variables_domain=self.variables_domain,
+        max_scal = ODETranslator(scaling_matrix=self.scaling_matrix, symbols_domain=self.symbols_domain,
                                   hermite_multiplier=hermite_multiplier)
 
         return max_scal
@@ -1543,9 +2384,9 @@ class ODETranslator(object):
             if len(variable_order) != self.n:
                 raise ValueError('{} variables given but we have {} actions'.format(len(variable_order), self.n))
         else:
-            if self.variables_domain is None:
+            if self.symbols_domain is None:
                 raise ValueError('No variable order found to determine invariance.')
-            variable_order = self.variables_domain
+            variable_order = self.symbols_domain
 
         missing_var = set(variable_order).difference(expr.atoms(sympy.Symbol))
         if len(missing_var):
@@ -1636,9 +2477,9 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
     ...                         [5, 6],])
     >>> extend_rectangular_matrix(matrix_)
     Matrix([
-    [ 3, 2, -2],
-    [-2, 1,  0],
-    [ 5, 6, -5]])
+    [ 3, 2, -3],
+    [-2, 1,  1],
+    [ 5, 6, -6]])
     """
     matrix_ = matrix_.copy()
     if len(matrix_.shape) != 2:
@@ -1676,7 +2517,8 @@ def extend_rectangular_matrix(matrix_, check_unimodular=True):
 
     return extended
 
-__all__ = ['ODETranslator', 'scale_action', 'extend_rectangular_matrix']
+__all__ = ['ODETranslator', 'ReductionScheme', 'scale_action', 'extend_rectangular_matrix',
+           'NAMING_SCHEME_KEYS', 'PARAMETER_SCHEME_NAMES', 'GENERAL_SCHEME_NAMES']
 
 if __name__ == '__main__':
     import doctest

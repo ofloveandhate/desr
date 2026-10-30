@@ -15,7 +15,7 @@ articlerender.fcgi?artid=PMC3991559.
 
 import sympy
 from desr import ODESystem, ODETranslator, scale_action
-from desr.matrix_normal_forms import smf
+from desr.matrix_normal_forms import smith_normal_form
 from desr.tex_tools import expr_to_tex
 
 
@@ -59,7 +59,7 @@ def michaelis_menten_four_variables():
         system = system_four_variable_michaelis_menten()
         system.update_initial_conditions({'S': 'S_0', 'E':'E_0', 'C':'C_0', 'P':'P_0'})
 
-        variable_order = list(system.variables)
+        variable_order = list(system.symbols)
 
         
 
@@ -78,7 +78,7 @@ def michaelis_menten_four_variables():
         translator = ODETranslator.from_ode_system(system)
 
 
-        print('variable order:', translator.variables_domain)
+        print('variable order:', translator.symbols_domain)
 
         # Print scaling matrices
         print('Scaling matrix:')
@@ -101,7 +101,7 @@ def michaelis_menten_four_variables():
         system = system_four_variable_michaelis_menten()
 
 
-        variable_order = list(system.variables)
+        variable_order = list(system.symbols)
         put_at_end('k_2',variable_order)
         system.reorder_variables(variable_order)
         print('New variable order:',variable_order)
@@ -123,7 +123,7 @@ def michaelis_menten_four_variables():
         print('P =')
         print(invariant_choice.__repr__())
         print('Chosen invariants:')
-        print(scale_action(system_from_ode.variables_domain, invariant_choice))
+        print(scale_action(system_from_ode.symbols_domain, invariant_choice))
 
         ## Method that does the extension automatically.
         max_scal2 = system_from_ode.extend_from_invariants(invariant_choice=invariant_choice)
@@ -136,7 +136,7 @@ def michaelis_menten_four_variables():
         ## Step 2: Try and extend the choices by a basis of invariants
         ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
         WdP = system_from_ode.inv_herm_mult_d * invariant_choice
-        smith_normal_form, row_ops, col_ops = smf(WdP)
+        normal_form, row_ops, col_ops = smith_normal_form(WdP)
 
         print('Smith normal form decomposition:')
         print('{}\n{}\n{}\n{}\n=\n{}'.format(*map(lambda x: x.__repr__(), (row_ops,
@@ -156,7 +156,7 @@ def michaelis_menten_four_variables():
 
         print('New Vn\n',system_from_ode.herm_mult_n * col_ops)
 
-        print('New invariants:\n',', '.join(map(str, scale_action(system_from_ode.variables_domain, system_from_ode.herm_mult_n * col_ops))))
+        print('New invariants:\n',', '.join(map(str, scale_action(system_from_ode.symbols_domain, system_from_ode.herm_mult_n * col_ops))))
 
         hermite_mult = system_from_ode.herm_mult_n * col_ops
         # The permutation is (0 1 3 4 2 5)
@@ -205,7 +205,7 @@ def michaelis_menten_two_variable(verbose=True):
         reduced_system_km1.reorder_variables(['t', 's', 'c', 'K', 'k_2', 'k_1', 'e_0'])
         
         # Print variable order
-        print('Variable order: ', reduced_system_km1.variables)
+        print('Variable order: ', reduced_system_km1.symbols)
         
         print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
         
@@ -293,10 +293,10 @@ def michaelis_menten_two_variable(verbose=True):
         system.update_initial_conditions({'s': 's0'})
 
 
-        print('Variable order: ', system.variables)
+        print('Variable order: ', system.symbols)
         
         print('Power Matrix:', system.exponent_matrix().__repr__())
-        translator = ODETranslator.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
+        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u','v']})
         
         
         print('Scaling matrix:',translator.scaling_matrix.__repr__())
@@ -338,7 +338,7 @@ def michaelis_menten_two_variable(verbose=True):
         print(reduced_system)#.to_tex()
 
         to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
-        reduced_system = reduced_system.diff_subs(to_sub, subs_constraints=True)
+        reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
 
         print('after subbing into canonical names from Murray')
         print(reduced_system)#.to_tex()
@@ -370,7 +370,7 @@ def michaelis_menten_two_variable(verbose=True):
         max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
         
         print('Scaling matrix:',max_scal2.scaling_matrix.__repr__())
-        print('Variable order: ', reduced_system_km1.variables)
+        print('Variable order: ', reduced_system_km1.symbols)
         print('Hermite multiplier', max_scal2.herm_mult.__repr__())
         print('Invariants: ', max_scal2.invariants())
         print('W:', max_scal2.inv_herm_mult.__repr__())

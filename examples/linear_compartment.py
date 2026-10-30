@@ -22,7 +22,7 @@ sympy.init_printing(pretty_print=True, use_latex=True)
 
 def run_symmetry_reduction(sys):
 
-    print(f'original variables: {sys.variables}')
+    print(f'original variables: {sys.symbols}')
     print(f'original system: {sys}')
 
     translator = ODETranslator.from_ode_system(sys)
@@ -38,7 +38,7 @@ def run_symmetry_reduction(sys):
     # Print translated system
     reduced_system = translator.translate(sys)
 
-    print(f'\nreduced variables: {reduced_system.variables}')
+    print(f'\nreduced variables: {reduced_system.symbols}')
     print('\nReduced system:')
     print(reduced_system)
 

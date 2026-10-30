@@ -13,7 +13,7 @@ def run_symmetry_reduction(sys):
 
     translator = ODETranslator.from_ode_system(sys)
 
-    print('Variable order: ', translator.variables_domain)
+    print('Symbol order: ', translator.symbols_domain)
 
     print('Scaling matrix:')
     print(translator.scaling_matrix.__repr__())

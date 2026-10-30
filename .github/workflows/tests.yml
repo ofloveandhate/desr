@@ -1,0 +1,162 @@
+name: tests
+
+# Four test surfaces, because each of them catches something none of the others does.
+# This was learned the hard way: during the Hermite convention work every one of these was
+# green at a moment when the next was broken.
+#
+#   pytest            the real assertions
+#   module doctests   the docstring examples
+#   sphinx doctest    the worked examples in docs/source/examples/*.rst
+#   sphinx html       the `.. plot::` directives -- the doctest builder does NOT run these,
+#                     and two figures were broken while all ~900 doctests passed
+#   examples/         six of the eight scripts are referenced by no doc page, so nothing
+#                     else runs them; that is how a parameter-ordering bug survived until
+#                     one of them tripped over it
+#
+# The second axis is numpy.  desr is pure sympy and `import desr` must work without numpy
+# or scipy; only desr.numerics needs them.  `without-numeric-extras` proves that on a bare
+# install, which a test running inside a full environment cannot.
+
+on:
+  push:
+    branches: [master, 'release/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: tests, python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is python-flint's floor and python-flint is not optional; see the comment in
+        # setup.py.  3.9 is end-of-life (2025-10-31) and python-flint rejects it anyway.
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install desr with the numeric extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[numerics]' pytest
+
+      - name: Unit tests
+        run: python -m pytest tests/ -v
+
+      - name: Module doctests
+        run: python -m pytest --doctest-modules desr/ -v
+
+  without-numeric-extras:
+    name: no numpy, python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install desr without numpy or scipy
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: numpy and scipy really are absent
+        run: |
+          python - <<'PY'
+          import importlib.util
+          for name in ('numpy', 'scipy'):
+              assert importlib.util.find_spec(name) is None, (
+                  name + ' is installed, so this job proves nothing')
+          print('neither numpy nor scipy is present')
+          PY
+
+      - name: A whole symbolic workflow, with no numeric dependency
+        run: |
+          python - <<'PY'
+          from desr import ODESystem, ODETranslator, ReductionScheme
+
+          system = ODESystem.from_equations(['dn/dt = n*(r*(1 - n/K) - k*p/(n+d))',
+                                             'dp/dt = s*p*(1 - h*p/n)'])
+          translator = ODETranslator.from_ode_system(system)
+          assert translator.scheme(system) == ReductionScheme.PARAMETER
+          reduced = translator.translate(system)
+          assert len(reduced.symbols) == translator.expected_variable_count(system)
+          assert reduced.scheme == ReductionScheme.PARAMETER
+          print(reduced)
+          PY
+
+      - name: desr.numerics asks for numpy, and says so
+        run: |
+          python - <<'PY'
+          try:
+              import desr.numerics
+          except ImportError as exc:
+              assert 'numpy' in str(exc), 'unhelpful message: ' + str(exc)
+              print('desr.numerics raised as it should:', exc)
+          else:
+              raise AssertionError('desr.numerics imported without numpy')
+          PY
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install desr and the docs toolchain
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[numerics]' sphinx sphinxcontrib-bibtex sphinx-rtd-theme matplotlib
+
+      - name: Sphinx doctests
+        run: python -m sphinx -b doctest docs/source docs/build/doctest
+
+      # -W, so a warning fails the build.  The one deliberate warning -- the placeholder
+      # arXiv bibliography key -- is excused in docs/source/conf.py, which says to remove
+      # the excuse once the preprint exists.
+      - name: HTML build, warnings are errors
+        run: python -m sphinx -b html -W docs/source docs/build/html
+
+      - name: Upload the built docs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: html-docs
+          path: docs/build/html
+          retention-days: 14
+
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install desr, the numeric extras and matplotlib
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[numerics]' matplotlib
+
+      # They can be run unattended: under the Agg backend plt.show() is a no-op.  CLAUDE.md
+      # used to claim otherwise, which is why nothing ran them.
+      - name: Run every example script
+        env:
+          MPLBACKEND: Agg
+        run: python .github/scripts/run_examples.py

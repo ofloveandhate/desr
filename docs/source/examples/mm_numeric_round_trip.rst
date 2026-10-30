@@ -36,19 +36,19 @@ The variable order matters: the reduction algorithm tends to reduce away the var
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
     >>> system = ODESystem.from_tex(system_tex)
     >>> system.update_initial_conditions({'s': 's_0'})
-    >>> system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
+    >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
 Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
 
     >>> translator = ODETranslator.from_ode_system(system,
-    ...                                              naming_scheme=('tau', ['u', 'v'], 'c'))
+    ...                                              naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
     >>> translator.invariants()
-    Matrix([[k_1*s_0*t, s/s_0, c/s_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), k_1*s_0*t, s/s_0, c/s_0]])
     >>> reduced_system = translator.translate(system)
     >>> reduced_system
     dtau/dtau = 1
-    du/dtau = c0*v - c2*u + u*v
-    dv/dtau = -c0*v - c1*v + c2*u - u*v
+    du/dtau = -c0*u + c2*v + u*v
+    dv/dtau = c0*u - c1*v - c2*v - u*v
     u(0) = 1
     parameters: c0, c1, c2
 
@@ -61,8 +61,8 @@ The number of scaling symmetries is also the number of parameters we must provid
 
 For programming convenience, let's give the variables names we can use below.
 
-    >>> t, s, c, k_m1, k_2, k_1, e_0, s_0 = system.variables
-    >>> tau, u, v, c0, c1, c2 = reduced_system.variables
+    >>> s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
+    >>> c0, c1, c2, tau, u, v = reduced_system.symbols
 
 
 Numerically solve the original system
@@ -72,7 +72,7 @@ Choose some arbitrary parameter values and solve directly.  This is the answer w
 
     >>> parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
     >>> def as_function(a_system, constants):
-    ...     variables = list(a_system.dependent_variables)
+    ...     variables = list(a_system.dependents)
     ...     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 
@@ -97,7 +97,7 @@ returns values of the reduced ones.  Here it converts the starting state and the
     >>> [float(translated_values[x]) for x in (tau, u, v)]
     [0.0, 1.0, 0.0]
     >>> [float(translated_values[x]) for x in (c0, c1, c2)]
-    [0.3, 0.13333333333333333, 0.15]
+    [0.15, 0.13333333333333333, 0.3]
 
 You don't have to translate all the values at once, the function accepts a partial dictionary. For example, passing
 a dict containing only parameters and time converts the time axis, since :math:`\tau = k_1 s_0 t`.

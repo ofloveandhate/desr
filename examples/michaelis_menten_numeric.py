@@ -34,14 +34,14 @@ SYSTEM_TEX = r'''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\
 
 system = ODESystem.from_tex(SYSTEM_TEX)
 system.update_initial_conditions({'s': 's_0'})
-system.reorder_variables(['t', 's', 'c', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
+system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-translator = ODETranslator.from_ode_system(system, naming_scheme=('tau', ['u', 'v'], 'c'))
+translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
 reduced_system = translator.translate(system)
 numeric = NumericTranslation(system, translator, reduced_system)
 
-t, s, c, k_m1, k_2, k_1, e_0, s_0 = system.variables
-tau, u, v, c0, c1, c2 = reduced_system.variables
+s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
+c0, c1, c2, tau, u, v = reduced_system.symbols
 
 parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
 initial_state = [2.0, 0.0]
@@ -50,7 +50,7 @@ final_time = 70.0
 
 def as_function(a_system, constants):
     """Turn a system with its constants fixed into a right-hand side for solve_ivp."""
-    variables = list(a_system.dependent_variables)
+    variables = list(a_system.dependents)
     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

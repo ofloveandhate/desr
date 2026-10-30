@@ -21,7 +21,7 @@ class TestPublicNames(TestCase):
         system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/k)'])
         translator = ODETranslator.from_ode_system(system)
         reduced = translator.translate(system)
-        self.assertTrue(reduced.variables)
+        self.assertTrue(reduced.symbols)
 
     def test_the_chemical_reaction_network_names_are_exported(self):
         from desr import ChemicalReactionNetwork, ChemicalSpecies, Complex, Reaction
@@ -34,11 +34,23 @@ class TestPublicNames(TestCase):
 
     def test_the_numeric_names_resolve_through_the_package(self):
         from desr import (ConflictingKnownValues, InsufficientKnownValues,
-                          NumericTranslation, Scheme)
+                          NumericTranslation)
         self.assertTrue(issubclass(InsufficientKnownValues, ValueError))
         self.assertTrue(issubclass(ConflictingKnownValues, ValueError))
         self.assertTrue(callable(NumericTranslation))
-        self.assertEqual(Scheme.GENERAL, 'general')
+
+    def test_the_reduction_scheme_is_eager_because_it_needs_no_numpy(self):
+        '''
+        `ReductionScheme` names the three reductions, which is symbolic business, so it
+        lives in `ode_translation` and imports eagerly.  It was in `numerics` until
+        `ODETranslator` needed to return one, which would have dragged numpy into the core.
+        '''
+        from desr import ReductionScheme
+        self.assertEqual(ReductionScheme.GENERAL, 'general')
+        self.assertNotIn('ReductionScheme', desr._LAZY)
+        # Still reachable where it used to be, since that is where it was introduced.
+        from desr.numerics import ReductionScheme as same
+        self.assertIs(ReductionScheme, same)
 
     def test_submodules_are_reachable_as_attributes(self):
         for name in ('chemical_reaction_network', 'matrix_normal_forms', 'numerics',

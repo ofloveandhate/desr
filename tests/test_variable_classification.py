@@ -34,24 +34,24 @@ class TestParametersAndDependents(TestCase):
         system = ODESystem.from_equations(['dz/dt = a*z'])
         self.assertEqual(system.parameters, (a,))
         self.assertEqual(system.num_parameters, 1)
-        self.assertEqual(system.dependent_variables, (z,))
-        self.assertEqual(system.num_dependent_variables, 1)
+        self.assertEqual(system.dependents, (z,))
+        self.assertEqual(system.num_dependents, 1)
 
     def test_the_independent_variable_is_neither(self):
         system = ODESystem.from_equations(['dz/dt = a*z'])
         self.assertNotIn(t, system.parameters)
-        self.assertNotIn(t, system.dependent_variables)
+        self.assertNotIn(t, system.dependents)
 
     def test_derivatives_reports_a_parameter_as_having_none(self):
         # `derivatives` used to map None to 0, which made a parameter indistinguishable
         # from a conserved dependent to anybody reading it.
         system = ODESystem.from_equations(['dz/dt = a*z'])
-        self.assertIsNone(system.derivatives[system.variables.index(a)])
+        self.assertIsNone(system.derivatives[system.symbols.index(a)])
         self.assertNotIn(a, system.derivative_dict)
 
     def test_an_explicit_zero_is_a_conserved_dependent(self):
         system = with_conserved_w()
-        self.assertIn(w, system.dependent_variables)
+        self.assertIn(w, system.dependents)
         self.assertNotIn(w, system.parameters)
         self.assertEqual(system.derivative_dict[w], sympy.sympify(0))
 
@@ -61,14 +61,14 @@ class TestParametersAndDependents(TestCase):
         # nor a dependent and fell out of the system entirely.
         system = ODESystem.from_equations(['dx/dt = 1'])
         x = sympy.Symbol('x')
-        self.assertEqual(system.dependent_variables, (x,))
+        self.assertEqual(system.dependents, (x,))
         self.assertEqual(system.parameters, ())
 
     def test_a_dependent_variable_with_derivative_one_survives_reduction(self):
         system = ODESystem.from_equations(['dx/dt = 1'])
         translator = ODETranslator.from_ode_system(system)
         reduced = translator.translate(system)
-        self.assertTrue(reduced.variables)
+        self.assertTrue(reduced.symbols)
 
     def test_the_retired_vocabulary_is_gone(self):
         # Cut outright rather than aliased, so that a caller is told rather than quietly
@@ -87,28 +87,28 @@ class TestDeclaringParameters(TestCase):
         system = with_conserved_w()
         system.make_parameter('w')
         self.assertIn(w, system.parameters)
-        self.assertNotIn(w, system.dependent_variables)
-        self.assertIsNone(system.derivatives[system.variables.index(w)])
+        self.assertNotIn(w, system.dependents)
+        self.assertIsNone(system.derivatives[system.symbols.index(w)])
 
     def test_parameters_at_construction_does_the_same(self):
         declared = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=['w'])
         made = with_conserved_w()
         made.make_parameter('w')
         self.assertEqual(set(declared.parameters), set(made.parameters))
-        self.assertEqual(declared.dependent_variables, made.dependent_variables)
+        self.assertEqual(declared.dependents, made.dependents)
 
     def test_declaring_at_construction_orders_it_with_the_parameters(self):
         # Construction ends in a default ordering, so a variable declared a parameter there
         # lands with the parameters.  make_parameter leaves it where it is, because the
         # ordering decides which parameters get normalised away and must not move silently.
         declared = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=['w'])
-        self.assertEqual(declared.variables, (t, z, a, w))
+        self.assertEqual(declared.symbols, (a, w, t, z))
 
         made = with_conserved_w()
         made.make_parameter('w')
-        self.assertEqual(made.variables, (t, w, z, a))
+        self.assertEqual(made.symbols, (a, t, w, z))
         made.default_order_variables()
-        self.assertEqual(made.variables, declared.variables)
+        self.assertEqual(made.symbols, declared.symbols)
 
     def test_parameters_accepts_symbols_as_well_as_strings(self):
         by_name = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=['w'])
@@ -117,7 +117,7 @@ class TestDeclaringParameters(TestCase):
 
     def test_parameters_through_the_raw_constructor(self):
         base = with_conserved_w()
-        system = ODESystem(base.variables, base.derivatives, indep_var=base.indep_var,
+        system = ODESystem(base.symbols, base.derivatives, indep_var=base.indep_var,
                            parameters=['w'])
         self.assertIn(w, system.parameters)
 
@@ -125,7 +125,7 @@ class TestDeclaringParameters(TestCase):
         tex = '\n'.join([r'\frac{dz}{dt} &= a z \\', r'\frac{dw}{dt} &= 0'])
         system = ODESystem.from_tex(tex, parameters=['w'])
         self.assertIn(w, system.parameters)
-        self.assertNotIn(w, system.dependent_variables)
+        self.assertNotIn(w, system.dependents)
 
     def test_a_catalyst_can_be_declared_a_parameter(self):
         # The motivating case: stoichiometry hands a catalyst a derivative of identically
@@ -135,7 +135,7 @@ class TestDeclaringParameters(TestCase):
         network = ChemicalReactionNetwork.from_diagram('x + e -> y + e')
         system = network.to_ode_system()
         e = sympy.Symbol('e')
-        self.assertIn(e, system.dependent_variables)
+        self.assertIn(e, system.dependents)
         system.make_parameter(e)
         self.assertIn(e, system.parameters)
 
@@ -176,30 +176,33 @@ class TestClassificationIsCarriedAround(TestCase):
 
     def test_a_parsed_system_and_a_hand_built_one_agree(self):
         parsed = ODESystem.from_equations(['dz/dt = a*z'])
-        built = ODESystem([t, z, a], [sympy.sympify(1), a * z, None], indep_var=t)
-        self.assertEqual(parsed.variables, built.variables)
+        built = ODESystem([a, t, z], [None, sympy.sympify(1), a * z], indep_var=t)
+        self.assertEqual(parsed.symbols, built.symbols)
         self.assertEqual(parsed.derivatives, built.derivatives)
         self.assertEqual(parsed.parameters, built.parameters)
-        self.assertEqual(parsed.dependent_variables, built.dependent_variables)
+        self.assertEqual(parsed.dependents, built.dependents)
 
     def test_copy_preserves_the_split(self):
         system = with_conserved_w()
         system.make_parameter('w')
         duplicate = system.copy()
         self.assertEqual(duplicate.parameters, system.parameters)
-        self.assertEqual(duplicate.dependent_variables, system.dependent_variables)
+        self.assertEqual(duplicate.dependents, system.dependents)
 
     def test_reordering_preserves_the_split(self):
         system = with_conserved_w()
         system.reorder_variables(['t', 'w', 'a', 'z'])
         self.assertEqual(set(system.parameters), {a})
-        self.assertEqual(set(system.dependent_variables), {z, w})
+        self.assertEqual(set(system.dependents), {z, w})
 
-    def test_default_ordering_puts_parameters_last(self):
+    def test_default_ordering_puts_parameters_first(self):
+        # (parameters, independent, dependents) -- Hubert & Labahn's (c, t, z), which the
+        # Hermite normal form convention requires; see ODESystem.default_order_variables.
+        # A conserved variable is a dependent, so `w` sorts with `z` and not with `a`.
         system = with_conserved_w()
         system.reorder_variables(['a', 'w', 't', 'z'])
         system.default_order_variables()
-        self.assertEqual(system.variables, (t, w, z, a))
+        self.assertEqual(system.symbols, (a, t, w, z))
 
 
 class TestConservedVariablesAndReduction(TestCase):
@@ -211,7 +214,7 @@ class TestConservedVariablesAndReduction(TestCase):
         conserved = with_conserved_w()
         as_parameter = with_conserved_w()
         as_parameter.make_parameter('w')
-        self.assertEqual(conserved.variables, as_parameter.variables)
+        self.assertEqual(conserved.symbols, as_parameter.symbols)
         self.assertEqual(conserved.maximal_scaling_matrix(),
                          as_parameter.maximal_scaling_matrix())
 
@@ -230,7 +233,7 @@ class TestConservedVariablesAndReduction(TestCase):
         translator = ODETranslator.from_ode_system(conserved)
         reduced = translator.translate(conserved)
         # Whatever the scheme chose, the reduction must not have silently dropped it.
-        self.assertTrue(reduced.variables)
+        self.assertTrue(reduced.symbols)
 
 
 class TestHowSystemsPrint(TestCase):

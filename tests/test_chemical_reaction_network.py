@@ -56,3 +56,44 @@ class TestChemicalReactionNetwork(TestCase):
         answer = ODESystem.from_equations('dx1/dt = -k_0_1*x1*x2 + k_3_2*x2\ndx2/dt = k_0_1*x1*x2 - k_3_2*x2')
 
         self.assertEqual(system, answer)
+
+
+class TestSpeciesNames(TestCase):
+    '''
+    A species name is a name, not a sympy builtin.
+
+    `from_diagram` called `sympy.sympify` rather than the library's own
+    `sympify_expression`, so `E + S -> E + P` -- the first diagram an enzyme kineticist is
+    likely to write -- died with "unsupported operand type(s) for +: 'Exp1' and
+    'SingletonRegistry'".
+    '''
+
+    def species_of(self, diagram):
+        network = ChemicalReactionNetwork.from_diagram(diagram)
+        return tuple(str(s) for s in network.chemical_species)
+
+    def test_the_canonical_catalysed_reaction_parses(self):
+        self.assertEqual(('E', 'S', 'P'), self.species_of('E + S -> E + P'))
+
+    def test_michaelis_menten_as_a_kineticist_writes_it(self):
+        species = self.species_of('E + S -> C \n C -> E + S \n C -> E + P')
+        self.assertEqual(('E', 'S', 'C', 'P'), species)
+
+    def test_the_other_single_letter_singletons(self):
+        self.assertEqual(('I', 'N', 'O'), self.species_of('I + N -> O'))
+        self.assertEqual(('Q', 'C'), self.species_of('Q -> C'))
+
+    def test_greek_letter_names(self):
+        self.assertEqual(('beta', 'gamma'), self.species_of('beta -> gamma'))
+
+    def test_a_catalyst_is_conserved_species_wise(self):
+        '''
+        E appears on both sides, so the network itself gives it dE/dt = 0.  That is a
+        conserved dependent variable, not a parameter: it has an equation, and the equation
+        says zero.
+        '''
+        system = ChemicalReactionNetwork.from_diagram('E + S -> E + P').to_ode_system()
+        E = sympy.Symbol('E')
+        self.assertIn(E, system.dependents)
+        self.assertNotIn(E, system.parameters)
+        self.assertEqual(0, system.derivative_dict[E])

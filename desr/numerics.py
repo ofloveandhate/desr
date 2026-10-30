@@ -22,8 +22,6 @@ back.  The reduction hides :math:`r` scaling symmetries in :math:`r` *auxiliary*
   them share the same reduction.
 """
 
-import enum
-
 import sympy
 
 try:
@@ -31,58 +29,15 @@ try:
 except ImportError:  # pragma: no cover
     raise ImportError('desr.numerics requires numpy.  Install it.')
 
-from .ode_translation import ODETranslator
+# ReductionScheme lives in ode_translation, next to the reductions it names, so that asking
+# a translator which scheme applies does not drag numpy in.  Re-exported here because this
+# is where it was first introduced and where it is most often wanted.
+from .ode_translation import ODETranslator, ReductionScheme
 from .ode_system import ODESystem
 from .sympy_helper import to_symbol
 
 __all__ = ['NumericTranslation', 'InsufficientKnownValues', 'ConflictingKnownValues',
-           'CONSISTENCY_TOLERANCE', 'Scheme']
-
-
-class Scheme(str, enum.Enum):
-    '''
-    Which of the three reductions of Hubert & Labahn a system was put through.
-
-    The scheme decides how many variables the reduced system has, whether it carries
-    auxiliary variables, and therefore what has to be known to translate values back.  It
-    is recorded rather than inferred: inferring it is only correct when
-    :meth:`~desr.ode_translation.ODETranslation.translate` did the choosing, and calling
-    :meth:`~desr.ode_translation.ODETranslation.translate_general` on a system that
-    `translate` would have handed to another scheme is perfectly legal.
-
-    A member is a :class:`str`, so ``scheme == 'general'`` holds and a plain string may be
-    passed wherever one of these is expected.
-
-    >>> from desr.numerics import Scheme
-    >>> Scheme.GENERAL
-    Scheme.GENERAL
-    >>> Scheme.GENERAL == 'general'
-    True
-    >>> print(Scheme.GENERAL)
-    general
-    '''
-
-    #: The parameter scheme: the reduced system has :math:`n - r` variables and no
-    #: auxiliaries, and it is the only scheme that handles initial conditions.
-    PARAMETER = 'parameter'
-
-    #: The dependent-variable scheme, where the scaling action ignores the independent
-    #: variable.  The reduced system has :math:`n` variables.
-    DEP_VAR = 'dep_var'
-
-    #: The general scheme, which always applies.  :math:`n + 1` variables with the
-    #: auxiliaries, :math:`n - r + 1` without.
-    GENERAL = 'general'
-
-    def __str__(self):
-        # Spelled out so that the printed form is the same on every Python version: the
-        # `str` mixin's __str__ and __format__ have changed between releases.
-        return self.value
-
-    def __repr__(self):
-        # `<Scheme.GENERAL: 'general'>` is the default and reads badly in documentation and
-        # in error messages, which is where this mostly appears.
-        return '{}.{}'.format(type(self).__name__, self.name)
+           'CONSISTENCY_TOLERANCE', 'ReductionScheme']
 
 
 class InsufficientKnownValues(ValueError):
@@ -134,10 +89,10 @@ def _dep_var_translator(system, translator):
     Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`
     works with internally: the same scaling action, with the independent variable removed.
     '''
-    index = system.indep_var_index
+    index = system.independent_variable_index
     scaling_matrix = translator.scaling_matrix.copy()
     hermite_multiplier = translator.dep_var_herm_mult(indep_var_index=index)
-    if translator.n == len(system.variables):
+    if translator.n == len(system.symbols):
         scaling_matrix.col_del(index)
     else:
         hermite_multiplier.col_del(index)
@@ -174,7 +129,7 @@ class NumericTranslation(object):
     >>> translator = ODETranslator.from_ode_system(system)
     >>> numeric = NumericTranslation(system, translator)
     >>> numeric.scheme
-    Scheme.PARAMETER
+    ReductionScheme.PARAMETER
 
     The system has three scaling symmetries, so three values must be known to
     come back.  The value of `r` tells us this (for the parameter scheme it's exact).
@@ -186,7 +141,7 @@ class NumericTranslation(object):
 
     You can translate a state of the original system into the reduced one.
 
-    >>> t, n, p, K, d, h, k, r, s = system.variables
+    >>> K, d, h, k, r, s, t, n, p = system.symbols
     >>> original = {t: 2.0, n: 1.0, p: 0.5, K: 5.0, d: 0.7, h: 1.3, k: 0.9, r: 1.1, s: 0.4}
     >>> reduced_values = numeric.forward(original)
     >>> sorted(str(x) for x in reduced_values)
@@ -219,7 +174,7 @@ class NumericTranslation(object):
             raise ValueError(
                 'Reduced system {} does not match any reduction of {} by this translator.  '
                 'Check that `reduced` came from this system and translator.'.format(
-                    tuple(self.reduced.variables), tuple(system.variables)))
+                    tuple(self.reduced.symbols), tuple(system.symbols)))
 
         (self._acted, source, self._auxiliaries, self._invariants,
          self._shares_indep_var) = layout
@@ -232,14 +187,14 @@ class NumericTranslation(object):
         '''The schemes this system admits, in the order `translate` prefers them.'''
         schemes = []
         if self.translator._is_translate_parameter_compatible(self.system):
-            schemes.append(Scheme.PARAMETER)
+            schemes.append(ReductionScheme.PARAMETER)
         columns = self.translator.scaling_matrix.shape[1]
-        if ((len(self.system.variables) == columns + 1)
+        if ((len(self.system.symbols) == columns + 1)
                 or self.translator.scaling_matrix[
-                    :, self.system.indep_var_index].is_zero_matrix):
-            schemes.append(Scheme.DEP_VAR)
-        if len(self.system.variables) == columns:
-            schemes.append(Scheme.GENERAL)
+                    :, self.system.independent_variable_index].is_zero_matrix):
+            schemes.append(ReductionScheme.DEP_VAR)
+        if len(self.system.symbols) == columns:
+            schemes.append(ReductionScheme.GENERAL)
         if not schemes:
             raise ValueError(
                 "System doesn't have the right number of variables for translation")
@@ -250,26 +205,26 @@ class NumericTranslation(object):
         Work out how the reduced system's variables correspond to the reduction's matrices
         under one scheme, or return None if they cannot.
         '''
-        if scheme == Scheme.PARAMETER:
+        if scheme == ReductionScheme.PARAMETER:
             source = self.translator
             # The reduced system carries no auxiliaries, and its variables line up
             # one-for-one with the columns of V_n -- the new independent variable among
             # them, since it is itself an invariant.
-            if len(self.reduced.variables) != source.herm_mult_n.cols:
+            if len(self.reduced.symbols) != source.herm_mult_n.cols:
                 return None
-            return (list(self.system.variables), source, [],
-                    list(self.reduced.variables), False)
+            return (list(self.system.symbols), source, [],
+                    list(self.reduced.symbols), False)
 
-        if scheme == Scheme.DEP_VAR:
+        if scheme == ReductionScheme.DEP_VAR:
             source = _dep_var_translator(self.system, self.translator)
-            acted = [v for v in self.system.variables if v != self.system.indep_var]
+            acted = [v for v in self.system.symbols if v != self.system.independent_variable]
         else:
             source = self.translator
-            acted = list(self.system.variables)
+            acted = list(self.system.symbols)
 
         # Here the reduced system keeps the original independent variable, and its
         # remaining variables are the auxiliaries followed by the invariants.
-        rest = [v for v in self.reduced.variables if v != self.reduced.indep_var]
+        rest = [v for v in self.reduced.symbols if v != self.reduced.independent_variable]
         if len(rest) == source.herm_mult_i.cols + source.herm_mult_n.cols:
             return (acted, source, rest[:source.herm_mult_i.cols],
                     rest[source.herm_mult_i.cols:], True)
@@ -321,14 +276,14 @@ class NumericTranslation(object):
             ValueError: If ``values`` names something that is not a variable of the original
                 system, or determines nothing at all.
         '''
-        values = self._check(values, self.system.variables, 'the original system')
+        values = self._check(values, self.system.symbols, 'the original system')
         ordered = [values.get(v) for v in self._acted]
 
         result = {}
         result.update(self._evaluate(ordered, self._herm_mult_i, self._auxiliaries))
         result.update(self._evaluate(ordered, self._herm_mult_n, self._invariants))
-        if self._shares_indep_var and values.get(self.system.indep_var) is not None:
-            result[self.reduced.indep_var] = values[self.system.indep_var]
+        if self._shares_indep_var and values.get(self.system.independent_variable) is not None:
+            result[self.reduced.independent_variable] = values[self.system.independent_variable]
 
         if not result:
             raise ValueError(
@@ -383,7 +338,7 @@ class NumericTranslation(object):
                 ``known_values`` nor ``auxiliaries`` pins them down.
             ConflictingKnownValues: If the known values contradict each other.
         '''
-        values = self._check(values, self.reduced.variables, 'the reduced system')
+        values = self._check(values, self.reduced.symbols, 'the reduced system')
         if known_values is not None and auxiliaries is not None:
             raise ValueError('Give known_values or auxiliaries, not both.')
 
@@ -395,11 +350,11 @@ class NumericTranslation(object):
 
         ordered = list(found) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
-        if self._shares_indep_var and values.get(self.reduced.indep_var) is not None:
+        if self._shares_indep_var and values.get(self.reduced.independent_variable) is not None:
             # Under these schemes the reduced system keeps the original independent
             # variable, so take it as given rather than reconstructing it -- the monomial
             # would agree, but only to the accuracy of everything that went into it.
-            result[self.system.indep_var] = values[self.reduced.indep_var]
+            result[self.system.independent_variable] = values[self.reduced.independent_variable]
 
         if not result:
             raise ValueError(
@@ -630,7 +585,7 @@ class NumericTranslation(object):
         >>> autonomous = NumericTranslation(system, translator,
         ...                                 translator.translate_general(system))
         >>> autonomous.scheme
-        Scheme.GENERAL
+        ReductionScheme.GENERAL
         >>> autonomous.auxiliary_growth_rates()
         [0, 0, 0]
         >>> autonomous.auxiliaries_are_constant
@@ -651,26 +606,29 @@ class NumericTranslation(object):
         >>> moving.auxiliaries_are_constant
         False
         >>> moving.auxiliary_growth_rates()
-        [(2*y0*(y1 + 1)/3 + y1)/(t*y0)]
+        [(2*y0*y1 - 1)/(3*t)]
         '''
         if self._growth_rates is None:
-            if self.scheme == Scheme.PARAMETER:
+            if self.scheme == ReductionScheme.PARAMETER:
                 # The parameter scheme normalises only constants, so its auxiliaries never
                 # move, and the reduced system does not carry them to ask.
                 self._growth_rates = [sympy.Integer(0)] * self.r
             else:
                 if self.carries_auxiliaries:
                     carrier, auxiliaries = self.reduced, self._auxiliaries
-                elif self.scheme == Scheme.GENERAL:
+                elif self.scheme == ReductionScheme.GENERAL:
                     carrier = self.translator.translate_general(self.system,
                                                                  include_aux_vars=True)
-                    auxiliaries = [v for v in carrier.variables
-                                   if v != carrier.indep_var][:self.r]
+                    auxiliaries = carrier.auxiliary_variables
                 else:
                     carrier = self.translator.translate_dep_var(self.system)
-                    auxiliaries = [v for v in carrier.variables
-                                   if v != carrier.indep_var][:self.r]
-                rates = [sympy.simplify(carrier.derivative_dict[x] / x)
+                    auxiliaries = carrier.auxiliary_variables
+                # An auxiliary that is a monomial in the original parameters alone is a
+                # parameter of the reduced system: no equation, and so not in
+                # derivative_dict.  Its growth rate is zero, which is the honest answer and
+                # is what makes `auxiliaries_are_constant` true for such a reduction.
+                rates = [sympy.Integer(0) if x in carrier.parameters
+                         else sympy.simplify(carrier.derivative_dict[x] / x)
                          for x in auxiliaries]
                 for rate, x in zip(rates, auxiliaries):
                     if rate.has(*auxiliaries):
@@ -724,7 +682,7 @@ class NumericTranslation(object):
             :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`: an array along the
             series if it moves, a scalar if it is constant.
         '''
-        values = self._check(values, self.reduced.variables, 'the reduced system')
+        values = self._check(values, self.reduced.symbols, 'the reduced system')
         if self.carries_auxiliaries:
             raise ValueError(
                 'The reduced system carries the auxiliary variables {} itself, so there is '
@@ -733,10 +691,10 @@ class NumericTranslation(object):
         if known_values is not None and auxiliaries is not None:
             raise ValueError('Give known_values or auxiliaries, not both.')
 
-        times = values.get(self.reduced.indep_var)
+        times = values.get(self.reduced.independent_variable)
         if times is None:
             raise ValueError('No values given for {}, the independent variable of the '
-                             'reduced system.'.format(self.reduced.indep_var))
+                             'reduced system.'.format(self.reduced.independent_variable))
         times = np.asarray(times, dtype=float)
         absent = [y for y in self._invariants if values.get(y) is None]
         if absent:
@@ -750,7 +708,7 @@ class NumericTranslation(object):
         else:
             known_values = {to_symbol(k): v for k, v in (known_values or {}).items()}
             self._reject_time_varying(known_values)
-            at_first = {self.reduced.indep_var: times[0]}
+            at_first = {self.reduced.independent_variable: times[0]}
             at_first.update(dict(zip(self._invariants, sampled[:, 0])))
             constants = [v for v in self._acted if v in self.system.parameters]
             start = self.auxiliaries_from(at_first, known_values, tolerance,
@@ -777,7 +735,7 @@ class NumericTranslation(object):
             from scipy.interpolate import CubicSpline
             invariants_at = CubicSpline(times, sampled, axis=1)
 
-        rate_of = sympy.lambdify([self.reduced.indep_var, list(self._invariants)],
+        rate_of = sympy.lambdify([self.reduced.independent_variable, list(self._invariants)],
                                  list(rates), modules='numpy')
         signs = [np.sign(float(x)) for x in start]
         if any(sign == 0 for sign in signs):

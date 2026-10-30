@@ -26,7 +26,7 @@ from . import tex_tools
 from .chemical_reaction_network import (ChemicalReactionNetwork, ChemicalSpecies, Complex,
                                         Reaction)
 from .ode_system import ODESystem
-from .ode_translation import ODETranslator, scale_action
+from .ode_translation import ODETranslator, ReductionScheme, scale_action
 from .sympy_helper import sympify_expression, to_symbol
 
 # desr.numerics needs numpy and scipy, which are optional for using the rest of the
@@ -37,7 +37,6 @@ _LAZY = {
     'ConflictingKnownValues': 'numerics',
     'InsufficientKnownValues': 'numerics',
     'NumericTranslation': 'numerics',
-    'Scheme': 'numerics',
     'numerics': None,
 }
 
@@ -61,6 +60,7 @@ __all__ = [
     'ODESystem',
     # Reduction
     'ODETranslator',
+    'ReductionScheme',
     'scale_action',
     # Chemical reaction networks
     'ChemicalReactionNetwork',
@@ -71,7 +71,6 @@ __all__ = [
     'NumericTranslation',
     'InsufficientKnownValues',
     'ConflictingKnownValues',
-    'Scheme',
     # The one place text becomes sympy
     'sympify_expression',
     'to_symbol',
