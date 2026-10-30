@@ -141,7 +141,7 @@ figure.tight_layout()
 
 if __name__ == '__main__':
     print(reduced_system)
-    print('invariants  :', translator.invariants())
+    print('invariants  :', translator.invariant_monomials())
     print('recovered_soln   :', {str(x): round(float(recovered_soln[x]), 10)
                             for x in (k_m1, k_2, e_0)})
     print('largest difference in s: {:.2e}'.format(

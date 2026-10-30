@@ -64,7 +64,7 @@ Choose a variable order, with initial conditions at the front so the algorithm w
 
 The invariants match :cite:`Segel1989` (9):
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), e_0*k_1*t, s/s_0, c/e_0]])
 
 Here are the substitutions the software will perform:
@@ -146,7 +146,7 @@ and translate the system
 
 The scaling invariants:
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), epsilon, k_1*s_0*t, s/s_0, c/s_0]])
 
 This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.  
@@ -182,7 +182,7 @@ To get :math:`\kappa = \frac{k_{-1}}{k_2}` in :cite:`Segel1989` (17), or :math:`
 
 We have the invariants up to this point of
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, e_0*k_1*t/epsilon, s/s_0, c/(epsilon*s_0)]])
     
 
@@ -236,7 +236,7 @@ and only the clock changes.  The three column operations act on the time column 
     >>> translator_24.multiplier_add_columns(7, 4, 1)
     >>> translator_24.multiplier_add_columns(7, 2, -1)
     >>> translator_24.multiplier_add_columns(7, 6, 2)
-    >>> translator_24.invariants()
+    >>> translator_24.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
     >>> reduced_system = translator_24.translate(system)
     >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
@@ -296,7 +296,7 @@ are the two parameters that get normalised -- we have the same reduced system as
     Matrix([
     [0, 0, 0, -1, -1, 0, 1, 0, 0],
     [1, 1, 1, -1,  0, 1, 0, 1, 1]])
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[L/s_0, e_0/s_0, k_2/(k_1*s_0), K_m/s_0, k_1*s_0*t, s/s_0, c/s_0]])
     >>> translator.translate(system_l)
     dt/dt = 1
@@ -323,7 +323,7 @@ Putting :math:`K_m` at the front, we have
     >>> # Find kappa = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
     >>> translator.multiplier_negate_column(5)
     >>> # sigma = s_0 / K_m needs no operation
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, L*k_1*t, s/s_0, L*c/(e_0*s_0)]])
 
 
@@ -396,7 +396,7 @@ To get the equations on the long/slow timescale :math:`t_c` from Murray, multipl
 
 Inspect
 
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, e_0*k_2*t/L, s/s_0, L*c/(e_0*s_0)]])
 
     >>> translator.translate_parameter_substitutions(system_l)

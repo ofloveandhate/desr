@@ -148,8 +148,8 @@ class TestInvariantClassification(TestCase):
                 if clock is not None:
                     groups.append((clock,))
                 found = [invariant for group in groups for invariant in group]
-                self.assertEqual(len(translator.invariants()), len(found))
-                self.assertEqual(set(translator.invariants()), set(found))
+                self.assertEqual(len(translator.invariant_monomials()), len(found))
+                self.assertEqual(set(translator.invariant_monomials()), set(found))
 
     def test_a_system_with_no_parameters_has_no_parameter_invariants(self):
         translator = ODETranslator.from_ode_system(self.hl66)
@@ -202,14 +202,14 @@ class TestInvariantClassification(TestCase):
 
         # sympify_expression, not sympy.sympify: E is Exp1 to the latter.
         conserved = sympify_expression('E*k_0_1/k_2_3')
-        self.assertIn(conserved, list(translator.invariants()))
+        self.assertIn(conserved, list(translator.invariant_monomials()))
         self.assertIn(conserved, translator.dependent_invariants(system))
         self.assertNotIn(conserved, translator.parameter_invariants(system))
 
         # And its rate really is zero, so the rate could not have told us.
         names = reduced.symbols[1 + translator.r:]
         rates = {invariant: reduced.derivative_dict[name]
-                 for name, invariant in zip(names, translator.invariants())}
+                 for name, invariant in zip(names, translator.invariant_monomials())}
         self.assertEqual(0, rates[conserved])
 
     def test_the_two_faces_of_an_invariant_share_their_keys(self):
@@ -219,8 +219,8 @@ class TestInvariantClassification(TestCase):
         join without reconstruction.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        meanings = translator.named_variables(self.prey_predator)
-        kinds = translator.variable_kinds(self.prey_predator)
+        meanings = translator.named_symbols(self.prey_predator)
+        kinds = translator.symbol_kinds(self.prey_predator)
         self.assertEqual(list(meanings), list(kinds))
         self.assertEqual({'kappa0': ('d/K', 'parameter'),
                           'kappa1': ('h*r/k', 'parameter'),
@@ -240,7 +240,7 @@ class TestInvariantClassification(TestCase):
                     reduced = translator.translate_parameter(self.prey_predator)
                 else:
                     reduced = translator.translate_general(self.prey_predator)
-                meanings = translator.named_variables(self.prey_predator, scheme=scheme)
+                meanings = translator.named_symbols(self.prey_predator, scheme=scheme)
                 self.assertEqual(tuple(reduced.symbols), tuple(meanings))
 
     def test_exactly_one_variable_is_the_one_to_integrate_against(self):
@@ -254,7 +254,7 @@ class TestInvariantClassification(TestCase):
                     continue  # the parameter scheme does not apply to HL 6.6
                 with self.subTest(scheme=scheme, variables=tuple(map(str, system.symbols))):
                     translator = ODETranslator.from_ode_system(system)
-                    kinds = translator.variable_kinds(system, scheme=scheme)
+                    kinds = translator.symbol_kinds(system, scheme=scheme)
                     clocks = [name for name, kind in kinds.items() if kind == 'independent']
                     self.assertEqual(1, len(clocks))
                     if scheme == 'general':
@@ -273,8 +273,8 @@ class TestInvariantClassification(TestCase):
 
         for scheme, expected in (('parameter', 'independent'), ('general', 'dependent')):
             with self.subTest(scheme=scheme):
-                meanings = translator.named_variables(self.prey_predator, scheme=scheme)
-                kinds = translator.variable_kinds(self.prey_predator, scheme=scheme)
+                meanings = translator.named_symbols(self.prey_predator, scheme=scheme)
+                kinds = translator.symbol_kinds(self.prey_predator, scheme=scheme)
                 name = next(n for n, monomial in meanings.items() if monomial == clock)
                 self.assertEqual(expected, kinds[name])
 
@@ -293,7 +293,7 @@ class TestInvariantClassification(TestCase):
             with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
                 n, r = len(system.symbols), translator.r
-                kinds = translator.variable_kinds(system, scheme='general')
+                kinds = translator.symbol_kinds(system, scheme='general')
                 tally = {kind: list(kinds.values()).count(kind)
                          for kind in set(kinds.values())}
                 self.assertEqual(1, tally['independent'])
@@ -305,20 +305,20 @@ class TestInvariantClassification(TestCase):
 
     def test_auxiliaries_are_their_own_kind(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        kinds = translator.variable_kinds(self.prey_predator, scheme='general')
+        kinds = translator.symbol_kinds(self.prey_predator, scheme='general')
         auxiliaries = [name for name, kind in kinds.items() if kind == 'auxiliary']
         self.assertEqual(translator.r, len(auxiliaries))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, auxiliaries)))
         # And the parameter scheme makes none.
-        kinds = translator.variable_kinds(self.prey_predator, scheme='parameter')
+        kinds = translator.symbol_kinds(self.prey_predator, scheme='parameter')
         self.assertNotIn('auxiliary', kinds.values())
 
     def test_dropping_the_auxiliaries_drops_them_from_both_maps(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         reduced = translator.translate_general(self.prey_predator, include_aux_vars=False)
-        meanings = translator.named_variables(self.prey_predator, scheme='general',
+        meanings = translator.named_symbols(self.prey_predator, scheme='general',
                                               include_aux_vars=False)
-        kinds = translator.variable_kinds(self.prey_predator, scheme='general',
+        kinds = translator.symbol_kinds(self.prey_predator, scheme='general',
                                           include_aux_vars=False)
         self.assertEqual(tuple(reduced.symbols), tuple(meanings))
         self.assertNotIn('auxiliary', kinds.values())
@@ -327,7 +327,7 @@ class TestInvariantClassification(TestCase):
         translator = ODETranslator.from_ode_system(self.hl66)
         self.assertEqual({'t': 't', 'x0': 't*z1**2', 'y0': 't*z1**3', 'y1': 'z1**2*z2/t'},
                          {str(name): str(monomial) for name, monomial
-                          in translator.named_variables(self.hl66).items()})
+                          in translator.named_symbols(self.hl66).items()})
 
     def test_the_scheme_may_be_said_rather_than_inferred(self):
         '''
@@ -335,8 +335,8 @@ class TestInvariantClassification(TestCase):
         system `translate` would have given to the parameter scheme must be able to say so.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        inferred = translator.named_variables(self.prey_predator)
-        general = translator.named_variables(self.prey_predator, scheme='general')
+        inferred = translator.named_symbols(self.prey_predator)
+        general = translator.named_symbols(self.prey_predator, scheme='general')
         self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
                          tuple(str(n) for n in inferred))
         self.assertEqual(('t', 'x0', 'x1', 'x2', 'y0', 'y1', 'y2', 'y3', 'y4', 'y5'),

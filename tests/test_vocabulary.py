@@ -19,7 +19,7 @@ from "constant parameters", and a page later call alpha = k_3/(k_1 a) a variable
 the collective is what lets "variable" mean something again.
 
 Orthogonal to the partition, and stored rather than inferred because a reduced system
-cannot re-derive it: `auxiliary_variables`.  Derived, and deliberately without an
+cannot re-derive it: `auxiliary_names`.  Derived, and deliberately without an
 accessor: "constant", which is implied for every parameter, impossible for the
 independent variable, and informative only for a dependent -- where it is
 `conserved_variables`.
@@ -203,6 +203,84 @@ class TestConservedAndConstant(TestCase):
                 self.assertFalse(hasattr(self.system, name))
 
 
+class TestMonomialsVersusNames(TestCase):
+    '''
+    An invariant has two faces, and the accessors say which one they give.
+
+    `invariant_monomials()` gives the expressions -- `d/K`, `k*t/h` -- and
+    `invariant_names()` gives the names those get -- `kappa0`, `tau`.  Neither is spelled
+    with the bare word, so there is no accessor whose aspect you have to guess.
+    '''
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(
+            ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_monomials_are_expressions_and_names_are_symbols(self):
+        monomials = list(self.translator.invariant_monomials())
+        names = self.translator.invariant_names(self.system)
+        self.assertTrue(all(not m.is_Symbol for m in monomials[:3]))
+        self.assertTrue(all(n.is_Symbol for n in names))
+
+    def test_they_are_in_the_same_order_and_pair_up(self):
+        monomials = list(self.translator.invariant_monomials())
+        names = self.translator.invariant_names(self.system)
+        self.assertEqual(len(monomials), len(names))
+        self.assertEqual(dict(zip(names, monomials)),
+                         self.translator.named_symbols(self.system))
+
+    def test_every_invariant_is_a_monomial(self):
+        '''
+        Each column of V_n is an exponent vector, so no invariant is a sum.  That is what
+        makes the reduction work -- these generate, and any rational invariant is a
+        rational function of them -- and it is why the accessor says `monomials`.
+        '''
+        for monomial in self.translator.invariant_monomials():
+            with self.subTest(monomial=str(monomial)):
+                self.assertFalse(monomial.is_Add,
+                                 '{} is a sum, so it is not a monomial'.format(monomial))
+                # A Laurent monomial: a product of powers, nothing else.
+                self.assertTrue(monomial.is_Mul or monomial.is_Pow or monomial.is_Symbol)
+
+    def test_the_auxiliary_pair_matches_too(self):
+        monomials = list(self.translator.auxiliary_monomials())
+        names = self.translator.auxiliary_names(self.system, scheme='general')
+        self.assertEqual(len(monomials), len(names))
+        self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, names)))
+
+    def test_the_parameter_scheme_names_no_auxiliaries(self):
+        ''' It normalises them to 1 and keeps none, so there is nothing to name. '''
+        self.assertEqual((), self.translator.auxiliary_names(self.system,
+                                                             scheme='parameter'))
+        # The monomials still exist -- they are a property of the multiplier, not of a
+        # reduction that was run.
+        self.assertEqual(3, len(self.translator.auxiliary_monomials()))
+
+    def test_the_bare_words_are_gone(self):
+        '''
+        `invariants` and `auxiliaries` were ambiguous between the two faces, and the
+        ambiguity was across a workflow rather than within one class.  Neither spelling
+        survives.
+        '''
+        for name in ('invariants', 'auxiliaries'):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(self.translator, name))
+
+    def test_names_match_what_translate_actually_produces(self):
+        for scheme in ('parameter', 'general'):
+            with self.subTest(scheme=scheme):
+                if scheme == 'parameter':
+                    reduced = self.translator.translate_parameter(self.system)
+                    expected = self.translator.invariant_names(self.system, scheme)
+                else:
+                    reduced = self.translator.translate_general(self.system)
+                    expected = ((reduced.independent_variable,)
+                                + self.translator.auxiliary_names(self.system, scheme)
+                                + self.translator.invariant_names(self.system, scheme))
+                self.assertEqual(tuple(reduced.symbols), tuple(expected))
+
+
 class TestStoredProvenance(TestCase):
     '''
     What a reduced system cannot re-derive about itself, and so carries: which scheme made
@@ -217,7 +295,7 @@ class TestStoredProvenance(TestCase):
     def test_an_original_system_has_no_provenance(self):
         self.assertIsNone(self.system.scheme)
         self.assertIsNone(self.system.num_scaling_symmetries)
-        self.assertEqual((), self.system.auxiliary_variables)
+        self.assertEqual((), self.system.auxiliary_names)
 
     def test_the_parameter_scheme_records_itself(self):
         reduced = self.translator.translate_parameter(self.system)
@@ -227,18 +305,18 @@ class TestStoredProvenance(TestCase):
     def test_the_parameter_scheme_has_no_auxiliaries(self):
         ''' It normalises them to 1 and discards them, so there are none to record. '''
         reduced = self.translator.translate_parameter(self.system)
-        self.assertEqual((), reduced.auxiliary_variables)
+        self.assertEqual((), reduced.auxiliary_names)
 
     def test_the_general_scheme_records_itself_and_its_auxiliaries(self):
         reduced = self.translator.translate_general(self.system)
         self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
         self.assertEqual(self.translator.r, reduced.num_scaling_symmetries)
         self.assertEqual(('x0', 'x1', 'x2'),
-                         tuple(map(str, reduced.auxiliary_variables)))
+                         tuple(map(str, reduced.auxiliary_names)))
 
     def test_dropping_the_auxiliaries_records_none(self):
         reduced = self.translator.translate_general(self.system, include_aux_vars=False)
-        self.assertEqual((), reduced.auxiliary_variables)
+        self.assertEqual((), reduced.auxiliary_names)
         self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
 
     def test_the_dep_var_scheme_records_itself(self):
@@ -261,7 +339,7 @@ class TestStoredProvenance(TestCase):
         self.assertEqual(reduced.scheme, duplicate.scheme)
         self.assertEqual(reduced.num_scaling_symmetries,
                          duplicate.num_scaling_symmetries)
-        self.assertEqual(reduced.auxiliary_variables, duplicate.auxiliary_variables)
+        self.assertEqual(reduced.auxiliary_names, duplicate.auxiliary_names)
 
     def test_the_provenance_survives_a_substitution(self):
         reduced = self.translator.translate_general(self.system)
@@ -269,7 +347,7 @@ class TestStoredProvenance(TestCase):
         self.assertEqual(reduced.scheme, substituted.scheme)
         self.assertEqual(reduced.num_scaling_symmetries,
                          substituted.num_scaling_symmetries)
-        self.assertEqual(reduced.auxiliary_variables, substituted.auxiliary_variables)
+        self.assertEqual(reduced.auxiliary_names, substituted.auxiliary_names)
 
     def test_an_auxiliary_is_not_pruned_for_having_no_equation(self):
         '''
@@ -280,8 +358,8 @@ class TestStoredProvenance(TestCase):
         reduced = self.translator.translate_general(self.system)
         substituted = reduced.subs({'y3': 'Y'})
         self.assertEqual(('x0', 'x1', 'x2'),
-                         tuple(map(str, substituted.auxiliary_variables)))
-        for auxiliary in reduced.auxiliary_variables:
+                         tuple(map(str, substituted.auxiliary_names)))
+        for auxiliary in reduced.auxiliary_names:
             self.assertIn(auxiliary, substituted.symbols)
 
     def test_renaming_an_equation_less_parameter_leaves_the_name_alone(self):
@@ -307,7 +385,7 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
         system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
         reduced = ODETranslator.from_ode_system(system).translate_general(system)
-        for auxiliary in reduced.auxiliary_variables:
+        for auxiliary in reduced.auxiliary_names:
             with self.subTest(auxiliary=str(auxiliary)):
                 self.assertIn(auxiliary, reduced.parameters)
 
@@ -317,7 +395,7 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         reduced = ODETranslator.from_ode_system(system).translate_general(system)
-        auxiliary, = reduced.auxiliary_variables
+        auxiliary, = reduced.auxiliary_names
         self.assertIn(auxiliary, reduced.dependents)
         self.assertNotEqual(0, reduced.derivative_dict[auxiliary])
 
@@ -330,7 +408,7 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
                 system = ODESystem.from_equations(equations)
                 translator = ODETranslator.from_ode_system(system)
                 reduced = translator.translate_general(system)
-                self.assertEqual(translator.r, len(reduced.auxiliary_variables))
+                self.assertEqual(translator.r, len(reduced.auxiliary_names))
 
 
 class TestClassificationSurvivesTheReduction(TestCase):
@@ -346,7 +424,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
 
     def test_a_parameter_monomial_becomes_a_parameter(self):
         reduced = self.translator.translate_general(self.system)
-        named = self.translator.named_variables(self.system, scheme='general')
+        named = self.translator.named_symbols(self.system, scheme='general')
         dynamic = set(self.system.variables)
         for symbol, monomial in named.items():
             if symbol == reduced.independent_variable:
@@ -389,7 +467,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
         reduced = translator.translate_general(system)
 
         conserved = sympify_expression('E*k_0_1/k_2_3')
-        named = translator.named_variables(system, scheme='general')
+        named = translator.named_symbols(system, scheme='general')
         symbol = next(s for s, monomial in named.items() if monomial == conserved)
 
         self.assertIn(symbol, reduced.dependents)
@@ -420,7 +498,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
 
     def test_the_kinds_agree_under_the_parameter_scheme(self):
         reduced = self.translator.translate_parameter(self.system)
-        kinds = self.translator.variable_kinds(self.system, scheme='parameter')
+        kinds = self.translator.symbol_kinds(self.system, scheme='parameter')
         self.assertEqual(set(reduced.parameters),
                          {s for s, kind in kinds.items() if kind == 'parameter'})
         self.assertEqual(set(reduced.dependents),
@@ -430,8 +508,8 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
 
     def test_the_auxiliaries_agree_under_the_general_scheme(self):
         reduced = self.translator.translate_general(self.system)
-        kinds = self.translator.variable_kinds(self.system, scheme='general')
-        self.assertEqual(set(reduced.auxiliary_variables),
+        kinds = self.translator.symbol_kinds(self.system, scheme='general')
+        self.assertEqual(set(reduced.auxiliary_names),
                          {s for s, kind in kinds.items() if kind == 'auxiliary'})
 
     def test_the_expected_count_matches_what_comes_out(self):
@@ -454,5 +532,5 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
                     reduced = self.translator.translate_parameter(self.system)
                 else:
                     reduced = self.translator.translate_general(self.system)
-                named = self.translator.named_variables(self.system, scheme=scheme)
+                named = self.translator.named_symbols(self.system, scheme=scheme)
                 self.assertEqual(set(reduced.symbols), set(named))

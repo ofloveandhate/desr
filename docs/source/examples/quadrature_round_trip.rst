@@ -71,9 +71,9 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 And nondimensionalize.
 
     >>> translator = ODETranslator.from_ode_system(system)
-    >>> translator.invariants()
+    >>> translator.invariant_monomials()
     Matrix([[t*z1**3, z1**2*z2/t]])
-    >>> translator.auxiliaries()
+    >>> translator.auxiliary_monomials()
     Matrix([[t*z1**2]])
 
 Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
@@ -147,7 +147,7 @@ Write these down and check that they satisfy the system desr produced, which is 
 direct confirmation that the two reductions are the same.
 
     >>> t, z1, z2 = system.symbols
-    >>> y0, y1 = numeric_translation.invariant_variables
+    >>> y0, y1 = numeric_translation.invariant_names
     >>> with_aux = translator.translate_general(system)
     >>> x0 = with_aux.symbols[1]
     >>> c1, c2, c3 = sympy.symbols('c1 c2 c3')

@@ -19,7 +19,7 @@ def run_symmetry_reduction(sys):
     print(translator.scaling_matrix.__repr__())
 
     # Print invariants
-    print('Invariants: ', translator.invariants())
+    print('Invariants: ', translator.invariant_monomials())
 
     # Print translated system
     print('Reduced system:')

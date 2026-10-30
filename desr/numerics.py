@@ -251,13 +251,24 @@ class NumericTranslation(object):
         return bool(self._auxiliaries)
 
     @property
-    def auxiliary_variables(self):
-        '''tuple: The auxiliary variables of the reduced system, empty if it has none.'''
+    def auxiliary_names(self):
+        '''
+        tuple: The auxiliaries of the reduced system, empty if it carries none.
+
+        *symbols*, not *variables*: an auxiliary is a normalised direction and may be a
+        parameter of the reduced system rather than something that varies -- under the
+        general scheme they usually are, being monomials in the original parameters.
+        '''
         return tuple(self._auxiliaries)
 
     @property
-    def invariant_variables(self):
-        '''tuple: The variables of the reduced system that are invariants.'''
+    def invariant_names(self):
+        '''
+        tuple: The symbols of the reduced system that are invariants.
+
+        *symbols* for the same reason: under the parameter scheme the invariants include
+        the reduced constants, which are parameters and do not vary.
+        '''
         return tuple(self._invariants)
 
     def forward(self, values):
@@ -319,7 +330,7 @@ class NumericTranslation(object):
                 it does, since then the original system is already determined.  In a series,
                 constants only.
             auxiliaries (iter, optional): The :attr:`r` auxiliary values themselves, in the
-                order of :attr:`auxiliary_variables`, as an alternative to ``known_values``.
+                order of :attr:`auxiliary_names`, as an alternative to ``known_values``.
                 Obtain them from :meth:`auxiliaries_from` at a single point.  This is how a
                 point value of a dependent variable is used to translate a series.
             invariants_at (callable, optional): Series only, and only when the auxiliaries
@@ -619,10 +630,10 @@ class NumericTranslation(object):
                 elif self.scheme == ReductionScheme.GENERAL:
                     carrier = self.translator.translate_general(self.system,
                                                                  include_aux_vars=True)
-                    auxiliaries = carrier.auxiliary_variables
+                    auxiliaries = carrier.auxiliary_names
                 else:
                     carrier = self.translator.translate_dep_var(self.system)
-                    auxiliaries = carrier.auxiliary_variables
+                    auxiliaries = carrier.auxiliary_names
                 # An auxiliary that is a monomial in the original parameters alone is a
                 # parameter of the reduced system: no equation, and so not in
                 # derivative_dict.  Its growth rate is zero, which is the honest answer and
@@ -669,7 +680,7 @@ class NumericTranslation(object):
             auxiliaries (iter, optional): The :attr:`r` auxiliary values at the first
                 sample, as an alternative to ``known_values``.
             invariants_at (callable, optional): ``f(t)`` returning the invariants at time
-                ``t``, in the order of :attr:`invariant_variables`.  Pass the ``sol``
+                ``t``, in the order of :attr:`invariant_names`.  Pass the ``sol``
                 attribute of a :func:`scipy.integrate.solve_ivp` result computed with
                 ``dense_output=True`` for the most accurate integration.  Without it the
                 sampled values are interpolated.
