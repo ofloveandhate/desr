@@ -69,8 +69,8 @@ page says which invariant each operation acts on rather than carrying a bare ind
     >>> clock, scale, concentration
     (6, 2, 8)
 
-    >>> translator.multiplier_add_columns(clock, scale, 1)  # Multiply time by e_0/s_0
-    >>> translator.multiplier_add_columns(concentration, scale, -1)  # Scale c by e_0 rather than s_0
+    >>> translator.multiplier_add_columns(clock, scale)  # Multiply time by e_0/s_0
+    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0 rather than s_0
 
 The invariants match :cite:`Segel1989` (9):
 
@@ -181,14 +181,14 @@ they do.  The numbers are printed because they are what the write-up quotes:
     (7, 2, 6, 9, 3, 5, 4)
 
     >>> # Scale t correctly to t/t_C = k_1 L t = e_0 k_1 t / epsilon
-    >>> translator.multiplier_add_columns(clock, scale, 1)
-    >>> translator.multiplier_add_columns(clock, eps, -1)
+    >>> translator.multiplier_add_columns(clock, scale)
+    >>> translator.multiplier_add_columns(clock, eps, power=-1)
 
 To get :math:`v = \frac{c}{s_0 \epsilon}`, we need to modify the Hermite multiplier as :math:`V_{10}' = V_{10} - V_7`.  In code,
 
     >>> # Scale s correctly to s / s_0
     >>> # Scale c correctly to c / (e_0 s_0 / L) = c / (s_0 epsilon)
-    >>> translator.multiplier_add_columns(concentration, eps, -1)
+    >>> translator.multiplier_add_columns(concentration, eps, power=-1)
 
 
 We also want :math:`\sigma = \frac{s_0}{K_m}`, so :math:`V_4' = -V_4`.
@@ -200,7 +200,7 @@ We also want :math:`\sigma = \frac{s_0}{K_m}`, so :math:`V_4' = -V_4`.
 To get :math:`\kappa = \frac{k_{-1}}{k_2}` in :cite:`Segel1989` (17), or :math:`\rho = \frac{k_{-1}}{k_2}` in :cite:`murray` (6.20), we need :math:`V_6' = V_6 - V_5`
 
     >>> # Find kappa = rho = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-    >>> translator.multiplier_add_columns(k_m1_ratio, k_2_ratio, -1)
+    >>> translator.multiplier_add_columns(k_m1_ratio, k_2_ratio, power=-1)
 
 
 We have the invariants up to this point of
@@ -260,9 +260,9 @@ and only the clock changes.  The three column operations act on the time column 
     >>> clock_24 = translator_24.column_of('e_0*k_1*t/epsilon')
     >>> clock_24, k_2_ratio, scale, eps
     (7, 4, 2, 6)
-    >>> translator_24.multiplier_add_columns(clock_24, k_2_ratio, 1)
-    >>> translator_24.multiplier_add_columns(clock_24, scale, -1)
-    >>> translator_24.multiplier_add_columns(clock_24, eps, 2)
+    >>> translator_24.multiplier_add_columns(clock_24, k_2_ratio)
+    >>> translator_24.multiplier_add_columns(clock_24, scale, power=-1)
+    >>> translator_24.multiplier_add_columns(clock_24, eps, power=2)
     >>> translator_24.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
     >>> reduced_system = translator_24.translate(system)
@@ -348,15 +348,15 @@ Putting :math:`K_m` at the front, we have
     (6, 2, 7, 3, 8, 4, 5)
 
     >>> # Scale t correctly to t/t_C = k_1 L t
-    >>> translator.multiplier_add_columns(clock, total, 1)
+    >>> translator.multiplier_add_columns(clock, total)
     >>> # Scale s correctly to s / s_0
-    >>> translator.multiplier_add_columns(substrate, sigma, -1)
+    >>> translator.multiplier_add_columns(substrate, sigma, power=-1)
     >>> # Scale c correctly to c / (e_0 s_0 / L)
-    >>> translator.multiplier_add_columns(complexed, total, 1)
-    >>> translator.multiplier_add_columns(complexed, enzyme, -1)
-    >>> translator.multiplier_add_columns(complexed, sigma, -1)
+    >>> translator.multiplier_add_columns(complexed, total)
+    >>> translator.multiplier_add_columns(complexed, enzyme, power=-1)
+    >>> translator.multiplier_add_columns(complexed, sigma, power=-1)
     >>> # Find epsilon = e_0 / L
-    >>> translator.multiplier_add_columns(enzyme, total, -1)
+    >>> translator.multiplier_add_columns(enzyme, total, power=-1)
     >>> # Find kappa = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
     >>> translator.multiplier_negate_column(k_2_ratio)
     >>> # sigma = s_0 / K_m needs no operation
@@ -433,9 +433,9 @@ To get the equations on the long/slow timescale :math:`t_c` from Murray, multipl
     >>> kappa_plus_one = translator.column_of('K_m*k_1/k_2')
     >>> clock, epsilon, kappa_plus_one, total
     (6, 4, 5, 2)
-    >>> translator.multiplier_add_columns(clock, epsilon, 1)
-    >>> translator.multiplier_add_columns(clock, kappa_plus_one, -1)
-    >>> translator.multiplier_add_columns(clock, total, -1)
+    >>> translator.multiplier_add_columns(clock, epsilon)
+    >>> translator.multiplier_add_columns(clock, kappa_plus_one, power=-1)
+    >>> translator.multiplier_add_columns(clock, total, power=-1)
 
 Inspect
 

@@ -195,12 +195,13 @@ class TestColumnLookup(TestCase):
                           'K_m/s_0': 3, 'k_m1/(k_1*s_0)': 5, 'k_2/(k_1*s_0)': 4},
                          columns)
 
-        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['e_0/s_0'], 1)
-        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['epsilon'], -1)
-        translator.multiplier_add_columns(columns['c/s_0'], columns['epsilon'], -1)
+        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['e_0/s_0'])
+        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['epsilon'],
+                                          power=-1)
+        translator.multiplier_add_columns(columns['c/s_0'], columns['epsilon'], power=-1)
         translator.multiplier_negate_column(columns['K_m/s_0'])
         translator.multiplier_add_columns(columns['k_m1/(k_1*s_0)'],
-                                          columns['k_2/(k_1*s_0)'], -1)
+                                          columns['k_2/(k_1*s_0)'], power=-1)
 
         self.assertEqual(
             ['e_0/s_0', 's_0/K_m', 'k_2/(k_1*s_0)', 'k_m1/k_2', 'epsilon',

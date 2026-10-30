@@ -312,8 +312,8 @@ def michaelis_menten_two_variable(verbose=True):
         # print('\nMichaelis-Menten Reparametrisation 1')
         print('Changing invariants by column operations on the Hermite multiplier')
         # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        translator.multiplier_add_columns(i=2, j=8, alpha=1)
-        translator.multiplier_add_columns(i=4, j=8, alpha=-1)
+        translator.multiplier_add_columns(i=2, j=8, power=1)
+        translator.multiplier_add_columns(i=4, j=8, power=-1)
         
         print('Invariants: ', translator.invariant_monomials())
         print('Hermite multiplier', translator.herm_mult.__repr__())
@@ -322,7 +322,7 @@ def michaelis_menten_two_variable(verbose=True):
         # print('\nMichaelis-Menten Reparametrisation 2')
         # print('Changing invariants by column operations on the Hermite multiplier')
         # # Divide time through by epsilon
-        # translator.multiplier_add_columns(i=0, j=8, alpha=1)
+        # translator.multiplier_add_columns(i=0, j=8, power=1)
         
         # print('Hermite multiplier', translator.herm_mult.__repr__())
         # print('Invariants: ', translator.invariant_monomials())
@@ -381,8 +381,8 @@ def michaelis_menten_two_variable(verbose=True):
         # # print('\nMichaelis-Menten Reparametrisation 1')
         # print('Changing invariants by column operations on the Hermite multiplier')
         # # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        # max_scal2.multiplier_add_columns(i=2, j=8, alpha=1)
-        # max_scal2.multiplier_add_columns(i=4, j=8, alpha=-1)
+        # max_scal2.multiplier_add_columns(i=2, j=8, power=1)
+        # max_scal2.multiplier_add_columns(i=4, j=8, power=-1)
         
         # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
         # print('Invariants: ', max_scal2.invariant_monomials())
@@ -391,7 +391,7 @@ def michaelis_menten_two_variable(verbose=True):
         # # print('\nMichaelis-Menten Reparametrisation 2')
         # # print('Changing invariants by column operations on the Hermite multiplier')
         # # # Divide time through by epsilon
-        # # max_scal2.multiplier_add_columns(i=0, j=8, alpha=1)
+        # # max_scal2.multiplier_add_columns(i=0, j=8, power=1)
         
         # # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
         # # print('Invariants: ', max_scal2.invariant_monomials())

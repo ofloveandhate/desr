@@ -125,8 +125,8 @@ instead of appearing from nowhere.
     >>> clock, scale, concentration
     (6, 2, 8)
 
-    >>> translator.multiplier_add_columns(clock, scale, 1)  # Scale time by e_0 not s_0
-    >>> translator.multiplier_add_columns(concentration, scale, -1)  # Scale c by e_0
+    >>> translator.multiplier_add_columns(clock, scale)  # Scale time by e_0 not s_0
+    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0
 
 Optionally, see the invariants and substitutions
 

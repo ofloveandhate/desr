@@ -686,12 +686,12 @@ class ODETranslator(object):
         to be quoted in a write-up -- but where it came from is now on the page::
 
             # before -- why 6 and 2?
-            translator.multiplier_add_columns(6, 2, 1)
+            translator.multiplier_add_columns(6, 2)
 
             # after -- and `clock` and `epsilon` can be printed
             clock = translator.column_of('k_1*s_0*t')
             epsilon = translator.column_of('e_0/s_0')
-            translator.multiplier_add_columns(clock, epsilon, 1)
+            translator.multiplier_add_columns(clock, epsilon)
 
         The ``multiplier_*`` methods deliberately keep taking integers, so that the number a
         reduction depends on stays visible in the code that performs it.
@@ -858,10 +858,24 @@ class ODETranslator(object):
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
 
-    def multiplier_add_columns(self, i, j, alpha):
+    def multiplier_add_columns(self, i, j, power=1):
         '''
-        Add column j alpha times to the ith column of the Hermite multiplier:
-        C_i <- C_i + alpha * C_j
+        Add column j to column i of the Hermite multiplier, `power` times:
+        :math:`C_i \\leftarrow C_i + \\textrm{power} \\cdot C_j`.
+
+        **What `power` means.** The columns are exponent vectors, so adding them multiplies
+        the monomials they stand for.  In terms of the invariants rather than the matrix,
+        this does
+
+        .. math::
+
+            \\textrm{invariant}_i \\leftarrow \\textrm{invariant}_i
+                \\cdot \\textrm{invariant}_j^{\\,\\textrm{power}}
+
+        -- which is why it is a *power* and not a factor: the factor is
+        :math:`\\textrm{invariant}_j^{\\textrm{power}}`.  So ``power=1`` multiplies by
+        invariant *j*, ``power=-1`` divides by it, and ``power=2`` multiplies by its square.
+        One is the default, that being the plain "add this column once".
 
         Column j must be an invariant column -- one that :attr:`~scaling_matrix` sends to
         zero -- since then :math:`AV` is unchanged by the operation and :math:`V` stays
@@ -870,10 +884,13 @@ class ODETranslator(object):
         changes the choice of auxiliary, which is just as free.  Adding an *auxiliary*
         column anywhere would change :math:`AV`, and is refused.
 
+        :meth:`column_of` is how to get `i` and `j` without writing a bare index.
+
         Args:
             i (int): Column index of the column to change.
             j (int): Column index of the invariant column to add.
-            alpha (int): Coefficient for addition
+            power (int): How many times to add it, which is the power of invariant *j*
+                that invariant *i* is multiplied by.  Defaults to 1.
 
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
@@ -895,7 +912,7 @@ class ODETranslator(object):
         [0, 0, 1,  0,  0],
         [0, 0, 0,  1,  0],
         [0, 0, 0,  0,  1]])
-        >>> translator.multiplier_add_columns(2, 3, 1)
+        >>> translator.multiplier_add_columns(2, 3)
 
         >>> translator.herm_mult
         Matrix([
@@ -918,7 +935,7 @@ class ODETranslator(object):
         An invariant column may be added to an auxiliary column too; that changes which
         auxiliary is used, and leaves :math:`AV` alone.
 
-        >>> translator.multiplier_add_columns(1, 3, 1)
+        >>> translator.multiplier_add_columns(1, 3)
         >>> translator.herm_mult.col(1).T
         Matrix([[-1, 2, 0, 1, 0]])
         >>> translator.scaling_matrix * translator.herm_mult == translator.herm_form
@@ -927,12 +944,12 @@ class ODETranslator(object):
         But an auxiliary column cannot be added to anything, since that would change
         :math:`AV`.
 
-        >>> translator.multiplier_add_columns(3, 1, 1)
+        >>> translator.multiplier_add_columns(3, 1)
         Traceback (most recent call last):
             ...
         ValueError: Cannot add column 1: it is an auxiliary column, not an invariant column, so adding it would change the Hermite form.
 
-        >>> translator.multiplier_add_columns(3, 3, 1)
+        >>> translator.multiplier_add_columns(3, 3)
         Traceback (most recent call last):
             ...
         ValueError: Cannot add column 3 to itself
@@ -949,8 +966,8 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t*z1**2]]), Matrix([[t*z1**3, z1**2*z2/t]]))
-        >>> translator.multiplier_add_columns(2, 1, -1)
-        >>> translator.multiplier_add_columns(0, 2, -1)
+        >>> translator.multiplier_add_columns(2, 1, power=-1)
+        >>> translator.multiplier_add_columns(0, 2, power=-1)
         >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t**3*z1**3/z2]]), Matrix([[t*z1**3, z2/(t**2*z1)]]))
 
@@ -963,7 +980,7 @@ class ODETranslator(object):
         [0, 1,  0, -1],
         [0, 0,  1,  0],
         [0, 0,  0,  1]])
-        >>> translator.multiplier_add_columns(2, -1, 1)
+        >>> translator.multiplier_add_columns(2, -1)
         >>> translator.herm_mult
         Matrix([
         [1, 0, -1,  0],
@@ -979,7 +996,7 @@ class ODETranslator(object):
             raise ValueError('Cannot add column {}: it is an auxiliary column, not an '
                              'invariant column, so adding it would change the Hermite '
                              'form.'.format(j))
-        self._herm_mult.col_op(i, lambda v, index: v + alpha * self._herm_mult[index, j])
+        self._herm_mult.col_op(i, lambda v, index: v + power * self._herm_mult[index, j])
         # Blow the cache of the inverse
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
