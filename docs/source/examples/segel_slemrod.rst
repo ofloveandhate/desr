@@ -122,7 +122,7 @@ Choose a variable order, with initial conditions at the front so the algorithm w
 
 A sanity check
 
-    >>> system.variables
+    >>> system.symbols
     (s_0, e_0, K_m, k_1, k_2, k_m1, epsilon, t, s, c)
 
 Now we can construct the `ODETranslator`

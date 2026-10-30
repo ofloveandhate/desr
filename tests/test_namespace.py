@@ -21,7 +21,7 @@ class TestPublicNames(TestCase):
         system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/k)'])
         translator = ODETranslator.from_ode_system(system)
         reduced = translator.translate(system)
-        self.assertTrue(reduced.variables)
+        self.assertTrue(reduced.symbols)
 
     def test_the_chemical_reaction_network_names_are_exported(self):
         from desr import ChemicalReactionNetwork, ChemicalSpecies, Complex, Reaction

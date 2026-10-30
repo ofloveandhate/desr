@@ -39,8 +39,8 @@ with_aux = translator.translate_general(system)
 reduced = translator.translate_general(system, include_aux_vars=False)
 numeric = NumericTranslation(system, translator, reduced)
 
-t, z1, z2 = system.variables
-x0 = with_aux.variables[1]
+t, z1, z2 = system.symbols
+x0 = with_aux.symbols[1]
 y0, y1 = numeric.invariant_variables
 
 start_time, final_time = 1.0, 2.0
@@ -61,7 +61,7 @@ exact_x0 = sympy.lambdify(t, exact[x0].subs(constants), modules='numpy')
 
 
 def as_function(a_system):
-    variables = list(a_system.dependent_variables)
+    variables = list(a_system.dependents)
     rhs = [a_system.derivative_dict[x] for x in variables]
     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

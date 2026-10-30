@@ -40,8 +40,8 @@ translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 
 reduced_system = translator.translate(system)
 numeric = NumericTranslation(system, translator, reduced_system)
 
-s_0, e_0, k_1, k_2, k_m1, t, s, c = system.variables
-c0, c1, c2, tau, u, v = reduced_system.variables
+s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
+c0, c1, c2, tau, u, v = reduced_system.symbols
 
 parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
 initial_state = [2.0, 0.0]
@@ -50,7 +50,7 @@ final_time = 70.0
 
 def as_function(a_system, constants):
     """Turn a system with its constants fixed into a right-hand side for solve_ivp."""
-    variables = list(a_system.dependent_variables)
+    variables = list(a_system.dependents)
     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

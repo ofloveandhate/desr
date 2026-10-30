@@ -94,6 +94,6 @@ class TestSpeciesNames(TestCase):
         '''
         system = ChemicalReactionNetwork.from_diagram('E + S -> E + P').to_ode_system()
         E = sympy.Symbol('E')
-        self.assertIn(E, system.dependent_variables)
+        self.assertIn(E, system.dependents)
         self.assertNotIn(E, system.parameters)
         self.assertEqual(0, system.derivative_dict[E])

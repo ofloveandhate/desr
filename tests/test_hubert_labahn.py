@@ -102,7 +102,7 @@ class TestExample66(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(self.EQUATIONS)
-        self.assertEqual(self.system.variables, (t, z1, z2))
+        self.assertEqual(self.system.symbols, (t, z1, z2))
 
     def test_the_scaling_matrix_matches(self):
         # This one already agrees.  A single-row matrix has no cross-row conditions to

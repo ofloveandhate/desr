@@ -27,10 +27,10 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     ...                 \frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\
     ...                 \frac{dP}{dt} &= k_2 C'''
     >>> original_system = ODESystem.from_tex(system_tex)
-    >>> original_system.variables
+    >>> original_system.symbols
     (k_1, k_2, k_m1, t, C, E, P, S)
     >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
-    >>> print('Variable order: ', max_scal1.variables_domain)
+    >>> print('Variable order: ', max_scal1.symbols_domain)
     Variable order:  (k_1, k_2, k_m1, t, C, E, P, S)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
     Scaling Matrix:
@@ -69,7 +69,7 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator
 
     >>> original_system_reorder = original_system.copy()
     >>> original_system_reorder.reorder_variables(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
-    >>> original_system_reorder.variables
+    >>> original_system_reorder.symbols
     (k_1, k_m1, k_2, t, C, E, P, S)
     >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariants())))
@@ -102,7 +102,7 @@ We can easily check we have correct matrix:
 
     >>> invariant_choice = sympy.Matrix([[1, -1, 0, 0, 1, 0, 0, 0],
     ...                                  [1, 0, -1, 0, 0, 0, 1, 0]]).T
-    >>> scale_action(max_scal1.variables_domain, invariant_choice)
+    >>> scale_action(max_scal1.symbols_domain, invariant_choice)
     Matrix([[C*k_1/k_2, P*k_1/k_m1]])
 
 Finding a maximal scaling matrix that can be used to rewrite the system in terms of these invariants is also simple.

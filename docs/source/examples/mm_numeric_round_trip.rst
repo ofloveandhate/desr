@@ -61,8 +61,8 @@ The number of scaling symmetries is also the number of parameters we must provid
 
 For programming convenience, let's give the variables names we can use below.
 
-    >>> s_0, e_0, k_1, k_2, k_m1, t, s, c = system.variables
-    >>> c0, c1, c2, tau, u, v = reduced_system.variables
+    >>> s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
+    >>> c0, c1, c2, tau, u, v = reduced_system.symbols
 
 
 Numerically solve the original system
@@ -72,7 +72,7 @@ Choose some arbitrary parameter values and solve directly.  This is the answer w
 
     >>> parameters = {k_1: 1.5, k_m1: 0.9, k_2: 0.4, e_0: 0.3, s_0: 2.0}
     >>> def as_function(a_system, constants):
-    ...     variables = list(a_system.dependent_variables)
+    ...     variables = list(a_system.dependents)
     ...     rhs = [a_system.derivative_dict[x].subs(constants) for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

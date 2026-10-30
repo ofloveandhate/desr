@@ -33,7 +33,7 @@ class TestODETranslatorTraps(TestCase):
             system = network.to_ode_system()
             self.assertEqual(system.derivative_dict[sympy.Symbol(catalyst)],
                              sympy.sympify(0))
-            scalings[catalyst] = (list(system.variables), system.maximal_scaling_matrix())
+            scalings[catalyst] = (list(system.symbols), system.maximal_scaling_matrix())
 
         # The two differ only by the name of the catalyst, so permuting the columns of one
         # into the other's variable order must give the same scaling action.
@@ -55,23 +55,23 @@ class TestODETranslatorTraps(TestCase):
         eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
         system = ODESystem.from_equations([eq1, eq2])
         t0, z10, z20 = sympy.symbols('t0 z10 z20')
-        extended = ODESystem(list(system.variables) + [t0, z10, z20],
+        extended = ODESystem(list(system.symbols) + [t0, z10, z20],
                              list(system.derivatives) + [None, None, None],
                              indep_var=system.indep_var)
         # Parameters, then the independent variable, then the dependents.  The scaling
         # matrix below is unchanged by the move because its pattern repeats with period 3.
         extended.reorder_variables(['t0', 'z10', 'z20', 't', 'z1', 'z2'])
         translator = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
-                                     variables_domain=extended.variables)
+                                     symbols_domain=extended.symbols)
         reduced = translator.translate(extended)
 
-        self.assertEqual(len(reduced.variables),
-                         len(extended.variables) - translator.r)
+        self.assertEqual(len(reduced.symbols),
+                         len(extended.symbols) - translator.r)
         # Every symbol the substitutions mention must exist in the reduced system.
         mentioned = set()
         for value in translator.translate_parameter_substitutions(extended).values():
             mentioned |= value.free_symbols
-        self.assertFalse(mentioned - set(reduced.variables))
+        self.assertFalse(mentioned - set(reduced.symbols))
 
     def test_rational_section_returns_its_result(self):
         equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
@@ -129,13 +129,13 @@ class TestInvariantClassification(TestCase):
         self.assertEqual((sympy.sympify('n/K'), sympy.sympify('h*p/K')),
                          translator.dependent_invariants(self.prey_predator))
 
-    def test_there_are_as_many_dependent_invariants_as_dependent_variables(self):
+    def test_there_are_as_many_dependent_invariants_as_dependents(self):
         '''
         The clock is reported separately, so this count is exactly the user's remark that
         the loss of symbols is among the parameters only.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        self.assertEqual(self.prey_predator.num_dependent_variables,
+        self.assertEqual(self.prey_predator.num_dependents,
                          len(translator.dependent_invariants(self.prey_predator)))
 
     def test_the_kinds_partition_the_invariants(self):
@@ -178,13 +178,13 @@ class TestInvariantClassification(TestCase):
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
         for system in (self.prey_predator, self.hl66, catalyst):
-            with self.subTest(system=tuple(map(str, system.variables))):
+            with self.subTest(system=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
                 law = (len(translator.parameter_invariants(system))
                        == system.num_parameters - translator.r
                        and translator.indep_var_invariant(system) is not None
                        and len(translator.dependent_invariants(system))
-                       == system.num_dependent_variables)
+                       == system.num_dependents)
                 self.assertEqual(translator.scheme(system) == 'parameter', law)
 
     def test_a_catalyst_invariant_is_conserved_and_still_a_dependent(self):
@@ -207,7 +207,7 @@ class TestInvariantClassification(TestCase):
         self.assertNotIn(conserved, translator.parameter_invariants(system))
 
         # And its rate really is zero, so the rate could not have told us.
-        names = reduced.variables[1 + translator.r:]
+        names = reduced.symbols[1 + translator.r:]
         rates = {invariant: reduced.derivative_dict[name]
                  for name, invariant in zip(names, translator.invariants())}
         self.assertEqual(0, rates[conserved])
@@ -241,7 +241,7 @@ class TestInvariantClassification(TestCase):
                 else:
                     reduced = translator.translate_general(self.prey_predator)
                 meanings = translator.named_variables(self.prey_predator, scheme=scheme)
-                self.assertEqual(tuple(reduced.variables), tuple(meanings))
+                self.assertEqual(tuple(reduced.symbols), tuple(meanings))
 
     def test_exactly_one_variable_is_the_one_to_integrate_against(self):
         '''
@@ -252,7 +252,7 @@ class TestInvariantClassification(TestCase):
             for scheme in ('parameter', 'general'):
                 if scheme == 'parameter' and system is self.hl66:
                     continue  # the parameter scheme does not apply to HL 6.6
-                with self.subTest(scheme=scheme, variables=tuple(map(str, system.variables))):
+                with self.subTest(scheme=scheme, variables=tuple(map(str, system.symbols))):
                     translator = ODETranslator.from_ode_system(system)
                     kinds = translator.variable_kinds(system, scheme=scheme)
                     clocks = [name for name, kind in kinds.items() if kind == 'independent']
@@ -290,9 +290,9 @@ class TestInvariantClassification(TestCase):
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
         for system in (self.prey_predator, self.hl66, catalyst):
-            with self.subTest(variables=tuple(map(str, system.variables))):
+            with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
-                n, r = len(system.variables), translator.r
+                n, r = len(system.symbols), translator.r
                 kinds = translator.variable_kinds(system, scheme='general')
                 tally = {kind: list(kinds.values()).count(kind)
                          for kind in set(kinds.values())}
@@ -320,7 +320,7 @@ class TestInvariantClassification(TestCase):
                                               include_aux_vars=False)
         kinds = translator.variable_kinds(self.prey_predator, scheme='general',
                                           include_aux_vars=False)
-        self.assertEqual(tuple(reduced.variables), tuple(meanings))
+        self.assertEqual(tuple(reduced.symbols), tuple(meanings))
         self.assertNotIn('auxiliary', kinds.values())
 
     def test_the_general_scheme_names_follow_hubert_labahn(self):
@@ -365,7 +365,7 @@ class TestNamingScheme(TestCase):
         self.parameter_system.reorder_variables(['e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
     def names(self, system):
-        return tuple(map(str, system.variables))
+        return tuple(map(str, system.symbols))
 
     def test_a_tuple_is_refused_and_says_what_to_write(self):
         with self.assertRaises(ValueError) as caught:

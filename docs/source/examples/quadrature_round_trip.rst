@@ -146,10 +146,10 @@ the constants used below --
 Write these down and check that they satisfy the system desr produced, which is the most
 direct confirmation that the two reductions are the same.
 
-    >>> t, z1, z2 = system.variables
+    >>> t, z1, z2 = system.symbols
     >>> y0, y1 = numeric_translation.invariant_variables
     >>> with_aux = translator.translate_general(system)
-    >>> x0 = with_aux.variables[1]
+    >>> x0 = with_aux.symbols[1]
     >>> c1, c2, c3 = sympy.symbols('c1 c2 c3')
     >>> L = sympy.log(c1 - t) - sympy.log(t) + c2
     >>> exact = {x0: c3 / (t**sympy.Rational(1, 3) * L**sympy.Rational(2, 3)),
@@ -186,7 +186,7 @@ Solving the reduced system
 Solve the two-equation system numerically.  We use sympy to turn the symbolic differential equations into numpy callables, so that scipy can integrate.
 
     >>> def as_function(a_system):
-    ...     variables = list(a_system.dependent_variables)
+    ...     variables = list(a_system.dependents)
     ...     rhs = [a_system.derivative_dict[x] for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 

@@ -167,7 +167,7 @@ class TestODESystemScaling(TestCase):
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]])
         translator = ODETranslator(max_scal,
-                                    variables_domain=system.variables,
+                                    symbols_domain=system.symbols,
                                     hermite_multiplier=herm_mult_paper)
         # The paper's answer carries auxiliary variables, so it is the general reduction and
         # is asked for by name.  `translate` would now choose the parameter scheme: the
@@ -214,7 +214,7 @@ class TestODESystemScaling(TestCase):
 
         # Fetched by name, not unpacked positionally: which column a variable occupies is a
         # property of the convention and not something a test should encode.
-        named = {str(v): v for v in max_scal.variables_domain}
+        named = {str(v): v for v in max_scal.symbols_domain}
         t, n, p = named['t'], named['n'], named['p']
         K, d, h, k, r, s = (named[x] for x in ('K', 'd', 'h', 'k', 'r', 's'))
 
@@ -228,7 +228,7 @@ class TestODESystemScaling(TestCase):
             sits.  Naming the monomials and converting here keeps the test independent of
             that -- and is the shape the method itself ought to accept.
             '''
-            variables = list(max_scal.variables_domain)
+            variables = list(max_scal.symbols_domain)
             return sympy.Matrix([monomial_to_powers(m, variables) for m in monomials]).T
 
         # Choose a new invariant
@@ -268,7 +268,7 @@ class TestInitialConditions(TestCase):
         # parameter list reversed -- which keeps the reduction it was chosen to produce.
         variables = ['e_0', 'k_1', 'k_2', 'K', 't', 's', 'c']
         original_system.reorder_variables(variables)
-        self.assertEqual(variables, list(map(str, original_system.variables)))
+        self.assertEqual(variables, list(map(str, original_system.symbols)))
         self.assertEqual(original_system.exponent_matrix(),
                          sympy.Matrix([[ 0,  1,  0,  0,  0,  0,  1],
                                        [ 0,  1,  0,  1,  0,  1,  1],
@@ -290,7 +290,7 @@ class TestInitialConditions(TestCase):
         # s_0 is a parameter, so it lands at the end of the parameter block and the system
         # stays in canonical order -- parameters, independent variable, dependents.
         self.assertEqual(['e_0', 'k_1', 'k_2', 'K', 's_0', 't', 's', 'c'],
-                         list(map(str, original_system.variables)))
+                         list(map(str, original_system.symbols)))
         self.assertEqual(original_system.indep_var_index, original_system.num_parameters)
         # Moving it to the front is now a choice, not a repair: leading parameters are the
         # ones the reduction normalises, and the rest of this test wants s_0 normalised.
@@ -341,10 +341,10 @@ class TestCanonicalOrder(TestCase):
         self.assertEqual(system.indep_var_index, system.num_parameters,
                          'independent variable should sit at index num_parameters, after the '
                          'parameters and before the dependents.  Order is {}'.format(
-                             system.variables))
+                             system.symbols))
         self.assertEqual(tuple(system.parameters) + (system.indep_var,)
-                         + tuple(system.dependent_variables),
-                         system.variables)
+                         + tuple(system.dependents),
+                         system.symbols)
 
     def test_from_equations_is_canonical(self):
         system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
@@ -385,7 +385,7 @@ class TestCanonicalOrder(TestCase):
         self.assertCanonicalOrder(system)
         system.add_constraint('c_2', 'c_0 + c_1')
         self.assertEqual(('c_1', 'c_0', 'c_2', 't', 'y', 'x'),
-                         tuple(map(str, system.variables)))
+                         tuple(map(str, system.symbols)))
         self.assertCanonicalOrder(system)
 
     def test_a_non_canonical_order_is_not_silently_rearranged(self):
@@ -399,7 +399,7 @@ class TestCanonicalOrder(TestCase):
         system.reorder_variables(['c_0', 't', 'x', 'y', 'c_1'])  # an interleaved order
         system.add_constraint('c_2', 'c_0 + c_1')
         self.assertEqual(('c_0', 'c_2', 't', 'x', 'y', 'c_1'),
-                         tuple(map(str, system.variables)))
+                         tuple(map(str, system.symbols)))
         self.assertIn(sympy.Symbol('c_2'), system.parameters)
 
 
@@ -438,19 +438,19 @@ class TestBlockReordering(TestCase):
         self.assertEqual(('k_m1', 'k_2', 'k_1', 'e_0'), self.names(self.system.parameters))
 
     def test_an_empty_order_changes_nothing(self):
-        before = self.system.variables
+        before = self.system.symbols
         self.system.reorder_parameters([])
-        self.assertEqual(before, self.system.variables)
+        self.assertEqual(before, self.system.symbols)
 
     def test_reordering_parameters_leaves_the_dependents_alone(self):
-        before = self.system.dependent_variables
+        before = self.system.dependents
         self.system.reorder_parameters('k_2')
-        self.assertEqual(before, self.system.dependent_variables)
+        self.assertEqual(before, self.system.dependents)
 
     def test_reordering_dependents_leaves_the_parameters_alone(self):
         before = self.system.parameters
         self.system.reorder_dependents('s')
-        self.assertEqual(('s', 'c'), self.names(self.system.dependent_variables))
+        self.assertEqual(('s', 'c'), self.names(self.system.dependents))
         self.assertEqual(before, self.system.parameters)
         self.assertCanonical(self.system)
 

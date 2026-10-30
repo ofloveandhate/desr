@@ -96,15 +96,15 @@ system.reorder_variables(variable_order)
 print('\n\n---------\n\nsystem in the chosen variable order:')
 print(system)
 
-print(f'\n{system.variables=}')
+print(f'\n{system.symbols=}')
 
 print(f'\n{system.parameters=}')
 print(f'{len(system.parameters)} parameters')
 
-print(f'\n{system.dependent_variables=}')
-print(f'{len(system.dependent_variables)} dependent variables')
+print(f'\n{system.dependents=}')
+print(f'{len(system.dependents)} dependent variables')
 
-print('\nVariable order: ', system.variables)
+print('\nVariable order: ', system.symbols)
 
 translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
 
@@ -130,12 +130,12 @@ print(system_translated.to_tex())#.to_tex()
 
 
 
-print(f'{system_translated.variables=}')
+print(f'{system_translated.symbols=}')
 print(f'{system_translated.parameters=}')
 print(f'{len(system_translated.parameters)}  parameters')
 
-print(f'{system_translated.dependent_variables=}')
-print(f'{len(system_translated.dependent_variables)}  dependent variables')
+print(f'{system_translated.dependents=}')
+print(f'{len(system_translated.dependents)}  dependent variables')
 
 
 

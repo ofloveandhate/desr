@@ -35,12 +35,12 @@ class TestNumericTranslation(TestCase):
 
         # Fetched by name rather than unpacked positionally, so that a change of variable
         # order is not a change to every test in this class.
-        original = {str(v): v for v in self.system.variables}
+        original = {str(v): v for v in self.system.symbols}
         self.t, self.s, self.c = original['t'], original['s'], original['c']
         self.k_m1, self.k_2 = original['k_m1'], original['k_2']
         self.k_1, self.e_0, self.s_0 = original['k_1'], original['e_0'], original['s_0']
 
-        reduced = {str(v): v for v in self.numeric.reduced.variables}
+        reduced = {str(v): v for v in self.numeric.reduced.symbols}
         self.tau, self.u, self.v = reduced['tau'], reduced['u'], reduced['v']
         self.c0, self.c1, self.c2 = reduced['c0'], reduced['c1'], reduced['c2']
 
@@ -248,7 +248,7 @@ class TestNumericTranslation(TestCase):
         # canonical order now that the parameters come first, so put it back.
         system.reorder_variables(['a', 'b', 'z0', 't', 'z'])
         numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
-        a, b, z0, t, z = system.variables
+        a, b, z0, t, z = system.symbols
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
         with self.assertRaises(NotImplementedError) as caught:
             numeric.reverse(point, known_values={a: 2.0, b: 0.5})
@@ -264,7 +264,7 @@ class TestNumericTranslation(TestCase):
         translator = ODETranslator.from_ode_system(system)
         numeric = NumericTranslation(system, translator)
         self.assertTrue(numeric.carries_auxiliaries)
-        t, z1, z2 = system.variables
+        t, z1, z2 = system.symbols
         point = numeric.forward({t: 1.0, z1: 0.4, z2: 0.3})
         with self.assertRaises(ValueError) as caught:
             numeric.reverse(point, known_values={z1: 0.4})

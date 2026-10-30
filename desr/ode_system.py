@@ -49,20 +49,38 @@ class ODESystem(object):
     '''
     A system of differential equations.
 
-    The main attributes are :attr:`~desr.ode_system.ODESystem.variables` and :attr:`~desr.ode_system.ODESystem.derivatives`.
-    :attr:`~desr.ode_system.ODESystem.variables` is an ordered tuple of variables, which includes the independent variable.
-    :attr:`~desr.ode_system.ODESystem.derivatives` is an ordered tuple of the same length that contains the derivatives with respect to :attr:`~desr.ode_system.ODESystem.indep_var`.
+    **The vocabulary**, since it is the thing that most often trips people up -- and did trip
+    up this library, which inherited the muddle from Hubert & Labahn:
 
-    A variable with no equation of its own -- a :const:`None` in
-    :attr:`~desr.ode_system.ODESystem.derivatives` -- is a :attr:`~desr.ode_system.ODESystem.parameters`.
-    A variable with an equation is a :attr:`~desr.ode_system.ODESystem.dependent_variables`,
-    including when that equation says zero: :math:`dw/dt = 0` states that :math:`w` is
-    conserved, which is a statement about a dependent variable.  To say instead that it is
-    a constant of the model, name it in `parameters` or call
-    :meth:`~desr.ode_system.ODESystem.make_parameter`.
+    - :attr:`~desr.ode_system.ODESystem.symbols` is the collective: every name the system
+      declares.  It is what :math:`n` counts.
+    - :attr:`~desr.ode_system.ODESystem.parameters` are the :math:`p` symbols with no
+      equation of their own.
+    - the *variables* are the rest -- the ones that actually vary -- namely
+      :attr:`~desr.ode_system.ODESystem.independent_variable` and the :math:`q`
+      :attr:`~desr.ode_system.ODESystem.dependents`.
+
+    So :math:`\\textrm{symbols} = \\textrm{parameters} + \\textrm{variables}` and
+    :math:`n = p + 1 + q`.  Hubert & Labahn have no word for the collective, which is how
+    "variable" came to do that job in their paper and lose its own meaning along the way:
+    at the top of their section 7 they separate "state variables" from "constant
+    parameters", and a page later call :math:`\\alpha = k_3/(k_1 a)` a variable.
+
+    :attr:`~desr.ode_system.ODESystem.derivatives` is an ordered tuple the same length as
+    `symbols`, holding each derivative with respect to the independent variable.  The
+    classification is read straight off it, which is why it is exhaustive: the independent
+    variable, a :const:`None` for a parameter, or an expression for a dependent.
+
+    An equation that says zero is still an equation.  :math:`dw/dt = 0` states that
+    :math:`w` is *conserved*, which is a fact about a dependent; to say instead that it does
+    not vary at all, name it in `parameters` or call
+    :meth:`~desr.ode_system.ODESystem.make_parameter`.  Both print as `0`, so only the
+    classification tells them apart -- see
+    :meth:`~desr.ode_translation.ODETranslator.variable_kinds`.
 
     Args:
-        variables (tuple of sympy.Symbol): Ordered tuple of variables.
+        variables (tuple of sympy.Symbol): Ordered tuple of symbols.  The argument keeps its
+            old name for now; it is the `symbols` of the constructed system.
         derivatives (tuple of sympy.Expression): Ordered tuple of derivatives, :const:`None` for a parameter.
         indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
         initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
@@ -85,7 +103,7 @@ class ODESystem(object):
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
-        assert self._derivatives[self.indep_var_index] == sympy.sympify(1)
+        assert self._derivatives[self.independent_variable_index] == sympy.sympify(1)
 
         # Reclassify before anything else reads the derivatives, so that the rest of
         # construction sees the system the caller asked for.
@@ -117,8 +135,8 @@ class ODESystem(object):
             return False
 
         # Compare variables
-        self_var = sorted(self.variables, key=str)
-        other_var = sorted(other.variables, key=str)
+        self_var = sorted(self.symbols, key=str)
+        other_var = sorted(other.symbols, key=str)
         if self_var != other_var:
             return False
 
@@ -176,7 +194,7 @@ class ODESystem(object):
         x(0) = x_0
         parameters: c_0, c_1, x_0
 
-        >>> system.variables
+        >>> system.symbols
         (c_0, c_1, x_0, tau, x, y)
         """
         if not isinstance(new_indep, sympy.Symbol):
@@ -190,60 +208,89 @@ class ODESystem(object):
         self._constraints = [c.subs(to_sub) for c in self.constraints]
         self._initial_conditions = {k:v.subs(to_sub) for k,v in self._initial_conditions.items()}
 
-        ind = self.indep_var_index
+        ind = self.independent_variable_index
         self._variables = self._variables[:ind] + (new_indep,) + self._variables[ind+1:]
         self._indep_var = new_indep
 
     @property
-    def indep_var(self):
+    def independent_variable(self):
         """
-        Return the independent variable.
+        Return the independent variable: the one everything is differentiated with respect to.
+
+        Hubert & Labahn call it *time*, which it usually is.  The library does not insist on
+        that -- it could be arclength or a spatial coordinate -- so the general name is used
+        here, with :py:attr:`~indep_var` as a short alias for typing at a prompt.
 
         Returns:
-            sympy.Symbol: The independent variable, which we are differentiating with respect to.
+            sympy.Symbol
         """
         return self._indep_var
 
+    #: Short alias for :py:attr:`~independent_variable`.  The library itself spells the name
+    #: out, so that a search for the long form finds every use within desr.
+    indep_var = independent_variable
 
     @property
-    def indep_var_index(self):
+    def independent_variable_index(self):
         """
-        Return the independent variable index.
+        Return the index of the independent variable in :py:attr:`~symbols`.
+
+        Under the canonical order this equals :py:attr:`~num_parameters`, since the
+        parameters come first.
 
         Return:
-             int: The index of :py:attr:`~indep_var` in :py:attr:`~self.variables`.
+             int
         """
-        return self.variables.index(self.indep_var)
+        return self.symbols.index(self.independent_variable)
+
+    #: Short alias for :py:attr:`~independent_variable_index`.
+    indep_var_index = independent_variable_index
 
     @property
-    def variables(self):
+    def symbols(self):
         '''
-        Return ALL the variables appearing in the system.
+        Every symbol the system declares: the parameters, the independent variable and the
+        dependent variables, in order.
+
+        **The vocabulary.**  `symbols` is the collective; it is what :math:`n` counts.  The
+        *variables* are the ones that actually vary -- the independent variable and the
+        dependents -- and the *parameters* are the rest.  So
+
+        .. math::
+
+            \\textrm{symbols} = \\textrm{parameters} + \\textrm{variables},
+            \\qquad n = p + 1 + q.
+
+        Hubert & Labahn have no term for the collective, which is why "variable" drifted
+        into the job in their paper and in earlier versions of this library: at the top of
+        their section 7 they distinguish "state variables" from "constant parameters", and a
+        page later call :math:`\\alpha = k_3/(k_1 a)` -- an expression in the parameters
+        alone -- a variable.  Naming the collective is what keeps "variable" meaning
+        something.
 
         Returns:
-            tuple: Ordered tuple of variables appearing in the system.
+            tuple: Ordered tuple of every symbol in the system.
         '''
         return self._variables
 
     @property
     def parameters(self):
         '''
-        Return the parameters of the system: the variables with no equation of their own.
+        The parameters of the system: the symbols with no equation of their own.
 
-        A variable whose equation says zero is conserved, not constant, and so is a
-        dependent variable rather than a parameter.  See
-        :attr:`~desr.ode_system.ODESystem.dependent_variables`.
+        A symbol whose equation says zero is *conserved*, which is a different thing, and so
+        is a dependent rather than a parameter.  See :attr:`~desr.ode_system.ODESystem.dependents`.
 
         Returns:
-            tuple: The parameters, in variable order.
+            tuple: The parameters, in symbol order.
 
         >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
         >>> system.parameters
         (a,)
-        >>> system.dependent_variables
+        >>> system.dependents
         (w, z)
         '''
-        return tuple(var for var, deriv in zip(self.variables, self._derivatives) if deriv is None)
+        return tuple(var for var, deriv in zip(self.symbols, self._derivatives) if deriv is None)
 
     @property
     def num_parameters(self):
@@ -254,42 +301,80 @@ class ODESystem(object):
         return len(self.parameters)
 
     @property
-    def dependent_variables(self):
+    def dependents(self):
         '''
-        Return the dependent variables: those with an equation of their own, excluding the
-        independent variable.
+        The dependents: the symbols with an equation of their own, excluding the independent
+        variable.
 
-        A conserved variable, whose equation says zero, is a dependent variable.
+        Hubert & Labahn's "state variables", and the right name for them in prose -- the
+        state is what a solver integrates.  The accessor is the short form so that it pairs
+        with :attr:`~parameters` without either needing a noun bolted on.
+
+        A conserved symbol, whose equation says zero, is a dependent.
 
         Returns:
-            tuple: The dependent variables, in variable order.
+            tuple: The dependents, in symbol order.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
         >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
         >>> system = ODESystem.from_dict(_input)
-        >>> system.dependent_variables
+        >>> system.dependents
         (x, y)
 
-        A variable may move at unit rate; being told apart from the independent variable is
-        a matter of which variable it is, not of what its equation happens to say.
+        A dependent may move at unit rate; being told apart from the independent variable is
+        a matter of which symbol it is, not of what its equation happens to say.
 
-        >>> ODESystem.from_equations(['dx/dt = 1']).dependent_variables
+        >>> ODESystem.from_equations(['dx/dt = 1']).dependents
         (x,)
         '''
-        return tuple(var for var, deriv in zip(self.variables, self._derivatives)
-                     if deriv is not None and var != self.indep_var)
+        return tuple(var for var, deriv in zip(self.symbols, self._derivatives)
+                     if deriv is not None and var != self.independent_variable)
 
     @property
-    def num_dependent_variables(self):
+    def num_dependents(self):
         '''
         Returns:
-            int: The number of dependent variables, excluding the independent variable.
+            int: The number of dependents, excluding the independent variable.
         '''
-        return len(self.dependent_variables)
+        return len(self.dependents)
+
+    @property
+    def variables(self):
+        '''
+        The symbols that actually vary: the independent variable, then the dependents.
+
+        The complement of :attr:`~parameters` within :attr:`~symbols`, and the set the
+        classification rule asks about -- an invariant is a parameter exactly when its
+        monomial involves none of these.
+
+        Note that this is **not** what `variables` meant before 2.0, when it was the
+        collective and is now :attr:`~symbols`.  The rename went in first and this came
+        back afterwards, so that nothing could silently receive the shorter tuple.
+
+        Returns:
+            tuple: The independent variable followed by the dependents.
+
+        >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
+        >>> system.symbols
+        (a, t, w, z)
+        >>> system.parameters, system.variables
+        ((a,), (t, w, z))
+        >>> system.num_parameters + system.num_variables == len(system.symbols)
+        True
+        '''
+        return (self.independent_variable,) + self.dependents
+
+    @property
+    def num_variables(self):
+        '''
+        Returns:
+            int: The number of symbols that vary, which is ``1 + num_dependents``.
+        '''
+        return 1 + self.num_dependents
 
     @property
     def derivatives(self):
-        ''' Getter for an ordered tuple of expressions representing the derivatives of self.variables.
+        ''' Getter for an ordered tuple of expressions representing the derivatives of self.symbols.
 
         A parameter has no equation, and so is reported as :const:`None`.  That is not the
         same answer as ``0``, which is the equation of a conserved variable.
@@ -307,7 +392,7 @@ class ODESystem(object):
         Returns:
             dict: Keys are the independent and dependent variables, value is the derivative with respect to the independent variable.
         '''
-        return dict(filter(lambda x: x[1] is not None, zip(self.variables, self._derivatives)))
+        return dict(filter(lambda x: x[1] is not None, zip(self.symbols, self._derivatives)))
 
     def make_parameter(self, variable):
         '''
@@ -333,7 +418,7 @@ class ODESystem(object):
         >>> system.make_parameter('w')
         >>> system.parameters
         (a, w)
-        >>> system.dependent_variables
+        >>> system.dependents
         (z,)
 
         >>> system.make_parameter('z')
@@ -344,15 +429,15 @@ class ODESystem(object):
         if isinstance(variable, str):
             variable = to_symbol(variable)
 
-        if variable not in self.variables:
+        if variable not in self.symbols:
             raise ValueError('Cannot make a parameter of {}, which is not a variable of the '
                              'system.'.format(variable))
 
-        if variable == self.indep_var:
+        if variable == self.independent_variable:
             raise ValueError('Cannot make a parameter of {}, the independent '
                              'variable.'.format(variable))
 
-        index = self.variables.index(variable)
+        index = self.symbols.index(variable)
         derivative = self._derivatives[index]
 
         if derivative is None:
@@ -360,7 +445,7 @@ class ODESystem(object):
 
         if derivative != sympy.sympify(0):
             raise ValueError('Cannot make a parameter of {}, which moves: d{}/d{} = {}.'.format(
-                variable, variable, self.indep_var, derivative))
+                variable, variable, self.independent_variable, derivative))
 
         initial_condition = self._initial_conditions.get(variable)
         if initial_condition is not None:
@@ -413,7 +498,7 @@ class ODESystem(object):
 
         for d in self._derivatives:
             if d is not None:
-                for v in self.variables:
+                for v in self.symbols:
                     d = sympy.collect(d,v)
             new_derivs.append(d)
 
@@ -483,7 +568,7 @@ class ODESystem(object):
                 init_cond = sympify_expression(init_cond)
 
             # We can only set initial conditions for dependent variables we already know about.
-            if variable not in self.dependent_variables:
+            if variable not in self.dependents:
                 raise ValueError('Cannot set initial condition {} for {}, which is not a dependent variable of the system.'.format(init_cond,
                                                                                                               variable))
 
@@ -504,7 +589,7 @@ class ODESystem(object):
                     raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.  If you want {variable}(0) to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)")
 
             # silviana: i think we should guard against having 1 be a variable...
-            if (init_cond not in self.variables) and not init_cond.is_constant(): # checking emptiness on ics_vars
+            if (init_cond not in self.symbols) and not init_cond.is_constant(): # checking emptiness on ics_vars
                 self._add_parameters([init_cond])
 
             self._initial_conditions[variable] = init_cond
@@ -631,7 +716,7 @@ class ODESystem(object):
         '''
         if not new_vars:
             return
-        at = self.indep_var_index
+        at = self.independent_variable_index
         variables = list(self._variables)
         derivatives = list(self._derivatives)
         self._variables = tuple(variables[:at] + list(new_vars) + variables[at:])
@@ -649,8 +734,8 @@ class ODESystem(object):
         Returns: length-three tuple of containers of variables: all, existing dependent, new
         """
         all_vars = expressions_to_variables([lhs, rhs])
-        dependent_vars = all_vars.intersection(self.dependent_variables)
-        new_vars = sorted(all_vars.difference(set(self.variables)), key=str)
+        dependent_vars = all_vars.intersection(self.dependents)
+        new_vars = sorted(all_vars.difference(set(self.symbols)), key=str)
 
         return all_vars, dependent_vars, new_vars
 
@@ -726,7 +811,7 @@ class ODESystem(object):
             rhs_vars = set(expressions_to_variables([rhs]))
 
             
-            lhs_dependent_vars = lhs_vars.intersection(set(self.dependent_variables))
+            lhs_dependent_vars = lhs_vars.intersection(set(self.dependents))
 
             # make sure we can actually do the substitution
             if lhs_dependent_vars:
@@ -745,7 +830,7 @@ class ODESystem(object):
 
         # copy so can do work on the derivatives, variables, initial conditions
         new_derivs = self._derivatives
-        variables = list(self.variables)
+        variables = list(self.symbols)
         initial_conditions = self.initial_conditions
         constraints = self.constraints
 
@@ -805,7 +890,7 @@ class ODESystem(object):
         # reduction scheme.  None rather than 0: giving it `0` would declare it a conserved
         # dependent.  The derivatives are stored in the variable order, so both lists are cut
         # at the same point.
-        at = variables.index(self.indep_var)
+        at = variables.index(self.independent_variable)
         new_vars = variables[:at] + missing_vars + variables[at:]
         new_derivs = new_derivs[:at] + [None] * len(missing_vars) + new_derivs[at:]
 
@@ -813,7 +898,7 @@ class ODESystem(object):
         # remove variables that don't appear in any expressions
 
         variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
-        extant_vars = set(expressions_to_variables( [d for d in new_derivs if d is not None] + constraints + list(initial_conditions.values()) + [self.indep_var] + list(self.dependent_variables)))
+        extant_vars = set(expressions_to_variables( [d for d in new_derivs if d is not None] + constraints + list(initial_conditions.values()) + [self.independent_variable] + list(self.dependents)))
 
         for v in variables_to_inspect:
 
@@ -827,7 +912,7 @@ class ODESystem(object):
         # we're finally ready to construct the new post-substitution System. Huzzah.
         subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
-                                indep_var=self.indep_var,
+                                indep_var=self.independent_variable,
                                 constraints=constraints,
                                 is_reduced = self.is_reduced)
 
@@ -945,9 +1030,9 @@ class ODESystem(object):
         # None means "no equation", so the None's are exactly the parameters; they are
         # named below instead of being given a line claiming they do not move.  That leaves
         # `d_/dt = 0` free to mean what it says -- a conserved dependent variable.
-        lines = ['d{}/d{} = {}'.format(var, self.indep_var, expr)
-                 for var, expr in zip(self.variables, self._derivatives) if expr is not None]
-        for v in self.dependent_variables:
+        lines = ['d{}/d{} = {}'.format(var, self.independent_variable, expr)
+                 for var, expr in zip(self.symbols, self._derivatives) if expr is not None]
+        for v in self.dependents:
             init_cond = self.initial_conditions.get(v)
             if init_cond is not None:
                 lines.append('{}(0) = {}'.format(v, init_cond))
@@ -1005,11 +1090,11 @@ class ODESystem(object):
         # parameters and keeps every real equation -- including a conserved variable's
         # `= 0`, which is an equation and must appear.  Testing `expr != 0` instead would
         # delete the conservation law along with the parameters.
-        lines = [line_template.format(var_to_tex(var), var_to_tex(self.indep_var), expr_to_tex(expr))
-                 for var, expr in zip(self.variables, self._derivatives) if expr is not None]
+        lines = [line_template.format(var_to_tex(var), var_to_tex(self.independent_variable), expr_to_tex(expr))
+                 for var, expr in zip(self.symbols, self._derivatives) if expr is not None]
         # Here, by contrast, None only means that `self.initial_conditions` has no entry
         # for this variable.
-        for v in self.dependent_variables:
+        for v in self.dependents:
             init_cond = self.initial_conditions.get(v)
             if init_cond is not None:
                 lines.append('{}\\left(0\\right) &= {}'.format(var_to_tex(v), expr_to_tex(init_cond)))
@@ -1134,7 +1219,7 @@ class ODESystem(object):
             TexParseError: On a definition when `sub_defns` is False.
             NotImplementedError: On a definition that refers to another definition.
         '''
-        dependent = set(system.dependent_variables)
+        dependent = set(system.dependents)
 
         constraints, definitions = {}, {}
         for lhs, rhs in relations.items():
@@ -1189,7 +1274,7 @@ class ODESystem(object):
         # variable moving at unit rate has a real equation, and `t * 1 / x` is a real
         # constraint on the scaling.
         exprs = [self._indep_var * expr / var for var, expr in self.derivative_dict.items()
-                 if var != self.indep_var]
+                 if var != self.independent_variable]
 
         # next, initial conditions
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
@@ -1211,13 +1296,13 @@ class ODESystem(object):
 
         expr_vars = expressions_to_variables(exprs)
         
-        unlisted_vars = expr_vars - set(self.variables)
+        unlisted_vars = expr_vars - set(self.symbols)
         
 
         if unlisted_vars:
             raise RuntimeError(f"there are variables in the expressions that are not in the list of variables: {unlisted_vars}")
 
-        for v in self.variables:
+        for v in self.symbols:
             found_vars = expressions_to_variables([v]) # convert.  constants don't make it through.
 
             if not found_vars:
@@ -1238,7 +1323,7 @@ class ODESystem(object):
         >>> eqns = '\\n'.join(['ds/dt = -k_1*e_0*s + (k_1*s + k_m1)*c',
         ... 'dc/dt = k_1*e_0*s - (k_1*s + k_m1 + k_2)*c'])
         >>> system = ODESystem.from_equations(eqns)
-        >>> system.variables
+        >>> system.symbols
         (e_0, k_1, k_2, k_m1, t, c, s)
         >>> system.exponent_matrix()
         Matrix([
@@ -1274,9 +1359,9 @@ class ODESystem(object):
 
         exprs = self._expressions()
 
-        matrices = [rational_expr_to_exponent_matrix(expr, self.variables) for expr in exprs]
+        matrices = [rational_expr_to_exponent_matrix(expr, self.symbols) for expr in exprs]
         out = sympy.Matrix.hstack(*matrices)
-        assert out.shape[0] == len(self.variables)
+        assert out.shape[0] == len(self.symbols)
         return out
 
     def maximal_scaling_matrix(self):
@@ -1297,7 +1382,7 @@ class ODESystem(object):
         '''
         exprs = self._expressions()
 
-        return maximal_scaling_matrix(exprs, variables=self.variables)
+        return maximal_scaling_matrix(exprs, variables=self.symbols)
 
     def reorder_variables(self, variables):
         '''
@@ -1318,7 +1403,7 @@ class ODESystem(object):
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
-        >>> system.variables
+        >>> system.symbols
         (z_3, t, z_1, z_2)
 
         `z_3` is a parameter, so it comes first, has no equation, and its entry is
@@ -1328,7 +1413,7 @@ class ODESystem(object):
         (None, 1, z_1*z_3, z_1*z_2/z_3**2)
 
         >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
-        >>> system.variables
+        >>> system.symbols
         (z_2, z_3, t, z_1)
         >>> system.derivatives
         (z_1*z_2/z_3**2, None, 1, z_1*z_3)
@@ -1343,10 +1428,10 @@ class ODESystem(object):
 
         variables = [sympy.Symbol(v) if isinstance(v, str) else v for v in variables]
 
-        if set(variables) != set(self.variables):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(self.variables, key=str), sorted(variables, key=str)))
+        if set(variables) != set(self.symbols):
+            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(self.symbols, key=str), sorted(variables, key=str)))
 
-        var_to_index = {var: i for i, var in enumerate(self.variables)}
+        var_to_index = {var: i for i, var in enumerate(self.symbols)}
         column_shuffle = [var_to_index[new_var] for new_var in variables]
 
         self._variables = tuple( [self._variables[i] for i in column_shuffle])
@@ -1356,11 +1441,11 @@ class ODESystem(object):
         '''
         What kind of variable this is, as a phrase for an error message.
         '''
-        if variable == self.indep_var:
+        if variable == self.independent_variable:
             return 'the independent variable'
         if variable in self.parameters:
             return 'a parameter'
-        if variable in self.dependent_variables:
+        if variable in self.dependents:
             return 'a dependent variable'
         return 'not a variable of this system'
 
@@ -1392,7 +1477,7 @@ class ODESystem(object):
                 raise ValueError('{} is named twice in the {} order.'.format(var, what))
             seen.add(var)
             if var not in current:
-                if var in self.variables:
+                if var in self.symbols:
                     raise ValueError(
                         '{} is not one of the {}; it is {}.  Use reorder_variables to move a '
                         'variable between blocks, or make_parameter to change what it '
@@ -1432,7 +1517,7 @@ class ODESystem(object):
         Name one, and it moves to the front; the others keep their order.
 
         >>> system.reorder_parameters('k_2')
-        >>> system.variables
+        >>> system.symbols
         (k_2, e_0, k_1, k_m1, t, c, s)
 
         Name several, and they lead in the order given.
@@ -1449,8 +1534,8 @@ class ODESystem(object):
         ValueError: s is not one of the parameters; it is a dependent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
         '''
         parameters = self._block_reorder(order, self.parameters, 'parameters')
-        self.reorder_variables(parameters + [self.indep_var]
-                               + list(self.dependent_variables))
+        self.reorder_variables(parameters + [self.independent_variable]
+                               + list(self.dependents))
 
     def reorder_dependents(self, order):
         '''
@@ -1469,10 +1554,10 @@ class ODESystem(object):
         >>> eqns = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
         >>> system = ODESystem.from_equations(eqns)
-        >>> system.dependent_variables
+        >>> system.dependents
         (c, s)
         >>> system.reorder_dependents('s')
-        >>> system.variables
+        >>> system.symbols
         (e_0, k_1, k_2, k_m1, t, s, c)
 
         The independent variable is not a dependent variable, and saying so is more use
@@ -1483,9 +1568,9 @@ class ODESystem(object):
             ...
         ValueError: t is not one of the dependent variables; it is the independent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
         '''
-        dependents = self._block_reorder(order, self.dependent_variables,
+        dependents = self._block_reorder(order, self.dependents,
                                          'dependent variables')
-        self.reorder_variables(list(self.parameters) + [self.indep_var] + dependents)
+        self.reorder_variables(list(self.parameters) + [self.independent_variable] + dependents)
 
     def default_order_variables(self):
         '''
@@ -1513,22 +1598,22 @@ class ODESystem(object):
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
-        >>> system.variables
+        >>> system.symbols
         (z_3, t, z_1, z_2)
 
         >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
-        >>> system.variables
+        >>> system.symbols
         (z_2, z_3, t, z_1)
 
         >>> system.default_order_variables()
-        >>> system.variables
+        >>> system.symbols
         (z_3, t, z_1, z_2)
         '''
-        dep_var = sorted(self.dependent_variables, key=str)
+        dep_var = sorted(self.dependents, key=str)
         parameters = sorted(self.parameters, key=str)
 
         # Order variables as parameters, independent, dependent
-        variables = parameters + [self.indep_var] + dep_var
+        variables = parameters + [self.independent_variable] + dep_var
         assert len(variables) == len(set(variables)) # assures no duplicates
         self.reorder_variables(variables=variables)
 

@@ -189,11 +189,11 @@ def main():
         system = example()
         max_scal = system.maximal_scaling_matrix()
         print('Original system:\n{}\n'.format(system))
-        print('Scaling action:\n{}\n{}\n'.format(system.variables, max_scal))
+        print('Scaling action:\n{}\n{}\n'.format(system.symbols, max_scal))
 
         translator = ODETranslator(max_scal)
         print('Hermite multiplier:\n{}\n'.format(translator.herm_mult))
-        print('Invariants of the system:\n{}\n'.format(translator.invariants(system.variables)))
+        print('Invariants of the system:\n{}\n'.format(translator.invariants(system.symbols)))
         print('Substitutions:',translator.translate_parameter_substitutions(system))
 
         reduced = translator.translate(system)

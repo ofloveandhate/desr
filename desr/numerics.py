@@ -92,7 +92,7 @@ def _dep_var_translator(system, translator):
     index = system.indep_var_index
     scaling_matrix = translator.scaling_matrix.copy()
     hermite_multiplier = translator.dep_var_herm_mult(indep_var_index=index)
-    if translator.n == len(system.variables):
+    if translator.n == len(system.symbols):
         scaling_matrix.col_del(index)
     else:
         hermite_multiplier.col_del(index)
@@ -141,7 +141,7 @@ class NumericTranslation(object):
 
     You can translate a state of the original system into the reduced one.
 
-    >>> K, d, h, k, r, s, t, n, p = system.variables
+    >>> K, d, h, k, r, s, t, n, p = system.symbols
     >>> original = {t: 2.0, n: 1.0, p: 0.5, K: 5.0, d: 0.7, h: 1.3, k: 0.9, r: 1.1, s: 0.4}
     >>> reduced_values = numeric.forward(original)
     >>> sorted(str(x) for x in reduced_values)
@@ -174,7 +174,7 @@ class NumericTranslation(object):
             raise ValueError(
                 'Reduced system {} does not match any reduction of {} by this translator.  '
                 'Check that `reduced` came from this system and translator.'.format(
-                    tuple(self.reduced.variables), tuple(system.variables)))
+                    tuple(self.reduced.symbols), tuple(system.symbols)))
 
         (self._acted, source, self._auxiliaries, self._invariants,
          self._shares_indep_var) = layout
@@ -189,11 +189,11 @@ class NumericTranslation(object):
         if self.translator._is_translate_parameter_compatible(self.system):
             schemes.append(ReductionScheme.PARAMETER)
         columns = self.translator.scaling_matrix.shape[1]
-        if ((len(self.system.variables) == columns + 1)
+        if ((len(self.system.symbols) == columns + 1)
                 or self.translator.scaling_matrix[
                     :, self.system.indep_var_index].is_zero_matrix):
             schemes.append(ReductionScheme.DEP_VAR)
-        if len(self.system.variables) == columns:
+        if len(self.system.symbols) == columns:
             schemes.append(ReductionScheme.GENERAL)
         if not schemes:
             raise ValueError(
@@ -210,21 +210,21 @@ class NumericTranslation(object):
             # The reduced system carries no auxiliaries, and its variables line up
             # one-for-one with the columns of V_n -- the new independent variable among
             # them, since it is itself an invariant.
-            if len(self.reduced.variables) != source.herm_mult_n.cols:
+            if len(self.reduced.symbols) != source.herm_mult_n.cols:
                 return None
-            return (list(self.system.variables), source, [],
-                    list(self.reduced.variables), False)
+            return (list(self.system.symbols), source, [],
+                    list(self.reduced.symbols), False)
 
         if scheme == ReductionScheme.DEP_VAR:
             source = _dep_var_translator(self.system, self.translator)
-            acted = [v for v in self.system.variables if v != self.system.indep_var]
+            acted = [v for v in self.system.symbols if v != self.system.indep_var]
         else:
             source = self.translator
-            acted = list(self.system.variables)
+            acted = list(self.system.symbols)
 
         # Here the reduced system keeps the original independent variable, and its
         # remaining variables are the auxiliaries followed by the invariants.
-        rest = [v for v in self.reduced.variables if v != self.reduced.indep_var]
+        rest = [v for v in self.reduced.symbols if v != self.reduced.indep_var]
         if len(rest) == source.herm_mult_i.cols + source.herm_mult_n.cols:
             return (acted, source, rest[:source.herm_mult_i.cols],
                     rest[source.herm_mult_i.cols:], True)
@@ -276,7 +276,7 @@ class NumericTranslation(object):
             ValueError: If ``values`` names something that is not a variable of the original
                 system, or determines nothing at all.
         '''
-        values = self._check(values, self.system.variables, 'the original system')
+        values = self._check(values, self.system.symbols, 'the original system')
         ordered = [values.get(v) for v in self._acted]
 
         result = {}
@@ -338,7 +338,7 @@ class NumericTranslation(object):
                 ``known_values`` nor ``auxiliaries`` pins them down.
             ConflictingKnownValues: If the known values contradict each other.
         '''
-        values = self._check(values, self.reduced.variables, 'the reduced system')
+        values = self._check(values, self.reduced.symbols, 'the reduced system')
         if known_values is not None and auxiliaries is not None:
             raise ValueError('Give known_values or auxiliaries, not both.')
 
@@ -619,11 +619,11 @@ class NumericTranslation(object):
                 elif self.scheme == ReductionScheme.GENERAL:
                     carrier = self.translator.translate_general(self.system,
                                                                  include_aux_vars=True)
-                    auxiliaries = [v for v in carrier.variables
+                    auxiliaries = [v for v in carrier.symbols
                                    if v != carrier.indep_var][:self.r]
                 else:
                     carrier = self.translator.translate_dep_var(self.system)
-                    auxiliaries = [v for v in carrier.variables
+                    auxiliaries = [v for v in carrier.symbols
                                    if v != carrier.indep_var][:self.r]
                 rates = [sympy.simplify(carrier.derivative_dict[x] / x)
                          for x in auxiliaries]
@@ -679,7 +679,7 @@ class NumericTranslation(object):
             :attr:`~desr.ode_translation.ODETranslator.herm_mult_i`: an array along the
             series if it moves, a scalar if it is constant.
         '''
-        values = self._check(values, self.reduced.variables, 'the reduced system')
+        values = self._check(values, self.reduced.symbols, 'the reduced system')
         if self.carries_auxiliaries:
             raise ValueError(
                 'The reduced system carries the auxiliary variables {} itself, so there is '
