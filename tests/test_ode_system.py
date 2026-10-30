@@ -403,6 +403,132 @@ class TestCanonicalOrder(TestCase):
         self.assertIn(sympy.Symbol('c_2'), system.parameters)
 
 
+class TestBlockReordering(TestCase):
+    '''
+    `reorder_parameters` and `reorder_dependents` let the caller say only what is
+    meaningful: the order *within* a block. Which block comes first is forced by the
+    Hermite convention and is not theirs to think about.
+
+    `reorder_variables` stays as it was, taking a full permutation, so an interleaved order
+    remains expressible -- the user was explicit that one function could not do both jobs.
+    '''
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+
+    def names(self, variables):
+        return tuple(map(str, variables))
+
+    def assertCanonical(self, system):
+        self.assertEqual(system.indep_var_index, system.num_parameters)
+
+    def test_a_partial_parameter_list_brings_those_to_the_front(self):
+        self.system.reorder_parameters(['k_2', 'k_m1'])
+        self.assertEqual(('k_2', 'k_m1', 'e_0', 'k_1'), self.names(self.system.parameters))
+        self.assertCanonical(self.system)
+
+    def test_a_single_parameter_need_not_be_in_a_list(self):
+        self.system.reorder_parameters('k_2')
+        self.assertEqual(('k_2', 'e_0', 'k_1', 'k_m1'), self.names(self.system.parameters))
+
+    def test_a_full_parameter_list_is_taken_exactly(self):
+        self.system.reorder_parameters(['k_m1', 'k_2', 'k_1', 'e_0'])
+        self.assertEqual(('k_m1', 'k_2', 'k_1', 'e_0'), self.names(self.system.parameters))
+
+    def test_an_empty_order_changes_nothing(self):
+        before = self.system.variables
+        self.system.reorder_parameters([])
+        self.assertEqual(before, self.system.variables)
+
+    def test_reordering_parameters_leaves_the_dependents_alone(self):
+        before = self.system.dependent_variables
+        self.system.reorder_parameters('k_2')
+        self.assertEqual(before, self.system.dependent_variables)
+
+    def test_reordering_dependents_leaves_the_parameters_alone(self):
+        before = self.system.parameters
+        self.system.reorder_dependents('s')
+        self.assertEqual(('s', 'c'), self.names(self.system.dependent_variables))
+        self.assertEqual(before, self.system.parameters)
+        self.assertCanonical(self.system)
+
+    def test_the_derivatives_travel_with_their_variables(self):
+        before = dict(self.system.derivative_dict)
+        self.system.reorder_parameters('k_2')
+        self.system.reorder_dependents('s')
+        self.assertEqual(before, dict(self.system.derivative_dict))
+
+    def test_a_dependent_named_as_a_parameter_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.system.reorder_parameters('s')
+        self.assertIn('a dependent variable', str(caught.exception))
+
+    def test_the_independent_variable_named_as_a_dependent_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.system.reorder_dependents('t')
+        self.assertIn('the independent variable', str(caught.exception))
+
+    def test_the_independent_variable_named_as_a_parameter_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.system.reorder_parameters('t')
+        self.assertIn('the independent variable', str(caught.exception))
+
+    def test_an_unknown_name_is_refused_and_says_what_the_block_holds(self):
+        with self.assertRaises(ValueError) as caught:
+            self.system.reorder_parameters('nonesuch')
+        message = str(caught.exception)
+        self.assertIn('not a variable of this system', message)
+        self.assertIn('k_1', message)
+
+    def test_a_repeated_name_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.system.reorder_parameters(['k_2', 'k_2'])
+        self.assertIn('twice', str(caught.exception))
+
+    def test_an_interleaved_order_is_canonicalised(self):
+        '''
+        `reorder_variables` permits a non-canonical layout on purpose. The block reorderers
+        are the ergonomic layer, so they put the blocks back -- documented, and the reason
+        they exist.
+        '''
+        self.system.reorder_variables(['k_1', 't', 's', 'c', 'e_0', 'k_2', 'k_m1'])
+        self.assertNotEqual(self.system.indep_var_index, self.system.num_parameters)
+        self.system.reorder_parameters('k_2')
+        self.assertCanonical(self.system)
+        self.assertEqual(('k_2', 'k_1', 'e_0', 'k_m1'), self.names(self.system.parameters))
+
+    def normalised_parameters(self, system):
+        ''' The parameters this system's reduction sends to 1. '''
+        translator = ODETranslator.from_ode_system(system)
+        substitutions = translator.translate_parameter_substitutions(system)
+        return [str(v) for v in system.parameters if substitutions[v] == 1]
+
+    def test_reordering_parameters_changes_which_are_normalised(self):
+        ''' The whole point: moving a parameter to the front makes it a candidate. '''
+        self.system.reorder_parameters(['e_0', 'k_1'])
+        self.assertEqual(['e_0', 'k_1'], self.normalised_parameters(self.system))
+        self.system.reorder_parameters('k_2')
+        self.assertIn('k_2', self.normalised_parameters(self.system))
+
+    def test_leading_position_is_a_preference_and_not_a_guarantee(self):
+        '''
+        Exactly `r` parameters are normalised, and the leading ones are only the natural
+        candidates -- the Hermite structure decides which set actually *can* be, and skips
+        one that cannot participate.  Here `k_2` and `k_m1` cannot both go, so asking for
+        both gets `k_2` and then `e_0`, not `k_m1`.  `reorder_parameters`' docstring makes
+        this claim, so it is pinned.
+        '''
+        self.system.reorder_parameters(['k_2', 'k_m1'])
+        self.assertEqual(('k_2', 'k_m1', 'e_0', 'k_1'), self.names(self.system.parameters))
+        normalised = self.normalised_parameters(self.system)
+        self.assertEqual(2, len(normalised))
+        self.assertIn('k_2', normalised)
+        self.assertNotIn('k_m1', normalised)
+        self.assertIn('e_0', normalised)
+
+
 class TestSubsCallShapes(TestCase):
     ''' `subs` is named after sympy's, so it takes the argument shapes sympy's takes. '''
 

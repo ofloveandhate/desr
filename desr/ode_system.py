@@ -1352,6 +1352,141 @@ class ODESystem(object):
         self._variables = tuple( [self._variables[i] for i in column_shuffle])
         self._derivatives = tuple( [self._derivatives[i] for i in column_shuffle])
 
+    def _describe_variable(self, variable):
+        '''
+        What kind of variable this is, as a phrase for an error message.
+        '''
+        if variable == self.indep_var:
+            return 'the independent variable'
+        if variable in self.parameters:
+            return 'a parameter'
+        if variable in self.dependent_variables:
+            return 'a dependent variable'
+        return 'not a variable of this system'
+
+    def _block_reorder(self, order, current, what):
+        '''
+        Work out the new order of one block of variables from a partial list.
+
+        The named ones lead, in the order given; the rest follow in the order they are in
+        now.  That is the useful default, because the reason to name a variable at all is to
+        move it towards the front.
+
+        Args:
+            order (str, iter): The variables to bring to the front of the block.  May be
+                partial, and may be empty.
+            current (tuple): The block as it stands.
+            what (str): What this block is, for error messages.
+
+        Returns:
+            list: The whole block, reordered.
+        '''
+        if isinstance(order, str):
+            order = order.split(' ') if ' ' in order else (order,)
+
+        named = [sympy.Symbol(v) if isinstance(v, str) else v for v in order]
+
+        seen = set()
+        for var in named:
+            if var in seen:
+                raise ValueError('{} is named twice in the {} order.'.format(var, what))
+            seen.add(var)
+            if var not in current:
+                if var in self.variables:
+                    raise ValueError(
+                        '{} is not one of the {}; it is {}.  Use reorder_variables to move a '
+                        'variable between blocks, or make_parameter to change what it '
+                        'is.'.format(var, what, self._describe_variable(var)))
+                raise ValueError('{} is not a variable of this system.  The {} are {}.'.format(
+                    var, what, ', '.join(map(str, current))))
+
+        return named + [var for var in current if var not in seen]
+
+    def reorder_parameters(self, order):
+        '''
+        Reorder the parameters, leaving everything else where it is.
+
+        The order within the parameters is the one that changes the answer -- the leading
+        ones tend to be normalised to 1 -- and this is the way to set it without having to
+        write out the independent variable and the dependents as well.  See
+        :meth:`reorder_variables` for the "tend to" caveat.
+
+        The list may be partial.  The parameters named come first, in the order given, and
+        the rest follow in the order they are already in, so naming one parameter is enough
+        to say "normalise this one if you can".
+
+        Args:
+            order (str, iter): The parameters to bring to the front.
+
+        The layout is left canonical: parameters, independent variable, dependents.  A
+        system deliberately put in some other order by :meth:`reorder_variables` is
+        canonicalised by this call, which is the point of it -- say what is meaningful, and
+        let the library place the blocks.
+
+        >>> eqns = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(eqns)
+        >>> system.parameters
+        (e_0, k_1, k_2, k_m1)
+
+        Name one, and it moves to the front; the others keep their order.
+
+        >>> system.reorder_parameters('k_2')
+        >>> system.variables
+        (k_2, e_0, k_1, k_m1, t, c, s)
+
+        Name several, and they lead in the order given.
+
+        >>> system.reorder_parameters(['k_m1', 'e_0'])
+        >>> system.parameters
+        (k_m1, e_0, k_2, k_1)
+
+        A dependent variable is refused, and the message says what to use instead:
+
+        >>> system.reorder_parameters('s')
+        Traceback (most recent call last):
+            ...
+        ValueError: s is not one of the parameters; it is a dependent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
+        '''
+        parameters = self._block_reorder(order, self.parameters, 'parameters')
+        self.reorder_variables(parameters + [self.indep_var]
+                               + list(self.dependent_variables))
+
+    def reorder_dependents(self, order):
+        '''
+        Reorder the dependent variables, leaving everything else where it is.
+
+        This sets which dependent gets which name in the reduced system -- the `nu`
+        numbering, or whatever :data:`~desr.ode_translation.NAMING_SCHEME_KEYS` says -- and
+        the order the reduced equations are printed in.  It does not change which parameters
+        are normalised; that is :meth:`reorder_parameters`.
+
+        The list may be partial, with the named ones leading.
+
+        Args:
+            order (str, iter): The dependent variables to bring to the front.
+
+        >>> eqns = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(eqns)
+        >>> system.dependent_variables
+        (c, s)
+        >>> system.reorder_dependents('s')
+        >>> system.variables
+        (e_0, k_1, k_2, k_m1, t, s, c)
+
+        The independent variable is not a dependent variable, and saying so is more use
+        than a mismatched-variables error:
+
+        >>> system.reorder_dependents('t')
+        Traceback (most recent call last):
+            ...
+        ValueError: t is not one of the dependent variables; it is the independent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
+        '''
+        dependents = self._block_reorder(order, self.dependent_variables,
+                                         'dependent variables')
+        self.reorder_variables(list(self.parameters) + [self.indep_var] + dependents)
+
     def default_order_variables(self):
         '''
         Reorder the variables into (parameters, independent variable, dependent variables),
