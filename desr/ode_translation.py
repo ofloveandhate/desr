@@ -5,6 +5,7 @@ import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
+from desr.sympy_helper import sympify_expression
 from desr.tex_tools import matrix_to_tex
 
 
@@ -619,6 +620,153 @@ class ODETranslator(object):
         :rtype: ODETranslator
         '''
         return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), symbols_domain=ode_system.symbols, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
+
+    def column_monomials(self):
+        '''
+        What every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult` stands
+        for, as a monomial in the original symbols.
+
+        The auxiliaries come first -- the :math:`r` columns of :math:`V_i` -- then the
+        :math:`n - r` invariants of :math:`V_n`, which is the column order of the multiplier
+        itself.  So the index into this tuple *is* the column index the
+        ``multiplier_*_column`` methods take.
+
+        Returns:
+            tuple of sympy.Expr: One monomial per column.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.column_monomials()
+        (1/(e_0*k_1), e_0, k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0)
+        '''
+        variables = self._validate_variables(None, self.n, 'y', True)
+        return tuple(scale_action(variables, self.herm_mult))
+
+    def column_names(self, system=None, scheme=None):
+        '''
+        A name for every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult`,
+        in the same order as :meth:`column_monomials`.
+
+        The auxiliary columns are named from the naming scheme's ``auxiliaries`` pattern
+        even under the parameter scheme, which keeps none of them: the *columns* exist in
+        the multiplier whether or not the reduction retains them, and naming them is what
+        lets a column operation refer to one.  :meth:`auxiliary_names` is the other
+        question -- what the *reduced system* calls them -- and is empty there.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`named_symbols`.
+
+        Returns:
+            tuple of sympy.Symbol
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.column_names(system)
+        (x0, x1, kappa0, kappa1, tau, nu0, nu1)
+        '''
+        naming = self._resolved_naming_scheme(
+            PARAMETER_SCHEME_NAMES if scheme == ReductionScheme.PARAMETER
+            else GENERAL_SCHEME_NAMES)
+        auxiliaries = _new_symbols(naming['auxiliaries'], self.herm_mult_i.shape[1],
+                                   self._new_indices_start_at)
+        return tuple(auxiliaries) + self.invariant_names(system, scheme)
+
+    def column_of(self, monomial_or_name, system=None, scheme=None):
+        '''
+        The column index of an invariant or auxiliary, by its monomial or by its name.
+
+        The point is to **demystify** the number, not to hide it.  The index is still an
+        :class:`int`, still what the ``multiplier_*_column`` methods take, and still there
+        to be quoted in a write-up -- but where it came from is now on the page::
+
+            # before -- why 6 and 2?
+            translator.multiplier_add_columns(6, 2, 1)
+
+            # after -- and `clock` and `epsilon` can be printed
+            clock = translator.column_of('k_1*s_0*t')
+            epsilon = translator.column_of('e_0/s_0')
+            translator.multiplier_add_columns(clock, epsilon, 1)
+
+        The ``multiplier_*`` methods deliberately keep taking integers, so that the number a
+        reduction depends on stays visible in the code that performs it.
+
+        Args:
+            monomial_or_name: A monomial in the original symbols -- `'e_0/s_0'`, or the
+                expression itself -- or the name a column's invariant gets, such as `tau`.
+                A string is parsed with the library's own convention.
+            system (ODESystem): Needed only when looking up by name.
+            scheme (desr.ode_translation.ReductionScheme, optional): Likewise.
+
+        Returns:
+            int: The column index, in the same numbering the multiplier operations use.
+
+        Raises:
+            ValueError: If nothing matches, listing what the columns are.
+
+        **Monomials are tried first**, then names.  A monomial is what the mathematics
+        points at, and it needs neither a system nor a scheme to resolve.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.column_of('e_0*k_1*t')
+        4
+        >>> translator.column_of('c/e_0')
+        5
+
+        By name, which needs the system so that the scheme can be worked out:
+
+        >>> translator.column_of('tau', system)
+        4
+        >>> translator.column_of('nu0', system)
+        5
+
+        And an unknown one says what is on offer:
+
+        >>> translator.column_of('nonsense')
+        Traceback (most recent call last):
+            ...
+        ValueError: nonsense is not a column of this Hermite multiplier.  The monomials are 1/(e_0*k_1), e_0, k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0.
+
+        Both companions are indexed *by column*, so the whole table -- which is what a
+        write-up wants, column number beside what the column is -- is one zip:
+
+        >>> for column, (name, monomial) in enumerate(zip(translator.column_names(system),
+        ...                                               translator.column_monomials())):
+        ...     print(column, name, '=', monomial)
+        0 x0 = 1/(e_0*k_1)
+        1 x1 = e_0
+        2 kappa0 = k_2/(e_0*k_1)
+        3 kappa1 = k_m1/(e_0*k_1)
+        4 tau = e_0*k_1*t
+        5 nu0 = c/e_0
+        6 nu1 = s/e_0
+        '''
+        if isinstance(monomial_or_name, str):
+            monomial_or_name = sympify_expression(monomial_or_name)
+
+        monomials = self.column_monomials()
+        for column, monomial in enumerate(monomials):
+            if monomial == monomial_or_name:
+                return column
+
+        # A name lookup needs the system, to know which scheme's names to generate, so it is
+        # only attempted when one was given.  A monomial lookup never needs it.
+        if monomial_or_name.is_Symbol and system is not None:
+            for column, name in enumerate(self.column_names(system, scheme)):
+                if name == monomial_or_name:
+                    return column
+
+        raise ValueError(
+            '{} is not a column of this Hermite multiplier.  The monomials are {}.'.format(
+                monomial_or_name, ', '.join(map(str, monomials))))
 
     def multiplier_swap_columns(self, i, j):
         '''

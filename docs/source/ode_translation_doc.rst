@@ -71,6 +71,19 @@ Useful Attributes
     :noindex:
 
 
+Finding a column to operate on
+------------------------------
+
+.. automethod:: desr.ode_translation.ODETranslator.column_of
+    :noindex:
+
+.. automethod:: desr.ode_translation.ODETranslator.column_monomials
+    :noindex:
+
+.. automethod:: desr.ode_translation.ODETranslator.column_names
+    :noindex:
+
+
 
 Output Functions
 ----------------

@@ -102,6 +102,112 @@ class TestODETranslatorTraps(TestCase):
                          general.reverse_translate_general(exact))
 
 
+class TestColumnLookup(TestCase):
+    '''
+    The column numbers a reduction depends on, derived rather than hardcoded.
+
+    They stay numbers -- the author reports them in the paper -- but where each one came
+    from is now in the code that uses it, instead of being a magic constant.
+    '''
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_the_index_is_an_int(self):
+        ''' Reportable, and what the multiplier operations take. '''
+        column = self.translator.column_of('e_0*k_1*t')
+        self.assertIsInstance(column, int)
+
+    def test_column_monomials_is_indexed_by_column(self):
+        monomials = self.translator.column_monomials()
+        self.assertEqual(self.translator.herm_mult.cols, len(monomials))
+        for column, monomial in enumerate(monomials):
+            with self.subTest(column=column):
+                self.assertEqual(column, self.translator.column_of(monomial))
+
+    def test_column_names_is_indexed_the_same_way(self):
+        names = self.translator.column_names(self.system)
+        self.assertEqual(self.translator.herm_mult.cols, len(names))
+        for column, name in enumerate(names):
+            with self.subTest(column=column):
+                self.assertEqual(column, self.translator.column_of(name, self.system))
+
+    def test_the_auxiliary_columns_come_first(self):
+        ''' V_i then V_n, which is the multiplier's own column order. '''
+        names = self.translator.column_names(self.system)
+        self.assertEqual(('x0', 'x1'), tuple(map(str, names[:self.translator.r])))
+
+    def test_auxiliary_columns_are_named_even_under_the_parameter_scheme(self):
+        '''
+        The reduced system keeps none of them, so `auxiliary_names` is empty -- but the
+        columns exist in the multiplier, and naming them is what lets an operation refer
+        to one.
+        '''
+        self.assertEqual((), self.translator.auxiliary_names(self.system))
+        names = self.translator.column_names(self.system)
+        self.assertEqual(self.translator.r,
+                         len([n for n in names if str(n).startswith('x')]))
+
+    def test_a_monomial_lookup_needs_no_system(self):
+        ''' The monomial is what the mathematics points at; it resolves on its own. '''
+        self.assertEqual(4, self.translator.column_of('e_0*k_1*t'))
+
+    def test_a_name_lookup_without_a_system_is_refused_rather_than_guessed(self):
+        with self.assertRaises(ValueError):
+            self.translator.column_of('tau')
+        self.assertEqual(4, self.translator.column_of('tau', self.system))
+
+    def test_an_unknown_column_says_what_the_columns_are(self):
+        with self.assertRaises(ValueError) as caught:
+            self.translator.column_of('nonsense')
+        message = str(caught.exception)
+        self.assertIn('nonsense', message)
+        self.assertIn('e_0*k_1*t', message)
+
+    def test_a_sympy_expression_works_as_well_as_a_string(self):
+        self.assertEqual(self.translator.column_of('c/e_0'),
+                         self.translator.column_of(sympify_expression('c/e_0')))
+
+    def test_derived_indices_reproduce_a_hand_indexed_reduction(self):
+        '''
+        The Segel (21a-d) reduction from `docs/source/examples/segel_slemrod.rst`, whose
+        five column operations carry the indices 7, 2, 6, 9, 3, 5 and 4.  Each is recovered
+        by naming the monomial it refers to, and the resulting invariants match the page.
+        '''
+        system = ODESystem.from_tex(
+            r'''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\
+                \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c''')
+        system.update_initial_conditions({'s': 's_0'})
+        system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
+        system.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
+        system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon',
+                                  't', 's', 'c'])
+        translator = ODETranslator.from_ode_system(system, naming_scheme={
+            'parameters': 'c', 'independent': 'tau', 'dependents': ['s', 'c']})
+
+        columns = {text: translator.column_of(text) for text in
+                   ('k_1*s_0*t', 'e_0/s_0', 'epsilon', 'c/s_0', 'K_m/s_0',
+                    'k_m1/(k_1*s_0)', 'k_2/(k_1*s_0)')}
+        self.assertEqual({'k_1*s_0*t': 7, 'e_0/s_0': 2, 'epsilon': 6, 'c/s_0': 9,
+                          'K_m/s_0': 3, 'k_m1/(k_1*s_0)': 5, 'k_2/(k_1*s_0)': 4},
+                         columns)
+
+        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['e_0/s_0'], 1)
+        translator.multiplier_add_columns(columns['k_1*s_0*t'], columns['epsilon'], -1)
+        translator.multiplier_add_columns(columns['c/s_0'], columns['epsilon'], -1)
+        translator.multiplier_negate_column(columns['K_m/s_0'])
+        translator.multiplier_add_columns(columns['k_m1/(k_1*s_0)'],
+                                          columns['k_2/(k_1*s_0)'], -1)
+
+        self.assertEqual(
+            ['e_0/s_0', 's_0/K_m', 'k_2/(k_1*s_0)', 'k_m1/k_2', 'epsilon',
+             'e_0*k_1*t/epsilon', 's/s_0', 'c/(epsilon*s_0)'],
+            [str(m) for m in translator.invariant_monomials()])
+
+
 class TestInvariantClassification(TestCase):
     '''
     Each invariant is a parameter or a dependent variable, decided **structurally** from
