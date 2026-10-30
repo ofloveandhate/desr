@@ -103,7 +103,10 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   once printed its result and returned `None` with its doctest passing. Behaviour shown in
   `docs/source/examples/*.rst` should also be asserted in `tests/`, so a regression surfaces
   before anyone builds the docs.
-- The scripts in `examples/` open plot windows and block; they cannot be run unattended.
+- Some scripts in `examples/` open plot windows, but they **can** be run unattended: set
+  `matplotlib.use('Agg')` first and `plt.show()` becomes a no-op. Worth doing, because six
+  of the eight are referenced by no doc page and so are tested by nothing else — which is
+  how a parameter-ordering bug survived until one of them tripped over it.
 - The naming scheme controls output variable names. It is a **dict** over the keys
   `parameters`, `independent`, `dependents` and `auxiliaries`; all are optional, and one left
   out takes the default for whichever reduction scheme runs — `desr`'s own `tau`/`nu`/`kappa`
