@@ -4,7 +4,7 @@ from collections.abc import MutableMapping
 import sympy
 
 from desr.ode_system import ODESystem
-from desr.sympy_helper import unique_array_stable
+from desr.sympy_helper import sympify_expression, unique_array_stable
 
 class ChemicalSpecies(object):
     ''' Chemical species, A_i from Harrington paper. Typically represents a single chemical element. '''
@@ -209,10 +209,14 @@ class ChemicalReactionNetwork(object):
             if len(_complexes) != 2:
                 raise ValueError('Invalid reaction: {}'.format(reaction))
 
-            # Process the left hand side
+            # Process the left hand side.  sympify_expression, not sympy.sympify: a species
+            # named E, S, I, N, O, Q or beta is a name like any other, where raw sympify
+            # resolves it to a sympy builtin.  `E + S -> E + P` used to die with
+            # "unsupported operand type(s) for +: 'Exp1' and 'SingletonRegistry'", which is
+            # the one diagram an enzyme kineticist is most likely to write first.
             complex_left = _complexes[0].strip()
             if complex_left:
-                complex_left = sympy.sympify(complex_left)
+                complex_left = sympify_expression(complex_left)
                 complex_left = {ChemicalSpecies(k): v for k, v in complex_left.as_coefficients_dict().items()}
                 species.extend(complex_left.keys())
                 complex_left = Complex(complex_left)
@@ -221,7 +225,7 @@ class ChemicalReactionNetwork(object):
 
             complex_right = _complexes[1].strip()
             if complex_right:
-                complex_right = sympy.sympify(complex_right)
+                complex_right = sympify_expression(complex_right)
                 complex_right = {ChemicalSpecies(k): v for k, v in complex_right.as_coefficients_dict().items()}
                 species.extend(complex_right.keys())
                 complex_right = Complex(complex_right)
