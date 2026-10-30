@@ -144,16 +144,18 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate(original_system)
     dt/dt = 1
-    dx0/dt = 0
-    dx1/dt = 0
     dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
     dy1/dt = y0*y1*y2/(t*y4)
     dy2/dt = y2/t
     dy3/dt = y3*(y0*y2/y3 + y0*y2*y4/(y1*y3) - y2*y5)/t
     dy4/dt = y0*y2/t
     dy5/dt = y5*(y0*y2*y4/(y1*y5) - y2*y3)/t
+    parameters: x0, x1
 
 Here, :code:`x0` and :code:`x1` are auxiliary variables, which can be fixed at any value at all.
+They are reported as *parameters* because each is a monomial in the original parameters alone
+and so cannot vary; being auxiliaries is a separate fact, recorded in
+:attr:`~desr.ode_system.ODESystem.auxiliary_variables`.
 The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
 

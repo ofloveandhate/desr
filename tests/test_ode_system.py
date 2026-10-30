@@ -174,8 +174,17 @@ class TestODESystemScaling(TestCase):
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
         translated = translator.translate_general(system)
-        answer = ODESystem.from_equations('dx0/dt = 0\ndx1/dt = 0\ndy0/dt = y0/t\ndy1/dt = y1*(-y0*y1 + y0)/t')
-        self.assertEqual(translated, answer)
+        self.assertEqual(('t', 'x0', 'x1', 'y0', 'y1'),
+                         tuple(map(str, translated.symbols)))
+        # x0 and x1 are monomials in the original parameters alone, so they are parameters
+        # of the reduced system -- not dependents whose equation says zero.  They are also
+        # the auxiliaries, which is a separate fact and recorded separately.
+        self.assertEqual(('x0', 'x1'), tuple(map(str, translated.parameters)))
+        self.assertEqual(('x0', 'x1'), tuple(map(str, translated.auxiliary_variables)))
+        self.assertEqual((), translated.conserved_variables)
+        self.assertEqual({'y0': 'y0/t', 'y1': 'y1*(-y0*y1 + y0)/t'},
+                         {str(v): str(translated.derivative_dict[v])
+                          for v in translated.dependents})
 
         ## Check reverse translation
         reduced_solutions = (sympy.var('t'),  # indep var t
@@ -194,7 +203,8 @@ class TestODESystemScaling(TestCase):
         ## of desr's own rather than against the paper.  Neither is necessary now.
         translator = ODETranslator.from_ode_system(system)
         self.assertEqual(translator.herm_mult, herm_mult_paper)
-        self.assertEqual(translator.translate_general(system), answer)
+        # Same multiplier, so the same reduced system as the one checked above.
+        self.assertEqual(translator.translate_general(system), translated)
         general_soln = translator.reverse_translate_general(reduced_solutions,
                                                             system_indep_var_index=2)
         self.assertTupleEqual(general_soln, paper_soln)

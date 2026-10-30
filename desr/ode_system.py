@@ -87,9 +87,20 @@ class ODESystem(object):
         same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
         parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
             discarding the zero equations they were given.
+        scheme (desr.ode_translation.ReductionScheme, optional): For a reduced system, which reduction produced
+            it.  **Stored, not inferred**: a reduced system handed on by itself cannot work
+            out where it came from, and inferring is only right when
+            :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing.
+        num_scaling_symmetries (int, optional): For a reduced system, the :math:`r` scaling
+            symmetries that were reduced away.
+        auxiliary_variables (iter of sympy.Symbol, optional): For a reduced system, which of
+            its symbols are auxiliaries -- normalised directions, free to be set to
+            anything.  Also stored rather than inferred: auxiliary-ness is a fact about
+            which block of the Hermite multiplier a symbol came from, and nothing in the
+            reduced system's own equations records it.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_variables=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -100,6 +111,11 @@ class ODESystem(object):
         self._constraints = []
         self._requires_same_unit = {} # a dict of {Symbol : Expression}
         self._is_reduced = is_reduced
+
+        # What a reduced system cannot re-derive about itself, and so must carry.
+        self._scheme = scheme
+        self._num_scaling_symmetries = num_scaling_symmetries
+        self._auxiliary_variables = tuple(auxiliary_variables or ())
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
@@ -164,7 +180,11 @@ class ODESystem(object):
         Returns:
             ODESystem: A copy of the system.
         '''
-        system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var, is_reduced = self.is_reduced, same_units=self._requires_same_unit)
+        system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var,
+                           is_reduced=self.is_reduced, same_units=self._requires_same_unit,
+                           scheme=self._scheme,
+                           num_scaling_symmetries=self._num_scaling_symmetries,
+                           auxiliary_variables=self._auxiliary_variables)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
@@ -371,6 +391,93 @@ class ODESystem(object):
             int: The number of symbols that vary, which is ``1 + num_dependents``.
         '''
         return 1 + self.num_dependents
+
+    @property
+    def conserved_variables(self):
+        '''
+        The dependents whose equation says zero.
+
+        *Conserved* is the right word only for a dependent: a quantity that does not change
+        along the trajectory.  A parameter does not change either, but it is not conserved
+        *along* anything -- it has no equation at all.  The umbrella word for both is
+        "constant", which is useful in prose and deliberately has no accessor: it would be
+        implied for every parameter, impossible for the independent variable, and
+        informative only here, where it is this.
+
+        A conserved dependent and a parameter both print as `0` or are absent from the
+        equations, so nothing in the printed system tells them apart.  What does is the
+        classification: see :attr:`~parameters` and
+        :meth:`~desr.ode_translation.ODETranslator.variable_kinds`.
+
+        Returns:
+            tuple: The conserved dependents, in symbol order.
+
+        >>> system = ODESystem.from_equations(['dx/dt = a*x - b*x*y',
+        ...                                    'dy/dt = b*x*y - c*y',
+        ...                                    'dw/dt = 0'])
+        >>> system.conserved_variables
+        (w,)
+        >>> system.parameters
+        (a, b, c)
+
+        `w` is not a parameter, and saying `dw/dt = 0` is how you state that:
+
+        >>> system.derivative_dict[sympy.Symbol('w')]
+        0
+        '''
+        return tuple(var for var in self.dependents
+                     if self.derivative_dict[var] == 0)
+
+    @property
+    def scheme(self):
+        '''
+        Which reduction produced this system, or :const:`None` if it is not a reduction.
+
+        :rtype: desr.ode_translation.ReductionScheme or None
+        '''
+        return self._scheme
+
+    @property
+    def num_scaling_symmetries(self):
+        '''
+        The :math:`r` scaling symmetries reduced away, or :const:`None` for an original system.
+
+        :rtype: int or None
+        '''
+        return self._num_scaling_symmetries
+
+    @property
+    def auxiliary_variables(self):
+        '''
+        The symbols that are auxiliaries: normalised directions, free to take any value.
+
+        Empty for an original system, and for one reduced by the parameter scheme, which
+        normalises its auxiliaries to 1 and discards them.
+
+        **Orthogonal to the classification, not a fourth kind.**  An auxiliary is a
+        parameter or a dependent like any other symbol -- in prey-predator's general
+        reduction the auxiliaries ``h/k``, ``K`` and ``K/h`` are monomials in the original
+        parameters and so are parameters, while Hubert & Labahn 6.6's auxiliary
+        :math:`t z_1^2` involves a dependent and evolves.  Auxiliary-ness says you may
+        choose the value; the kind says whether it varies.
+
+        Returns:
+            tuple: The auxiliaries, in symbol order.
+        '''
+        return self._auxiliary_variables
+
+    def is_auxiliary(self, variable):
+        '''
+        Whether `variable` is an auxiliary of this system.
+
+        Args:
+            variable (str or sympy.Symbol): The symbol to ask about.
+
+        :rtype: bool
+        '''
+        if isinstance(variable, str):
+            variable = sympy.Symbol(variable)
+        return variable in self._auxiliary_variables
 
     @property
     def derivatives(self):
@@ -899,6 +1006,18 @@ class ODESystem(object):
 
         variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
         extant_vars = set(expressions_to_variables( [d for d in new_derivs if d is not None] + constraints + list(initial_conditions.values()) + [self.independent_variable] + list(self.dependents)))
+        # An auxiliary is kept even when it appears in no equation.  Under the general
+        # scheme an auxiliary is often a monomial in the original parameters, so it has no
+        # equation of its own, and pruning it here would throw away part of the record of
+        # how this system was reduced -- which the system cannot reconstruct.
+        #
+        # Both names, because a substitution naming such a parameter does not rename it:
+        # `variable_renamings` only picks up a symbol that occurs in an expression, so a
+        # parameter with no equation keeps its old name.  Keeping both is what stops it
+        # being dropped instead; see ODESystem.subs' note on renaming an equation-less
+        # parameter.
+        extant_vars |= set(self._auxiliary_variables)
+        extant_vars |= {to_sub.get(aux, aux) for aux in self._auxiliary_variables}
 
         for v in variables_to_inspect:
 
@@ -910,11 +1029,21 @@ class ODESystem(object):
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
 
         # we're finally ready to construct the new post-substitution System. Huzzah.
+        # A substitution renames and rewrites; it does not change where the system came from,
+        # so the stored provenance travels with it.  Auxiliaries are filtered to those that
+        # survived: a substitution may rename one, or remove it by making it vanish from
+        # every expression.
         subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
                                 indep_var=self.independent_variable,
                                 constraints=constraints,
-                                is_reduced = self.is_reduced)
+                                is_reduced = self.is_reduced,
+                                scheme=self._scheme,
+                                num_scaling_symmetries=self._num_scaling_symmetries,
+                                auxiliary_variables=[
+                                    aux if aux in new_vars else to_sub.get(aux)
+                                    for aux in self._auxiliary_variables
+                                    if aux in new_vars or to_sub.get(aux) in new_vars])
 
         subs_system._variable_sanity_check()
         return subs_system

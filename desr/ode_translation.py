@@ -174,6 +174,46 @@ def _names_for(pattern, count, start_at, what):
             for name in names]
 
 
+def _classify_reduced_derivatives(names, monomials, rates, dynamic):
+    '''
+    Replace the rate of every parameter-monomial with :const:`None`, so the reduced system
+    records it as a parameter rather than as a dependent whose equation says zero.
+
+    A column whose monomial involves none of the original system's *variables* -- its
+    independent variable and its dependents -- is a monomial in the parameters alone.  It
+    cannot vary under any trajectory, so it is a parameter of the reduced system, and
+    storing it as `dy/dt = 0` would assert the different and false thing: that it happens
+    to stay constant along the solution.
+
+    This applies to both blocks of the Hermite multiplier.  An auxiliary that is a monomial
+    in the parameters is a parameter too -- auxiliary-ness is about being free to choose a
+    value, not about whether the value varies.
+
+    Args:
+        names (iter of sympy.Symbol): The reduced system's symbols, in order.
+        monomials (iter of sympy.Expr): What each one denotes, in the same order.
+        rates (iter of sympy.Expr): The computed rate of each, in the same order.
+        dynamic (set of sympy.Symbol): The original system's variables.
+
+    Returns:
+        list: The rates, with :const:`None` wherever the symbol is a parameter.
+    '''
+    classified = []
+    for name, monomial, rate in zip(names, monomials, rates):
+        if monomial.free_symbols & dynamic:
+            classified.append(rate)
+            continue
+        # Proved, and worth failing loudly on: a monomial in the parameters alone has no
+        # time dependence, so its computed rate must already be zero.  A nonzero one here
+        # would mean the monomial and the rate disagree about what this symbol is.
+        if rate != 0:
+            raise AssertionError(
+                '{} = {} involves no variable of the original system, so it cannot change, '
+                'but its computed rate is {}'.format(name, monomial, rate))
+        classified.append(None)
+    return classified
+
+
 def _rename_indep_var(system, new_name):
     '''
     Rename a reduced system's independent variable, or leave it alone if `new_name` is None.
@@ -983,7 +1023,7 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem): The system to be reduced.
-            scheme (ReductionScheme, optional): The scheme that will be used.  **Pass this
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be used.  **Pass this
                 whenever you choose the scheme yourself.**  Left out, it is inferred by
                 :meth:`scheme`, which is only the right answer when :meth:`translate` does
                 the choosing: calling :meth:`translate_general` on a system that
@@ -1066,8 +1106,12 @@ class ODETranslator(object):
                            + [new_deriv_dict[var] for var in dependents]
                            + [None] * len(new_constants))
 
+        # The parameter scheme normalises its auxiliaries to 1 and discards them, so there
+        # are none to record.
         reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
-                                   is_reduced=True)
+                                   is_reduced=True,
+                                   scheme=ReductionScheme.PARAMETER,
+                                   num_scaling_symmetries=self.r)
         reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
@@ -1159,9 +1203,23 @@ class ODETranslator(object):
         dxdt = _scaled_rates(auxiliary_variables, fywd * reduced_scaling.herm_mult_i)
 
         new_variables = [system.independent_variable] + list(auxiliary_variables) + list(invariant_variables)
-        new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
 
-        reduced = ODESystem(new_variables, new_derivatives, indep_var=system.independent_variable, is_reduced=True)
+        # The dependent-variable scheme's columns are indexed by the symbols other than the
+        # independent variable, so that is what the monomials are built from -- and why none
+        # of them can involve the clock.
+        dynamic = set(system.dependents)
+        monomials = (list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_i))
+                     + list(scale_action(system_var_no_indep, reduced_scaling.herm_mult_n)))
+        rates = _classify_reduced_derivatives(
+            list(auxiliary_variables) + list(invariant_variables), monomials,
+            list(dxdt) + list(dydt), dynamic)
+        new_derivatives = [sympy.sympify(1)] + rates
+
+        reduced = ODESystem(new_variables, new_derivatives,
+                            indep_var=system.independent_variable, is_reduced=True,
+                            scheme=ReductionScheme.DEP_VAR,
+                            num_scaling_symmetries=self.r,
+                            auxiliary_variables=auxiliary_variables)
         return _rename_indep_var(reduced, scheme['independent'])
 
     def translate_general(self, system, include_aux_vars = True):
@@ -1178,26 +1236,31 @@ class ODETranslator(object):
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
+
+        Six of the ten symbols are monomials in the original parameters alone, so they are
+        reported as parameters and only three equations need integrating:
+
         >>> translator.translate_general(system=system)
         dt/dt = 1
-        dx0/dt = 0
-        dx1/dt = 0
-        dx2/dt = 0
-        dy0/dt = 0
-        dy1/dt = 0
-        dy2/dt = 0
         dy3/dt = y3/t
         dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
         dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
+        parameters: x0, x1, x2, y0, y1, y2
 
         >>> translator.translate_general(system=system, include_aux_vars=False)
         dt/dt = 1
-        dy0/dt = 0
-        dy1/dt = 0
-        dy2/dt = 0
         dy3/dt = y3/t
         dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
         dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
+        parameters: y0, y1, y2
+
+        The auxiliaries are recorded whatever kind they turn out to be:
+
+        >>> reduced = translator.translate_general(system=system)
+        >>> reduced.auxiliary_variables
+        (x0, x1, x2)
+        >>> reduced.scheme, reduced.num_scaling_symmetries
+        (ReductionScheme.GENERAL, 3)
         '''
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
@@ -1228,18 +1291,36 @@ class ODETranslator(object):
             dxdt = _scaled_rates(auxiliary_variables, fywd * self.herm_mult_i,
                                  divide_by=system.independent_variable)
 
+        dynamic = set(system.dependents) | {system.independent_variable}
+
+        # scale_action against system.symbols, not self.auxiliaries()/self.invariants():
+        # those go through _validate_variables and fall back to placeholder x_i and y_i
+        # names when symbols_domain is unset, which would pair each name with somebody
+        # else's monomial.
         if include_aux_vars:
-            new_variables = [system.independent_variable] + list(auxiliary_variables) + list(invariant_variables)
-            new_derivatives = [sympy.sympify(1)] + list(dxdt) + list(dydt)
-            assert len(new_variables) == len(new_derivatives) == len(system.symbols) + 1
+            named = list(auxiliary_variables) + list(invariant_variables)
+            monomials = (list(scale_action(system.symbols, self.herm_mult_i))
+                         + list(scale_action(system.symbols, self.herm_mult_n)))
+            rates = list(dxdt) + list(dydt)
+            new_variables = [system.independent_variable] + named
+            assert len(new_variables) == len(rates) + 1 == len(system.symbols) + 1
         else:
             # don't include the aux vars.
-            new_variables = [system.independent_variable] + list(invariant_variables)
-            new_derivatives = [sympy.sympify(1)] + list(dydt)
+            named = list(invariant_variables)
+            monomials = list(scale_action(system.symbols, self.herm_mult_n))
+            rates = list(dydt)
+            new_variables = [system.independent_variable] + named
             # see remark 3.2 in the second arxiv version of the paper, where we discuss this number
-            assert len(new_variables) == len(new_derivatives) == len(system.symbols) - self.r + 1
+            assert len(new_variables) == len(rates) + 1 == len(system.symbols) - self.r + 1
 
-        reduced = ODESystem(new_variables, new_derivatives, indep_var=system.independent_variable,is_reduced=True)
+        new_derivatives = ([sympy.sympify(1)]
+                           + _classify_reduced_derivatives(named, monomials, rates, dynamic))
+
+        reduced = ODESystem(new_variables, new_derivatives,
+                            indep_var=system.independent_variable, is_reduced=True,
+                            scheme=ReductionScheme.GENERAL,
+                            num_scaling_symmetries=self.r,
+                            auxiliary_variables=auxiliary_variables if include_aux_vars else ())
         return _rename_indep_var(reduced, scheme['independent'])
 
     def _is_translate_parameter_compatible(self, system):
@@ -1798,9 +1879,9 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem): The system being reduced.
-            scheme (ReductionScheme, optional): The scheme that will be used, since the
-                names depend on it.  The kinds of the invariants do not -- those are
-                structural.
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be
+                used, since the names depend on it.  The kinds of the invariants do not --
+                those are structural.
             include_aux_vars (bool): Whether the auxiliaries will be kept.
 
         Returns:
@@ -2027,9 +2108,9 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem): The system being reduced.
-            scheme (ReductionScheme, optional): The scheme that will be used, since the
-                names depend on it -- the parameter scheme gives `kappa`, `tau` and `nu`
-                while the general scheme gives `x` and `y`.  Inferred by :meth:`scheme`
+            scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be
+                used, since the names depend on it -- the parameter scheme gives `kappa`,
+                `tau` and `nu` while the general scheme gives `x` and `y`.  Inferred by :meth:`scheme`
                 when left out, with the caveat in :meth:`expected_variable_count`.
             include_aux_vars (bool): Whether the auxiliaries will be kept.
 
