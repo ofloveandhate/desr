@@ -3,7 +3,7 @@ from unittest import TestCase
 import sympy
 
 from desr.chemical_reaction_network import ChemicalReactionNetwork
-from desr.ode_system import ODESystem
+from desr.ode_system import ConflictingParameterValues, ODESystem
 from desr.ode_translation import ODETranslator, ReductionScheme, scale_action
 from desr.sympy_helper import monomial_to_powers, sympify_expression
 
@@ -1236,3 +1236,87 @@ class TestMurraySixTwenty(TestCase):
         reduced = self.translator.translate(self.system)
         self.assertEqual(reduced.initial_conditions[sympy.Symbol('u')],
                          sympy.Integer(1))
+
+
+class TestAnInitialConditionThatIsAMonomial(TestCase):
+    '''
+    A reduced system's initial condition need not be a single symbol.  Once a column
+    operation changes what a dependent is measured in, `v(0)` comes out as a monomial in
+    two reduced parameters -- `kappa4/kappa0` -- and two things went wrong with that:
+
+    - `update_initial_conditions` added the whole expression to the symbol list, making a
+      "parameter" that is not a variable at all, which the next `subs` died on inside
+      `_variable_sanity_check`;
+    - `subs` substituted into initial condition *values* only inside its
+      dependent-variable renaming loop, so renaming only parameters left the initial
+      conditions written in the old names, keeping stale symbols alive.
+
+    Both are reachable only with a second initial condition *and* a column operation,
+    which is why they survived until a zero initial condition was stateable.
+    '''
+
+    def setUp(self):
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        system.add_constraint('Km', '(k_m1 + k_2) / k_1')
+        system.update_initial_conditions({'s': 's0', 'c': 0})
+        system.reorder_variables(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0',
+                                  't', 'c', 's'])
+        self.system = system
+        self.translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'kappa', 'independent': 'tau',
+                                   'dependents': ['v', 'u']})
+        # Measure the complex in units of the enzyme, which is what makes v(0) a ratio.
+        self.translator.multiplier_add_columns(
+            self.translator.column_of('c/s0'),
+            self.translator.column_of('e_0/s0'), power=-1)
+
+    def test_the_initial_condition_really_is_a_monomial(self):
+        reduced = self.translator.translate(self.system)
+        self.assertEqual(reduced.initial_conditions[sympy.Symbol('v')],
+                         sympify_expression('kappa4/kappa0'))
+
+    def test_the_expression_is_not_added_as_a_parameter(self):
+        reduced = self.translator.translate(self.system)
+        for parameter in reduced.parameters:
+            with self.subTest(parameter=parameter):
+                self.assertIsInstance(parameter, sympy.Symbol)
+
+    def test_every_symbol_of_the_reduced_system_is_a_single_symbol(self):
+        reduced = self.translator.translate(self.system)
+        self.assertTrue(all(isinstance(symbol, sympy.Symbol)
+                            for symbol in reduced.symbols))
+
+    def test_renaming_only_parameters_reaches_the_initial_condition(self):
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs({'kappa0': 'epsilon', 'kappa4': 'gamma'})
+        self.assertEqual(renamed.initial_conditions[sympy.Symbol('v')],
+                         sympify_expression('gamma/epsilon'))
+
+    def test_no_stale_symbol_survives_the_renaming(self):
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs({'kappa0': 'epsilon', 'kappa4': 'gamma'})
+        self.assertNotIn(sympy.Symbol('kappa0'), renamed.symbols)
+        self.assertNotIn(sympy.Symbol('kappa4'), renamed.symbols)
+
+    def test_the_value_face_gives_the_zero_through_the_monomial(self):
+        # gamma is zero, so v(0) = gamma/epsilon is zero whatever epsilon is.  This is the
+        # zero initial condition arriving at the far end of the reduction.
+        reduced = self.translator.translate(self.system)
+        self.assertEqual(reduced.initial_condition_values[sympy.Symbol('v')],
+                         sympy.Integer(0))
+
+    def test_substituting_the_known_zero_removes_the_group(self):
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs({'kappa0': 'epsilon', 'kappa4': 'gamma'})
+        final = renamed.subs({'gamma': 0})
+        self.assertEqual(final.initial_conditions[sympy.Symbol('v')],
+                         sympy.Integer(0))
+        self.assertNotIn(sympy.Symbol('gamma'), final.parameters)
+
+    def test_substituting_a_value_that_contradicts_it_is_refused(self):
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs({'kappa4': 'gamma'})
+        with self.assertRaises(ConflictingParameterValues):
+            renamed.subs({'gamma': 1})
