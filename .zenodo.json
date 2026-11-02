@@ -1,7 +1,7 @@
 {
-         "title": "desr: Differental Equation Symmetry Reduction",
+         "title": "desr: Differential Equation Symmetry Reduction",
          "upload_type": "Software",
-         "description": "*desr* is a package used for Differental Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems",
+         "description": "*desr* is a package used for Differential Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems",
          "creators": [
            {
              "affiliations": [

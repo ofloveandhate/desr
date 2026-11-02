@@ -1,7 +1,7 @@
 Introduction
 ============
 
-*desr* is a package used for Differental Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems.
+*desr* is a package used for Differential Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems.
 
 
 *desr* implements and extends algorithms originally outlined by Evelyne Hubert and George Labahn :cite:`Hubert2013c`.  It further implements reduction on systems with equality constraints and initial conditions.
