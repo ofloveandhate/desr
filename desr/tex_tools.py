@@ -138,6 +138,36 @@ _NOT_A_NAME = re.compile(r'[-+*/^()\\]')
 #: product and ``C(t)`` is not an initial condition.
 _AT_ZERO = re.compile(r'\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*0\s*\)\s*\Z')
 
+
+def variable_at_zero(text):
+    '''
+    The name of the variable in ``C(0)``, or :const:`None` if that is not what `text` is.
+
+    One place decides what an initial condition looks like written down, because two would
+    drift: this reads the tex ``C\\left(0\\right)`` once ``\\left``/``\\right`` have been
+    stripped, and equally the plain ``C(0)`` that
+    :meth:`desr.ode_system.ODESystem.update_initial_conditions` accepts.
+
+    Args:
+        text (str): One side of an equation, or a dict key.
+
+    Returns:
+        str, None
+
+    >>> variable_at_zero('C(0)')
+    'C'
+    >>> variable_at_zero(' ES ( 0 ) ')
+    'ES'
+    >>> variable_at_zero('C') is None
+    True
+    >>> variable_at_zero('C(t)') is None
+    True
+    >>> variable_at_zero('k_3(x - y)') is None
+    True
+    '''
+    match = _AT_ZERO.match(text)
+    return match.group(1) if match else None
+
 #: The independent variable assumed when a prime is read as a derivative.  ``x'`` does not
 #: say what it is differentiated with respect to, so there is nothing to infer.
 PRIME_INDEP_VAR = 't'
@@ -368,7 +398,7 @@ def _as_initial_condition(lhs, rhs, primes, tex):
     Raises:
         TexParseError: If both sides are, which says nothing about any system.
     '''
-    at_zero, other = _AT_ZERO.match(lhs), _AT_ZERO.match(rhs)
+    at_zero, other = variable_at_zero(lhs), variable_at_zero(rhs)
 
     if at_zero and other:
         raise TexParseError(
@@ -379,10 +409,9 @@ def _as_initial_condition(lhs, rhs, primes, tex):
         return None
 
     if other is not None:
-        at_zero, lhs, rhs = other, rhs, lhs
+        at_zero, rhs = other, lhs
 
-    variable = to_symbol(at_zero.group(1))
-    return sympy.Eq(sympy.Function(variable.name)(0), _parse_side(rhs, primes))
+    return sympy.Eq(sympy.Function(to_symbol(at_zero).name)(0), _parse_side(rhs, primes))
 
 
 def _equation(lhs, rhs, tex):

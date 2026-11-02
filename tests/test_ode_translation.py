@@ -808,3 +808,108 @@ class TestParameterValuesThroughTranslation(TestCase):
         with self.assertRaises(NotImplementedError) as caught:
             translator.translate_dep_var(system)
         self.assertIn('parameter values', str(caught.exception))
+
+
+class TestGeneratedNameClashes(TestCase):
+    '''
+    The original and the reduced system are different namespaces, and `desr.numerics` maps
+    between them, so one spelling meaning two quantities is not cosmetic: a `known_values`
+    entry would not say which was meant.  A generated name landing on a symbol the original
+    already has is refused.
+    '''
+
+    def test_a_parameter_already_called_kappa0_is_refused(self):
+        # It used to reduce quietly, and the reduced `kappa0` was an invariant monomial in
+        # the original `c_1` and `kappa0` -- same spelling, different quantity.
+        system = ODESystem.from_equations(['dx/dt = kappa0*x*y',
+                                           'dy/dt = c_1*(1-x)*(1-y)'])
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(system)
+        message = str(caught.exception)
+        self.assertIn('kappa0', message)
+        self.assertIn('naming_scheme', message)
+
+    def test_a_naming_scheme_colliding_with_a_minted_name_is_refused(self):
+        # The route worth worrying about: an initial condition mints `c_0` from the
+        # variable `c`, and then a naming scheme of 'c_' generates `c_0` as well.  It
+        # needs enough parameters that one survives the reduction to be named.
+        system = ODESystem.from_equations(['dc/dt = -k_1*c*s + k_2*p',
+                                           'ds/dt = k_1*c*s - k_3*s',
+                                           'dp/dt = k_3*s - k_2*p'])
+        system.update_initial_conditions('c(0) = c_0')
+        system.reorder_parameters(['k_1', 'k_2', 'k_3', 'c_0'])
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(system, naming_scheme={'parameters': 'c_'})
+        self.assertIn('c_0', str(caught.exception))
+
+    def test_a_scheme_whose_names_are_all_normalised_out_cannot_clash(self):
+        # Two parameters and two scaling symmetries, so no reduced parameter is generated
+        # at all and there is nothing to collide with.
+        system = ODESystem.from_equations(['dc/dt = -k_1*c*s', 'ds/dt = k_1*c*s'])
+        system.update_initial_conditions('c(0) = c_0')
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system, naming_scheme={'parameters': 'c_'})
+        self.assertEqual(set(system.symbols) & set(reduced.symbols), set())
+
+    def test_a_scheme_that_avoids_the_clash_is_accepted(self):
+        system = ODESystem.from_equations(['dx/dt = kappa0*x*y',
+                                           'dy/dt = c_1*(1-x)*(1-y)'])
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system, naming_scheme={'parameters': 'theta'})
+        self.assertTrue(reduced.is_reduced)
+
+    def test_keeping_the_systems_own_clock_is_not_a_clash(self):
+        # The general and dependent-variable schemes retain the independent variable on
+        # purpose, so that one shared name is allowed.
+        equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
+        system = ODESystem.from_equations(equations)
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertEqual(reduced.independent_variable, system.independent_variable)
+
+    def test_an_ordinary_reduction_is_unaffected(self):
+        equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'
+        system = ODESystem.from_equations(equations.split(';'))
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertEqual(set(system.symbols) & set(reduced.symbols), set())
+
+
+class TestExplicitNamesAreTheCallersChoice(TestCase):
+    '''
+    Only a *generated* name can clash by accident.  Reusing the original letters on purpose
+    is a real thing to want: Hubert & Labahn write their reduced predator-prey system in
+    the same `n` and `p`.
+    '''
+
+    EQUATIONS = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
+
+    def system(self):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        return system
+
+    def test_explicitly_reusing_the_original_dependent_names_is_allowed(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'c', 'independent': 't',
+                                   'dependents': ['n', 'p']})
+        reduced = translator.translate_parameter(system)
+        self.assertEqual(set(map(str, reduced.dependents)), {'n', 'p'})
+
+    def test_a_generated_name_landing_on_an_original_is_still_refused(self):
+        # Same system, but `n` arrives from the pattern rather than from a list.
+        system = ODESystem.from_equations(['dx/dt = n0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
+        translator = ODETranslator.from_ode_system(system,
+                                                   naming_scheme={'parameters': 'n'})
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(system)
+        self.assertIn('n0', str(caught.exception))
+
+    def test_an_explicit_independent_variable_name_is_allowed(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'c', 'independent': 't',
+                                   'dependents': ['n', 'p']})
+        reduced = translator.translate_parameter(system)
+        self.assertEqual(str(reduced.independent_variable), 't')

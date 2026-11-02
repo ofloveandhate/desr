@@ -5,7 +5,7 @@ import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
-from desr.sympy_helper import sympify_expression
+from desr.sympy_helper import sympify_expression, to_symbol
 from desr.tex_tools import matrix_to_tex
 
 
@@ -1299,6 +1299,7 @@ class ODETranslator(object):
         reduced_system.update_parameter_values(
             self._propagated_parameter_values(system, reduced_system))
 
+        self._refuse_name_clashes(system, reduced_system)
         return reduced_system
 
     def _propagated_parameter_values(self, system, reduced_system):
@@ -1428,7 +1429,9 @@ class ODETranslator(object):
                             scheme=ReductionScheme.DEP_VAR,
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names)
-        return _rename_indep_var(reduced, scheme['independent'])
+        reduced = _rename_indep_var(reduced, scheme['independent'])
+        self._refuse_name_clashes(system, reduced)
+        return reduced
 
     def translate_general(self, system, include_aux_vars = True):
         '''
@@ -1533,7 +1536,9 @@ class ODETranslator(object):
                             scheme=ReductionScheme.GENERAL,
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names if include_aux_vars else ())
-        return _rename_indep_var(reduced, scheme['independent'])
+        reduced = _rename_indep_var(reduced, scheme['independent'])
+        self._refuse_name_clashes(system, reduced)
+        return reduced
 
     def _is_translate_parameter_compatible(self, system):
         '''
@@ -2108,6 +2113,65 @@ class ODETranslator(object):
         # in the forward direction one original symbol was one row.
         return tuple(name for column, name in enumerate(names)
                      if any(entry < 0 for entry in inverse[:, column]))
+
+    def _names_given_explicitly(self):
+        '''
+        The names the caller wrote out in the naming scheme, as opposed to patterns.
+
+        A block entry that is a string is a pattern -- `'kappa'` becomes `kappa0, kappa1,
+        ...` -- and what it produces is not a name anyone chose.  A list or tuple is taken
+        literally, so every entry of it is.  ``independent`` is a single name either way,
+        since there is one independent variable and nothing to index.
+
+        Returns:
+            set of sympy.Symbol
+        '''
+        explicit = set()
+        for key, value in self._naming_scheme.items():
+            if key == 'independent':
+                if value is not None:
+                    explicit.add(to_symbol(value))
+            elif not isinstance(value, str) and value is not None:
+                explicit.update(to_symbol(name) if isinstance(name, str) else name
+                                for name in value)
+        return explicit
+
+    def _refuse_name_clashes(self, system, reduced_system):
+        '''
+        Refuse a reduced system that reuses one of the original's names for something else.
+
+        The two systems are different namespaces, and :mod:`desr.numerics` maps between
+        them, so one spelling meaning two quantities is not a cosmetic problem: a
+        ``known_values`` entry would not say which was meant.  It happens whenever a
+        generated name lands on a symbol the original already had -- a model whose own
+        parameter is called ``kappa0``, or a naming scheme of ``'c_'`` meeting the ``c_0``
+        that an initial condition minted.
+
+        Only a name the reduction **generated** can clash by accident.  A name the caller
+        wrote out is their decision, and reusing the original letters is a real thing to
+        want: Hubert & Labahn write their reduced predator-prey system in the same `n` and
+        `p`, and ``naming_scheme={'dependents': ['n', 'p']}`` is how to reproduce that.  So
+        an explicit entry of the naming scheme is exempt, as is the independent variable,
+        whose entry is always a literal name rather than a pattern -- which is also what
+        lets the general and dependent-variable schemes keep the system's own clock.
+
+        Raises:
+            ValueError: naming the clashing symbols and the way out.
+        '''
+        shared = set(system.symbols) & set(reduced_system.symbols)
+        shared -= self._names_given_explicitly()
+        if reduced_system.independent_variable == system.independent_variable:
+            shared.discard(system.independent_variable)
+        if not shared:
+            return
+
+        named = ', '.join(map(str, sorted(shared, key=str)))
+        plural = '' if len(shared) == 1 else 's'
+        raise ValueError(
+            'The reduced system would also use the name{} {}, which this system already '
+            'has, so one spelling would mean two different quantities.  Pass a '
+            'naming_scheme that avoids {}, or rename the original symbol{}.'.format(
+                plural, named, named, plural))
 
     def _refuse_zero_scales(self, system):
         '''

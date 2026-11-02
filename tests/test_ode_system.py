@@ -640,7 +640,7 @@ class TestConstraintCallShapes(TestCase):
         system = self.system()
         with self.assertRaises(ValueError) as caught:
             system.add_constraint(sympy.Symbol('c_2'))
-        self.assertIn('one side of a constraint', str(caught.exception))
+        self.assertIn('one side of an equation', str(caught.exception))
 
     def test_the_whole_form_is_checked_like_the_two_sided_one(self):
         # Same path, so the dependent-variable refusal still applies.
@@ -1020,3 +1020,167 @@ class TestZeroInitialConditionsThroughAReduction(TestCase):
         before = len(system.symbols)
         system.require_same_unit({'C': 'E_0'})
         self.assertEqual(len(system.symbols), before)
+
+
+class TestInitialConditionCallShapes(TestCase):
+    '''
+    An initial condition is `C(0) = 0` on paper, so it can be written that way, and the
+    bare `C` that only this method ever needed still works.  All of the shapes mean the
+    same thing.
+    '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def expected(self):
+        return {sympy.Symbol('x'): sympy.Symbol('x_0')}
+
+    def test_the_bare_variable_as_a_key(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 0})
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_the_variable_at_zero_as_a_key(self):
+        system = self.system()
+        system.update_initial_conditions({'x(0)': 0})
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_one_equation_as_a_string(self):
+        system = self.system()
+        system.update_initial_conditions('x(0) = 0')
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_a_list_of_equations(self):
+        system = self.system()
+        system.update_initial_conditions(['x(0) = 0', 'y(0) = y_0'])
+        self.assertEqual(set(map(str, system.initial_conditions)), {'x', 'y'})
+
+    def test_a_set_of_equations(self):
+        system = self.system()
+        system.update_initial_conditions({'x(0) = 0'})
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_a_double_equals_reads_the_same_way(self):
+        system = self.system()
+        system.update_initial_conditions('x(0) == 0')
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_the_value_may_come_first(self):
+        system = self.system()
+        system.update_initial_conditions('x_0 = x(0)')
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_a_sympy_equality_works(self):
+        system = self.system()
+        system.update_initial_conditions(
+            sympy.Eq(sympy.Function('x')(0), sympy.Integer(0)))
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_whitespace_inside_the_parenthesis_is_fine(self):
+        system = self.system()
+        system.update_initial_conditions({' x ( 0 ) ': 0})
+        self.assertEqual(system.initial_conditions, self.expected())
+
+    def test_all_the_shapes_agree(self):
+        shapes = [{'x': 0}, {'x(0)': 0}, 'x(0) = 0', ['x(0) = 0'], {'x(0) = 0'}]
+        results = []
+        for shape in shapes:
+            system = self.system()
+            system.update_initial_conditions(shape)
+            results.append((system.initial_conditions, system.parameter_values))
+        for shape, result in zip(shapes[1:], results[1:]):
+            with self.subTest(shape=shape):
+                self.assertEqual(result, results[0])
+
+    def test_an_equation_with_no_variable_at_zero_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions('x = 0')
+        self.assertIn('Neither side', str(caught.exception))
+
+    def test_two_equals_signs_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions('x(0) = 0 = 0')
+        self.assertIn('not one initial condition', str(caught.exception))
+
+    def test_one_side_alone_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions(['x(0)'])
+        self.assertIn('0 equals signs', str(caught.exception))
+
+
+class TestTheTwoFacesOfAValue(TestCase):
+    '''
+    A reduced parameter is an invariant and an invariant is a monomial, so sometimes the
+    expression is what you want to read and sometimes the number is.  Both are available,
+    before and after a reduction.
+    '''
+
+    TEX = '\n'.join(['\\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\',
+                     '\\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\',
+                     '\\frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\',
+                     '\\frac{dP}{dt} &= k_2 C'])
+
+    def system(self):
+        system = ODESystem.from_tex(self.TEX)
+        system.update_initial_conditions(['S(0) = S_0', 'E(0) = E_0',
+                                          'C(0) = 0', 'P(0) = 0'])
+        return system
+
+    def test_the_expression_face_names_the_symbol(self):
+        system = self.system()
+        self.assertEqual(system.initial_conditions[sympy.Symbol('C')],
+                         sympy.Symbol('C_0'))
+
+    def test_the_value_face_gives_the_number(self):
+        system = self.system()
+        self.assertEqual(system.initial_condition_values[sympy.Symbol('C')],
+                         sympy.Integer(0))
+
+    def test_a_variable_whose_initial_value_is_unknown_is_absent(self):
+        # Absent rather than present and meaningless.
+        system = self.system()
+        self.assertNotIn(sympy.Symbol('S'), system.initial_condition_values)
+        self.assertIn(sympy.Symbol('S'), system.initial_conditions)
+
+    def test_both_faces_survive_a_reduction(self):
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        # The expression face is whichever invariant C's scale became; the value face is
+        # still the zero that was stated.
+        valued = reduced.initial_condition_values
+        self.assertEqual(set(valued.values()), {sympy.Integer(0)})
+        self.assertEqual(len(valued), 2)
+        for variable in valued:
+            with self.subTest(variable=variable):
+                self.assertIn(reduced.initial_conditions[variable],
+                              reduced.parameters)
+
+    def test_value_of_evaluates_any_expression(self):
+        system = self.system()
+        system.update_parameter_values({'k_1': 2, 'k_2': 3})
+        self.assertEqual(system.value_of('k_1 * k_2'), sympy.Integer(6))
+
+    def test_value_of_returns_none_when_a_symbol_has_no_value(self):
+        system = self.system()
+        self.assertIsNone(system.value_of('k_1 * k_2'))
+
+    def test_value_of_returns_none_when_a_variable_is_left_undetermined(self):
+        system = self.system()
+        self.assertIsNone(system.value_of('C_0 + C'))
+
+    def test_a_known_zero_can_settle_an_expression_naming_a_variable(self):
+        # C_0 is zero, so `C_0 * C` is zero whatever C does.  The question is whether the
+        # values determine the expression, not whether every symbol in it has one.
+        system = self.system()
+        self.assertEqual(system.value_of('C_0 * C'), sympy.Integer(0))
+
+    def test_value_of_a_known_zero_is_zero_not_none(self):
+        # `None` means "not settled"; a settled zero must not be confused with it.
+        system = self.system()
+        self.assertEqual(system.value_of('C_0'), sympy.Integer(0))
+        self.assertIsNotNone(system.value_of('C_0'))

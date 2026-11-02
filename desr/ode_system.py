@@ -7,18 +7,21 @@ from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
 from desr.sympy_helper import (CONSISTENCY_TOLERANCE, expressions_to_variables,
                                unique_array_stable, monomial_to_powers,
                                sympify_expression, to_symbol)
-from desr.tex_tools import TexParseError, expr_to_tex, var_to_tex, tex_to_sympy
+from desr.tex_tools import (TexParseError, expr_to_tex, var_to_tex, tex_to_sympy,
+                            variable_at_zero)
 
 
-def _as_constraint_sides(constraint):
+def _as_equation_sides(equation, what, method):
     '''
-    Split a whole constraint into its two sides.
+    Split a whole equation into its two sides.
 
-    A constraint is written as one equation on paper, so :meth:`ODESystem.add_constraint`
-    takes it that way too -- as a string, or as a :class:`sympy.Eq`.
+    A constraint and an initial condition are each written as one equation on paper, so the
+    methods that take them accept them that way -- as a string, or as a :class:`sympy.Eq`.
 
     Args:
-        constraint: A string holding one ``=`` or ``==``, or a :class:`sympy.Eq`.
+        equation: A string holding one ``=`` or ``==``, or a :class:`sympy.Eq`.
+        what (str): What kind of thing it should be, for the error messages.
+        method (str): The method to name in the error messages.
 
     Returns:
         tuple: `(lhs, rhs)`, each still in whatever form it arrived in.
@@ -26,24 +29,93 @@ def _as_constraint_sides(constraint):
     Raises:
         ValueError: If there is no equals sign, or more than one.
     '''
-    if isinstance(constraint, sympy.Eq):
-        return constraint.lhs, constraint.rhs
+    if isinstance(equation, sympy.Eq):
+        return equation.lhs, equation.rhs
 
-    if not isinstance(constraint, str):
+    if not isinstance(equation, str):
         raise ValueError(
-            'add_constraint was given a single {}, which is one side of a constraint and '
-            'not a whole one.  Pass both sides, or one string or sympy.Eq holding the '
-            'equation.'.format(type(constraint).__name__))
+            '{} was given a single {}, which is one side of an equation rather than a '
+            'whole one.  Pass one string or sympy.Eq holding the {}.'.format(
+                method, type(equation).__name__, what))
 
     # One or more `=` is one separator, so `=` and `==` read the same way -- the second is
-    # how the constraint prints, and retyping what was printed should work.
-    sides = [side.strip() for side in re.split(r'=+', constraint)]
+    # how a constraint prints, and retyping what was printed should work.
+    sides = [side.strip() for side in re.split(r'=+', equation)]
     if len(sides) != 2:
         raise ValueError(
-            '{!r} has {} equals signs, so it is not one constraint.  Write one equation, '
-            'or pass the two sides separately.'.format(constraint, len(sides) - 1))
+            '{!r} has {} equals signs, so it is not one {}.  Write one '
+            'equation.'.format(equation, len(sides) - 1, what))
 
     return sides[0], sides[1]
+
+
+def _as_initial_condition_pairs(initial_conditions):
+    '''
+    Normalise the ways an initial condition can be written into `(variable, value)` pairs.
+
+    ``C(0) = 0`` is how it is written on paper, so that is accepted, and so is the bare
+    ``C`` that only this method ever needed.  Which means all of these say the same thing::
+
+        {'C': 0}                  {'C(0)': 0}
+        'C(0) = 0'                ['C(0) = 0']               {'C(0) = 0'}
+
+    Args:
+        initial_conditions: A dict keyed by variable or by ``variable(0)``; one equation as
+            a string or :class:`sympy.Eq`; or any iterable of such equations.
+
+    Returns:
+        list: `(variable, value)` pairs, the variable still a string or symbol.
+
+    Raises:
+        ValueError: If an equation does not have exactly one equals sign, or if neither
+            side of one is a variable at zero.
+    '''
+    if isinstance(initial_conditions, dict):
+        # `C(0)` or plain `C`; the notation is allowed but not required, since the method
+        # is only ever about initial conditions.
+        pairs = []
+        for variable, value in initial_conditions.items():
+            if isinstance(variable, str):
+                variable = variable_at_zero(variable) or variable
+            pairs.append((variable, value))
+        return pairs
+
+    if isinstance(initial_conditions, (str, sympy.Basic)):
+        initial_conditions = [initial_conditions]
+
+    pairs = []
+    for equation in initial_conditions:
+        lhs, rhs = _as_equation_sides(equation, 'initial condition',
+                                      'update_initial_conditions')
+
+        at_zero = _side_at_zero(lhs)
+        if at_zero is None:
+            at_zero, rhs = _side_at_zero(rhs), lhs
+
+        if at_zero is None:
+            raise ValueError(
+                'Neither side of {!r} is a variable at zero, so it does not say what '
+                'anything starts at.  Write it as `C(0) = 0`.'.format(equation))
+
+        pairs.append((at_zero, rhs))
+    return pairs
+
+
+def _side_at_zero(side):
+    '''
+    The variable in one side of an equation, when that side is `C(0)`, else :const:`None`.
+
+    Handles the two shapes a side arrives in: the text of a string equation, and the
+    :class:`sympy.Function` that :func:`desr.tex_tools.tex_to_sympy` produces for the same
+    notation, so a parsed line can be handed straight back.
+    '''
+    if isinstance(side, str):
+        return variable_at_zero(side)
+
+    if isinstance(side, sympy.core.function.AppliedUndef) and side.args == (sympy.S.Zero,):
+        return to_symbol(side.func.__name__)
+
+    return None
 
 
 class ConflictingParameterValues(ValueError):
@@ -684,7 +756,14 @@ class ODESystem(object):
         Update the internal record of initial conditions.
 
         Args:
-            initial_conditions (dict): non-constant variable: initial value constant.
+            initial_conditions: Written whichever way reads best where it is written.  All
+                of these say the same thing::
+
+                    {'C': 0}                  {'C(0)': 0}
+                    'C(0) = 0'                ['C(0) = 0']               {'C(0) = 0'}
+
+                That is, a dict keyed by the variable or by ``variable(0)``; one equation
+                as a string or :class:`sympy.Eq`; or any iterable of such equations.
 
         >>> _input = {'x': 'c_0*x*y', 'y': 'c_1*(1-x)*(1-y)*t'}
         >>> _input = {sympy.Symbol(k): sympy.sympify(v) for k, v in _input.items()}
@@ -751,7 +830,7 @@ class ODESystem(object):
             ...
         ValueError: an initial condition for a non-reduced system should just be a single variable.  you have c_0, c_1
         '''
-        for variable, init_cond in initial_conditions.items():
+        for variable, init_cond in _as_initial_condition_pairs(initial_conditions):
 
             # convert through sympy
             if not isinstance(variable, sympy.Symbol):
@@ -859,6 +938,75 @@ class ODESystem(object):
         :meth:`update_parameter_values`.
         '''
         return self._parameter_values.copy()
+
+    def value_of(self, expression):
+        '''
+        What an expression works out to, if the values say, and :const:`None` if they do not.
+
+        The counterpart of reading the expression itself.  A reduced parameter is an
+        invariant and an invariant is a monomial, so sometimes the monomial is what you
+        want to see and sometimes the number is; this is the second of those, for anything
+        written in the system's symbols.
+
+        Args:
+            expression: An expression in the system's symbols; a string is read as one.
+
+        Returns:
+            sympy.Expr, None: The value, or :const:`None` when the values do not determine
+            one.  The test is whether a number comes out, not whether every symbol had a
+            value: a known zero settles whatever it multiplies, so ``C_0 * C`` is zero
+            when ``C_0`` is, though `C` never has a value at all.
+
+        >>> eqns = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+        >>> system = ODESystem.from_equations(eqns)
+        >>> system.update_parameter_values({'c_0': 2, 'c_1': 3})
+        >>> system.value_of('c_0 * c_1')
+        6
+        >>> system.value_of('c_0 / c_1')
+        2/3
+
+        A variable has no value, so nothing containing one does:
+
+        >>> system.value_of('c_0 * x') is None
+        True
+        '''
+        if isinstance(expression, str):
+            expression = sympify_expression(expression)
+
+        value = expression.subs(self._parameter_values)
+        return value if value.is_number else None
+
+    @property
+    def initial_condition_values(self):
+        '''
+        What each initial condition works out to, for those the values settle.
+
+        `C(0)` is recorded as the symbol that carries its units -- `C_0` -- and after a
+        reduction as whichever invariant that became.  Both are worth being able to read:
+        the symbol says *what* the initial value is, and this says what it *is*.  So a
+        system that was told ``C(0) = 0`` can be asked either way, before or after
+        reducing.
+
+        Returns:
+            dict: {variable: value}, holding only the variables whose initial value is
+            settled by :attr:`parameter_values`.
+
+        >>> eqns = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+        >>> system = ODESystem.from_equations(eqns)
+        >>> system.update_initial_conditions(['x(0) = 0', 'y(0) = y_0'])
+        >>> system.initial_conditions
+        {x: x_0, y: y_0}
+        >>> system.initial_condition_values
+        {x: 0}
+
+        ``y_0`` has no value, so `y` is absent rather than present and meaningless.
+        '''
+        values = {}
+        for variable, init_cond in self._initial_conditions.items():
+            value = self.value_of(init_cond)
+            if value is not None:
+                values[variable] = value
+        return values
 
     def update_parameter_values(self, parameter_values):
         '''
@@ -1090,10 +1238,10 @@ class ODESystem(object):
         >>> system.add_constraint('c_5 = c_0 = c_1')
         Traceback (most recent call last):
             ...
-        ValueError: 'c_5 = c_0 = c_1' has 2 equals signs, so it is not one constraint.  Write one equation, or pass the two sides separately.
+        ValueError: 'c_5 = c_0 = c_1' has 2 equals signs, so it is not one constraint.  Write one equation.
         '''
         if rhs is None:
-            lhs, rhs = _as_constraint_sides(lhs)
+            lhs, rhs = _as_equation_sides(lhs, 'constraint', 'add_constraint')
 
         if isinstance(lhs, str):
             lhs = sympify_expression(lhs)
