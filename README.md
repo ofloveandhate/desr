@@ -1,6 +1,8 @@
 # desr
 
-*desr* is a package used for Differental Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems. It implements algorithms outlined by Evelyne Hubert and George Labahn <sup>[1](#myfootnote1)</sup>. See the full documentation on [readthedocs](https://desr.readthedocs.io/en/latest/).
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17671203.svg)](https://doi.org/10.5281/zenodo.17671203)
+
+*desr* is a package used for Differential Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems. It implements algorithms outlined by Evelyne Hubert and George Labahn <sup>[1](#myfootnote1)</sup>. See the full documentation on [readthedocs](https://desr.readthedocs.io/en/latest/).
 
 This package accompanies a paper "Nondimensionalization is more science than art".  The Masters dissertation [Differential Algebra and Applications](http://tanbur.github.io/desr/dissertation/differential_algebra_and_applications.pdf) that this code originally accompanied places the algorithms into the theoretical framework of <em>differential algebraic geometry</em> and shows how to extend them to parameter reduction of arbitrary systems of partial differential equations, though this is not yet implemented.
 
