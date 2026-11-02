@@ -5,6 +5,7 @@ import sympy
 from desr.chemical_reaction_network import ChemicalReactionNetwork
 from desr.ode_system import ConflictingParameterValues, ODESystem
 from desr.ode_translation import ODETranslator, ReductionScheme, scale_action
+from desr.matrix_normal_forms import smith_normal_form
 from desr.sympy_helper import monomial_to_powers, sympify_expression
 
 
@@ -1320,3 +1321,165 @@ class TestAnInitialConditionThatIsAMonomial(TestCase):
         renamed = reduced.subs({'kappa4': 'gamma'})
         with self.assertRaises(ConflictingParameterValues):
             renamed.subs({'gamma': 1})
+
+
+class TestFourVariableWithZeroInitialConditions(TestCase):
+    '''
+    Four-variable Michaelis-Menten with the complex and the product starting at nothing,
+    as `examples/michaelis_menten.py` does it.  Both zeros have to reach the reduced
+    system, and neither may be a thing the reduction divides by.
+    '''
+
+    TEX = '\n'.join([r'\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\',
+                     r'\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\',
+                     r'\frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\',
+                     r'\frac{dP}{dt} &= k_2 C'])
+
+    def setUp(self):
+        system = ODESystem.from_tex(self.TEX)
+        system.update_initial_conditions(['S(0) = S_0', 'E(0) = E_0',
+                                          'C(0) = 0', 'P(0) = 0'])
+        system.reorder_parameters(['S_0', 'k_1', 'k_2', 'k_m1',
+                                   'E_0', 'C_0', 'P_0'])
+        self.system = system
+        self.translator = ODETranslator.from_ode_system(system)
+
+    def test_the_zeros_are_recorded_against_minted_symbols(self):
+        self.assertEqual(self.system.parameter_values,
+                         {sympy.Symbol('C_0'): sympy.Integer(0),
+                          sympy.Symbol('P_0'): sympy.Integer(0)})
+
+    def test_the_order_stays_canonical(self):
+        # `reorder_parameters` moves only the parameter block, so the layout the parameter
+        # scheme needs survives -- unlike reordering the whole symbol list by hand.
+        self.assertEqual(
+            list(self.system.symbols),
+            list(self.system.parameters) + [self.system.independent_variable]
+            + list(self.system.dependents))
+
+    def test_the_parameter_scheme_still_applies(self):
+        self.assertEqual(self.translator.scheme(self.system),
+                         ReductionScheme.PARAMETER)
+
+    def test_the_reduction_divides_by_the_front_of_the_order_only(self):
+        self.assertEqual(self.translator.symbols_that_must_not_be_zero(),
+                         tuple(sympy.symbols('S_0 k_1')))
+
+    def test_neither_zero_valued_symbol_is_divided_by(self):
+        must_not_be_zero = self.translator.symbols_that_must_not_be_zero()
+        for symbol in (sympy.Symbol('C_0'), sympy.Symbol('P_0')):
+            with self.subTest(symbol=symbol):
+                self.assertNotIn(symbol, must_not_be_zero)
+
+    def test_the_clock_matches_the_two_variable_section(self):
+        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+                         self.translator.invariant_monomials()))
+        self.assertEqual(named['tau'], sympify_expression('S_0*k_1*t'))
+
+    def test_both_zeros_reach_the_reduced_system(self):
+        reduced = self.translator.translate(self.system)
+        values = reduced.initial_condition_values
+        # The substrate starts at one, the complex and the product at nothing.
+        self.assertEqual(sorted(map(str, values)), ['nu0', 'nu2', 'nu3'])
+        self.assertEqual(values[sympy.Symbol('nu3')], sympy.Integer(1))
+        self.assertEqual(values[sympy.Symbol('nu0')], sympy.Integer(0))
+        self.assertEqual(values[sympy.Symbol('nu2')], sympy.Integer(0))
+
+    def test_the_zeros_are_derived_not_restated(self):
+        # Each zero is the value of the invariant that holds C_0 or P_0 in its numerator,
+        # worked out from the original values rather than asserted again.
+        reduced = self.translator.translate(self.system)
+        zero_valued = {parameter for parameter, value
+                       in reduced.parameter_values.items() if value == 0}
+        self.assertEqual(len(zero_valued), 2)
+        self.assertTrue(zero_valued <= set(reduced.initial_conditions.values()))
+
+
+class TestFourVariableImposedInvariants(TestCase):
+    '''
+    The reduction `examples/michaelis_menten.py` builds by imposing a choice of invariants
+    and rearranging into the parameter scheme by hand.  It is the same reduction as
+    `docs/source/examples/mm_four_variable.rst`, and every index in it is derived.
+    '''
+
+    TEX = TestFourVariableWithZeroInitialConditions.TEX
+    CHOICE = ['C*k_1/k_2', 'P*k_1/k_m1']
+
+    def setUp(self):
+        self.system = ODESystem.from_tex(self.TEX)
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_the_choice_is_honoured(self):
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        self.assertEqual(tuple(chosen.invariant_monomials())[:2],
+                         (sympify_expression('C*k_1/k_2'),
+                          sympify_expression('P*k_1/k_m1')))
+
+    def test_none_of_the_six_is_a_parameter_yet(self):
+        # Which is why a column operation is needed before the parameter scheme has
+        # anything to reduce.
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        variables = set(self.system.variables)
+        for monomial in chosen.invariant_monomials():
+            with self.subTest(monomial=monomial):
+                self.assertTrue(monomial.free_symbols & variables)
+
+    def test_one_column_operation_exposes_a_parameter(self):
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
+                                      chosen.column_of('P*k_1/k_2'), power=-1)
+        self.assertIn(sympify_expression('k_2/k_m1'),
+                      list(chosen.invariant_monomials()))
+
+    def test_the_hand_rolled_extension_agrees_with_the_library(self):
+        # The script shows the Smith normal form of W_d P for the paper.  It reaches the
+        # same invariants, in a different column order -- asserted rather than claimed.
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        exponents = sympy.Matrix(
+            [monomial_to_powers(sympify_expression(m), list(self.system.symbols))
+             for m in self.CHOICE]).T
+        WdP = self.translator.inv_herm_mult_d * exponents
+        _, row_ops, _ = smith_normal_form(WdP)
+        col_ops = sympy.Matrix.hstack(WdP, row_ops.inv()[:, len(self.CHOICE):])
+        by_hand = ODETranslator(
+            self.translator.scaling_matrix, symbols_domain=self.system.symbols,
+            hermite_multiplier=sympy.Matrix.hstack(
+                self.translator.herm_mult_i,
+                self.translator.herm_mult_n * col_ops))
+        self.assertEqual(sorted(map(str, by_hand.invariant_monomials())),
+                         sorted(map(str, chosen.invariant_monomials())))
+
+    def test_the_derived_permutation_is_the_one_the_doc_page_hardcodes(self):
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
+                                      chosen.column_of('P*k_1/k_2'), power=-1)
+        monomials = list(chosen.invariant_monomials())
+        variables = set(self.system.variables)
+        indep = self.system.independent_variable
+
+        def kind(monomial):
+            if indep in monomial.free_symbols:
+                return 1
+            return 2 if monomial.free_symbols & variables else 0
+
+        permutation = sorted(range(len(monomials)),
+                             key=lambda i: (kind(monomials[i]), i))
+        self.assertEqual(permutation, [1, 2, 0, 3, 4, 5])
+
+    def test_the_result_is_the_doc_pages_one_parameter_system(self):
+        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
+                                      chosen.column_of('P*k_1/k_2'), power=-1)
+        rearranged = ODETranslator(
+            chosen.scaling_matrix, symbols_domain=self.system.symbols,
+            hermite_multiplier=sympy.Matrix.hstack(
+                chosen.herm_mult_i, chosen.herm_mult_n[:, [1, 2, 0, 3, 4, 5]]),
+            naming_scheme={'parameters': 'c', 'independent': 't',
+                           'dependents': ['C', 'E', 'P', 'S']})
+        reduced = rearranged.translate(self.system).subs({'c0': 'alpha'})
+        C, E, P, S, alpha = sympy.symbols('C E P S alpha')
+        derivatives = reduced.derivative_dict
+        self.assertEqual(set(map(str, reduced.parameters)), {'alpha'})
+        self.assertEqual(sympy.simplify(derivatives[C] - (-C - C / alpha + E * S)), 0)
+        self.assertEqual(sympy.simplify(derivatives[P] - C), 0)
+        self.assertEqual(sympy.simplify(derivatives[S] - (C / alpha - E * S)), 0)

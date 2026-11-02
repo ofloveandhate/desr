@@ -14,9 +14,9 @@ articlerender.fcgi?artid=PMC3991559.
 """
 
 import sympy
-from desr import ODESystem, ODETranslator, scale_action
+from desr import ODESystem, ODETranslator
 from desr.matrix_normal_forms import smith_normal_form
-from desr.tex_tools import expr_to_tex
+from desr.sympy_helper import monomial_to_powers, sympify_expression
 
 
 
@@ -48,8 +48,10 @@ def michaelis_menten_four_variables():
         return system
 
 
-    # a 'lil helper function that moves values to the front.  ⚠️ assumes that `sorted` is a stable sort...
-    put_at_front = lambda v, order: sorted(order, key=lambda n: str(n)!=v)
+    # There used to be a `put_at_front` helper here, moving one symbol at a time to the
+    # front of the whole symbol list.  `reorder_parameters` with the order written out says
+    # the same thing and says it once -- and it cannot put a parameter after the
+    # dependents, which is what silently costs the parameter reduction scheme.
 
 
 
@@ -57,21 +59,23 @@ def michaelis_menten_four_variables():
         print('\n\nFour-variable with ICs\n-----------------------------------')
 
         system = system_four_variable_michaelis_menten()
-        system.update_initial_conditions({'S': 'S_0', 'E':'E_0', 'C':'C_0', 'P':'P_0'})
+        # The complex and the product both start at nothing.  Saying so is the point.
+        system.update_initial_conditions(['S(0) = S_0', 'E(0) = E_0',
+                                          'C(0) = 0', 'P(0) = 0'])
+        print('initial conditions:', system.initial_conditions)
+        print('as values         :', system.initial_condition_values)
 
-        variable_order = list(system.symbols)
-
-
-
-        # put s_0 and k_1 at the front so will likely get normalized out
-        variable_order = put_at_front('k_1', variable_order)
-        variable_order = put_at_front('k_2', variable_order)
-        variable_order = put_at_front('k_m1', variable_order)
-        variable_order = put_at_front('S_0', variable_order)
-        print(f'{variable_order=}')
-
-        # variable_order[-1], variable_order[-4] = variable_order[-4], variable_order[-1]
-        system.reorder_variables(variable_order)
+        # Written out, rather than built by moving one symbol at a time: the front of the
+        # order is the end that gets scaled by, so S_0 and k_1 are what this normalises --
+        # the same clock the two-variable section uses, k_1 S_0 t.  The initial values of
+        # the complex and the product go at the back, which is the end that is kept, since
+        # a quantity known to be zero must not be scaled by.
+        #
+        # `reorder_parameters` rather than `reorder_variables`, so the parameter block is
+        # the only thing that moves.  Reordering the whole symbol list by hand is how a
+        # parameter ends up after the dependents, which silently costs the parameter
+        # reduction scheme.
+        system.reorder_parameters(['S_0', 'k_1', 'k_2', 'k_m1', 'E_0', 'C_0', 'P_0'])
         print('system\n',system)
 
 
@@ -79,106 +83,156 @@ def michaelis_menten_four_variables():
 
 
         print('variable order:', translator.symbols_domain)
+        print('scheme:', translator.scheme(system))
+
+        # Asked, not assumed.  S_0 and k_1 are what the reduction divides by; C_0 and P_0
+        # are not, which is what makes a zero harmless for them.
+        print('must not be zero:', translator.symbols_that_must_not_be_zero())
 
         # Print scaling matrices
         print('Scaling matrix:')
         print(translator.scaling_matrix.__repr__())
 
         # Print invariants
-        print('Invariants: ', translator.invariant_monomials())
+        print('Invariants: ',
+              ['{}={}'.format(a, b) for a, b
+               in zip(translator.invariant_names(system),
+                      translator.invariant_monomials())])
 
         # Print translated result
         print('Reduced system:')
-        print(translator.translate(system))
+        reduced_system = translator.translate(system)
+        print(reduced_system)
+
+        # The zeros arrive here derived, not restated: each is the invariant holding
+        # C_0 or P_0 in its numerator, so the complex and the product start at nothing in
+        # the reduced system too.
+        print('initial conditions, as values:',
+              reduced_system.initial_condition_values)
+        assert (set(reduced_system.initial_condition_values.values())
+                == {0, 1}), reduced_system.initial_condition_values
 
         print('Substitutions:')
         print(translator.translate_parameter_substitutions(system=system))
 
-    def four_variable_using_specific_row_ops():
-        print('\n\nFour-variable without ICs:\nWhat happens when we make k_2 the last variable?\n-----------------------------------')
+    def four_variable_choosing_invariants():
+        """
+        Impose a choice of invariants, and rearrange into the parameter scheme by hand.
 
-        # make the system
+        The same reduction as `docs/source/examples/mm_four_variable.rst`, with the
+        extension step shown rather than taken on trust, because that step is what the
+        paper describes.
+        """
+        print('\n\nFour-variable, imposing a choice of invariants\n-----------------------------------')
+
         system = system_four_variable_michaelis_menten()
+        print('Variable order:', system.symbols)
+
+        translator = ODETranslator.from_ode_system(system)
+        print('Invariants:', ', '.join(map(str, translator.invariant_monomials())))
+
+        # The reduction the algorithm picks on its own, for comparison.
+        print('Reduced system:', translator.translate(system))
 
 
-        variable_order = list(system.symbols)
-        put_at_front('k_2',variable_order)
-        system.reorder_variables(variable_order)
-        print('New variable order:',variable_order)
-
-
-        system_from_ode = ODETranslator.from_ode_system(system)
-        print('Invariants:', ', '.join(map(str, system_from_ode.invariant_monomials())))
-
-        # Now do the reduction
-        reduced_system = system_from_ode.translate(system)
-        print('Reduced system:', reduced_system)
-
-
-        print('Imposing a choice of invariants')
+        print('\nImposing a choice of invariants')
         print('--------------------------------')
-        # Extend a choice of invariants   t  C  E  P  S k_1 k_2 k_{-1}
-        invariant_choice = sympy.Matrix([[0, 1, 0, 0, 0, 1, -1, 0],
-                                         [0, 0, 0, 1, 0, 1, 0, -1]]).T
+        # Say which invariants, by writing them.  An exponent matrix would say the same
+        # thing, but its rows are *positions* in the variable order, so reordering the
+        # variables would leave the same matrix meaning different monomials -- and nothing
+        # in it records which invariants were meant.  This is how the section used to be
+        # written, and it had rotted into denoting `E*k_2/P, E*t/S`, which are not
+        # invariants at all.
+        invariant_choice = ['C*k_1/k_2', 'P*k_1/k_m1']
+        print('Chosen invariants:', invariant_choice)
+
+        chosen = translator.extend_from_invariants(invariant_choice)
+        print('Extended to:', ', '.join(map(str, chosen.invariant_monomials())))
+
+
+        print('\nThe extension step, for the paper')
+        print('--------------------------------')
+        # What `extend_from_invariants` does, spelled out.  The exponent matrix is needed
+        # here because this is the linear algebra; it is derived from the monomials above,
+        # so there is one statement of the choice rather than two that can disagree.
+        exponents = sympy.Matrix(
+            [monomial_to_powers(sympify_expression(m), list(system.symbols))
+             for m in invariant_choice]).T
         print('P =')
-        print(invariant_choice.__repr__())
-        print('Chosen invariants:')
-        print(scale_action(system_from_ode.symbols_domain, invariant_choice))
+        print(exponents.__repr__())
 
-        ## Method that does the extension automatically.
-        max_scal2 = system_from_ode.extend_from_invariants(invariant_choice=invariant_choice)
+        assert (translator.scaling_matrix * exponents).is_zero_matrix, (
+            'the choice is not invariant')
 
-        ## Stepping through the above function for the sake of the paper.
-        ## Step 1: Check we have invariants
-        choice_actions = system_from_ode.scaling_matrix * invariant_choice
-        assert choice_actions.is_zero_matrix  # Else we have to stop.
-
-        ## Step 2: Try and extend the choices by a basis of invariants
-        ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
-        WdP = system_from_ode.inv_herm_mult_d * invariant_choice
-        normal_form, row_ops, col_ops = smith_normal_form(WdP)
-
-        print('Smith normal form decomposition:')
-        print('{}\n{}\n{}\n{}\n=\n{}'.format(*map(lambda x: x.__repr__(), (row_ops,
-                                                                           system_from_ode.inv_herm_mult_d,
-                                                                           invariant_choice,
-                                                                           col_ops,
-                                                                           smith_normal_form)))
-             )
-
-        print('U^{-1} = ',row_ops.inv())
+        WdP = translator.inv_herm_mult_d * exponents
         print(f'{WdP=}')
+        normal_form, row_ops, snf_col_ops = smith_normal_form(WdP)
+        print('Smith normal form of W_d P:')
+        print('{}\n*\n{}\n*\n{}\n=\n{}'.format(
+            *map(repr, (row_ops, WdP, snf_col_ops, normal_form))))
+        print('U^{-1} =', row_ops.inv().__repr__())
+
+        col_ops = sympy.Matrix.hstack(WdP, row_ops.inv()[:, len(invariant_choice):])
+        by_hand = ODETranslator(
+            translator.scaling_matrix, symbols_domain=system.symbols,
+            hermite_multiplier=sympy.Matrix.hstack(
+                translator.herm_mult_i, translator.herm_mult_n * col_ops))
+        print('invariants this way:', ', '.join(map(str, by_hand.invariant_monomials())))
+
+        # The same invariants, in a different column order.  Worth asserting rather than
+        # asserting in prose: the hand-rolled extension and the library's are the same
+        # reduction, and the column order is all that separates them.
+        assert (sorted(map(str, by_hand.invariant_monomials()))
+                == sorted(map(str, chosen.invariant_monomials()))), (
+            'the two extensions disagree on the invariants themselves')
 
 
-        col_ops = sympy.Matrix.hstack(WdP, row_ops.inv()[:, 2:])  # col_ops is the column operations we're going to apply to Vn
-        print(f'{col_ops=}')
+        print('\nRearranging into the parameter scheme')
+        print('--------------------------------')
+        # None of the six invariants is a monomial in the parameters alone, so the
+        # parameter scheme has nothing to reduce yet.  One column operation makes one:
+        # dividing P k_1/k_{-1} by P k_1/k_2 cancels the P and leaves k_2/k_{-1}.
+        ratio = chosen.column_of('P*k_1/k_m1')
+        product = chosen.column_of('P*k_1/k_2')
+        print(f'{ratio=}, {product=}')
+        chosen.multiplier_add_columns(ratio, product, power=-1)
+        print('invariants now:', ', '.join(map(str, chosen.invariant_monomials())))
 
+        # The scheme wants the parameters first, then the independent variable, then the
+        # dependents.  Derived from what each column *is*, so the permutation cannot go
+        # stale when the variable order changes -- which is what a literal
+        # `[1, 2, 0, 3, 4, 5]` would do.
+        def column_kind(monomial):
+            symbols = monomial.free_symbols
+            if system.independent_variable in symbols:
+                return 1
+            return 2 if symbols & set(system.variables) else 0
 
-        print('New Vn\n',system_from_ode.herm_mult_n * col_ops)
+        monomials = list(chosen.invariant_monomials())
+        permutation = sorted(range(len(monomials)),
+                             key=lambda i: (column_kind(monomials[i]), i))
+        print('permutation derived from the kinds:', permutation)
 
-        print('New invariants:\n',', '.join(map(str, scale_action(system_from_ode.symbols_domain, system_from_ode.herm_mult_n * col_ops))))
-
-        hermite_mult = system_from_ode.herm_mult_n * col_ops
-        # The permutation is (0 1 3 4 2 5)
-        hermite_mult.col_swap(0, 1)
-        hermite_mult.col_swap(0, 3)
-        hermite_mult.col_swap(0, 4)
-        hermite_mult.col_swap(0, 2)
-        hermite_mult.col_swap(0, 5)
-
-        print('Permuted Vn:\n',hermite_mult)
-
-
-        # We need to add on Vi - the original will do.
-        hermite_mult = sympy.Matrix.hstack(system_from_ode.herm_mult_i, hermite_mult)
-        translator = ODETranslator(system_from_ode.scaling_matrix, hermite_multiplier=hermite_mult)
+        rearranged = ODETranslator(
+            chosen.scaling_matrix, symbols_domain=system.symbols,
+            hermite_multiplier=sympy.Matrix.hstack(
+                chosen.herm_mult_i, chosen.herm_mult_n[:, permutation]),
+            naming_scheme={'parameters': 'c', 'independent': 't',
+                           'dependents': ['C', 'E', 'P', 'S']})
+        print('final invariants:',
+              ', '.join(map(str, rearranged.invariant_monomials())))
 
         print('Reduced system:')
-        print(translator.translate(system))
+        reduced_system = rearranged.translate(system)
+        print(reduced_system.subs({'c0': 'alpha'}))
+        assert len(reduced_system.parameters) == 1, (
+            'expected a one-parameter reduction, got {}'.format(
+                reduced_system.parameters))
+
 
 
     four_variable_with_ics()
-    # four_variable_using_specific_row_ops()
+    four_variable_choosing_invariants()
 
 
 
@@ -356,4 +410,4 @@ if __name__ == '__main__':
 
     michaelis_menten_two_variable()
 
-    # michaelis_menten_four_variables()
+    michaelis_menten_four_variables()
