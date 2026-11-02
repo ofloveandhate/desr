@@ -3,9 +3,9 @@ from unittest import TestCase
 import sympy
 
 from desr.matrix_normal_forms import hnf_row
-from desr.ode_system import ODESystem
+from desr.ode_system import ConflictingParameterValues, ODESystem
 from desr.ode_translation import ODETranslator
-from desr.sympy_helper import monomial_to_powers
+from desr.sympy_helper import CONSISTENCY_TOLERANCE, monomial_to_powers
 
 
 class TestODESystemScaling(TestCase):
@@ -582,3 +582,280 @@ class TestSubsCallShapes(TestCase):
         self.assertIn(r'\lambda', expr_to_tex(substituted.derivative_dict[sympy.Symbol('x')]))
         with self.assertRaises(Exception):
             self.system.subs({'c_0': 'lambda'})
+
+
+class TestConstraintCallShapes(TestCase):
+    '''
+    A constraint is one equation on paper, so it can be given as one.
+    '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def expected(self):
+        c_0, c_1, c_2 = sympy.symbols('c_0 c_1 c_2')
+        return sympy.Eq(c_2, c_0 + c_1)
+
+    def test_two_sides_still_work(self):
+        system = self.system()
+        system.add_constraint('c_2', 'c_0 + c_1')
+        self.assertEqual(system.constraints, [self.expected()])
+
+    def test_one_string_says_the_same_thing(self):
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        self.assertEqual(system.constraints, [self.expected()])
+
+    def test_a_double_equals_reads_the_same_way(self):
+        # Which is how a constraint prints, so retyping what was printed works.
+        system = self.system()
+        system.add_constraint('c_2 == c_0 + c_1')
+        self.assertEqual(system.constraints, [self.expected()])
+
+    def test_whitespace_around_the_equals_is_optional(self):
+        system = self.system()
+        system.add_constraint('c_2=c_0 + c_1')
+        self.assertEqual(system.constraints, [self.expected()])
+
+    def test_a_sympy_equality_is_taken_whole(self):
+        system = self.system()
+        system.add_constraint(self.expected())
+        self.assertEqual(system.constraints, [self.expected()])
+
+    def test_two_equals_signs_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.add_constraint('c_2 = c_0 = c_1')
+        self.assertIn('not one constraint', str(caught.exception))
+
+    def test_one_side_alone_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.add_constraint('c_2')
+        self.assertIn('0 equals signs', str(caught.exception))
+
+    def test_a_bare_expression_alone_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.add_constraint(sympy.Symbol('c_2'))
+        self.assertIn('one side of a constraint', str(caught.exception))
+
+    def test_the_whole_form_is_checked_like_the_two_sided_one(self):
+        # Same path, so the dependent-variable refusal still applies.
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.add_constraint('c_2 = c_0 + x')
+        self.assertIn('dependent variables', str(caught.exception))
+
+
+class TestParameterValues(TestCase):
+    '''
+    A parameter is a constant of the model, so its numeric value is true everywhere and is
+    a fact the system can hold.  That is the whole difference from `desr.numerics`'
+    `known_values`, which are values at one point on a solution and may name a dependent
+    variable.
+    '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def test_a_value_is_recorded_against_the_parameter(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        self.assertEqual(system.parameter_values, {sympy.Symbol('c_0'): sympy.Integer(2)})
+
+    def test_the_accessor_hands_back_a_copy(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        system.parameter_values[sympy.Symbol('c_1')] = 9
+        self.assertNotIn(sympy.Symbol('c_1'), system.parameter_values)
+
+    def test_values_accumulate_across_calls(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        system.update_parameter_values({'c_1': 3})
+        self.assertEqual(set(map(str, system.parameter_values)), {'c_0', 'c_1'})
+
+    def test_setting_the_same_parameter_again_replaces_the_value(self):
+        # An edit by the caller, not a conflict: there is only one of them, and the second
+        # call is the later word.  A conflict is between two sources that both claim to be
+        # right, which is what the constraint check and `known_values` are about.
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        system.update_parameter_values({'c_0': 5})
+        self.assertEqual(system.parameter_values[sympy.Symbol('c_0')], sympy.Integer(5))
+
+    def test_a_dependent_variable_is_refused_and_told_where_to_go(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_parameter_values({'x': 2})
+        message = str(caught.exception)
+        self.assertIn('dependent variable', message)
+        self.assertIn('known_values', message)
+
+    def test_the_independent_variable_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_parameter_values({'t': 0})
+        self.assertIn('independent variable', str(caught.exception))
+
+    def test_a_symbol_the_system_does_not_have_is_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_parameter_values({'q': 1})
+        self.assertIn('not a symbol of this system', str(caught.exception))
+
+    def test_an_expression_is_refused_and_told_it_is_a_constraint(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_parameter_values({'c_1': 'c_0 + 1'})
+        self.assertIn('add_constraint', str(caught.exception))
+
+    def test_a_float_is_kept(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 0.25})
+        self.assertAlmostEqual(float(system.parameter_values[sympy.Symbol('c_0')]), 0.25)
+
+    def test_zero_is_an_ordinary_value_here(self):
+        # Zero is refused as a *scale*; as a value it is a number like any other, and this
+        # is where a zero initial condition's value will live.
+        system = self.system()
+        system.update_parameter_values({'c_0': 0})
+        self.assertEqual(system.parameter_values[sympy.Symbol('c_0')], sympy.Integer(0))
+
+    def test_a_rejected_key_leaves_no_partial_update(self):
+        system = self.system()
+        with self.assertRaises(ValueError):
+            system.update_parameter_values({'c_0': 2, 'x': 3})
+        self.assertEqual(system.parameter_values, {})
+
+
+class TestParameterValuesAgainstConstraints(TestCase):
+    '''
+    A constraint says something true of the parameters, so values that fail it and a
+    constraint the values fail are the same mistake from two sides.  Whichever arrives
+    second is refused.
+    '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def test_values_consistent_with_a_constraint_are_accepted(self):
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        system.update_parameter_values({'c_0': 2, 'c_1': 3, 'c_2': 5})
+        self.assertEqual(system.parameter_values[sympy.Symbol('c_2')], sympy.Integer(5))
+
+    def test_values_inconsistent_with_a_constraint_are_refused(self):
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        with self.assertRaises(ConflictingParameterValues) as caught:
+            system.update_parameter_values({'c_0': 2, 'c_1': 3, 'c_2': 6})
+        message = str(caught.exception)
+        self.assertIn('c_2 == c_0 + c_1', message)
+        self.assertIn('6 == 5', message)
+
+    def test_a_constraint_inconsistent_with_standing_values_is_refused(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2, 'c_1': 3})
+        with self.assertRaises(ConflictingParameterValues):
+            system.add_constraint('c_1 = c_0')
+
+    def test_a_refused_constraint_is_not_added(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2, 'c_1': 3})
+        with self.assertRaises(ConflictingParameterValues):
+            system.add_constraint('c_1 = c_0')
+        self.assertEqual(system.constraints, [])
+
+    def test_a_partly_valued_constraint_says_nothing_yet(self):
+        # c_2 has no value, so the constraint can still be satisfied by choosing one.
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        system.update_parameter_values({'c_0': 2, 'c_1': 3})
+        self.assertNotIn(sympy.Symbol('c_2'), system.parameter_values)
+
+    def test_floats_agree_within_the_shared_tolerance(self):
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        system.update_parameter_values({'c_0': 1.0, 'c_1': 2.0,
+                                        'c_2': 3.0 + CONSISTENCY_TOLERANCE / 10})
+
+    def test_floats_further_apart_than_the_tolerance_are_refused(self):
+        system = self.system()
+        system.add_constraint('c_2 = c_0 + c_1')
+        with self.assertRaises(ConflictingParameterValues):
+            system.update_parameter_values({'c_0': 1.0, 'c_1': 2.0,
+                                            'c_2': 3.0 + CONSISTENCY_TOLERANCE * 100})
+
+    def test_the_tolerance_is_one_constant_for_both_halves_of_the_library(self):
+        # ode_system cannot import numerics -- numpy would become mandatory for
+        # `import desr` -- so the constant lives in sympy_helper and numerics re-exports
+        # it.  A value the system accepted and the numerics then rejected would be a
+        # contradiction the caller could do nothing about.
+        from desr import numerics
+        self.assertIs(numerics.CONSISTENCY_TOLERANCE, CONSISTENCY_TOLERANCE)
+
+
+class TestParameterValuesSurviveTheSystem(TestCase):
+    ''' Values are part of the system, so they travel with it. '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def test_copy_carries_the_values(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        self.assertEqual(system.copy().parameter_values, system.parameter_values)
+
+    def test_the_constructor_takes_them(self):
+        system = self.system()
+        rebuilt = ODESystem(system.symbols, system.derivatives,
+                            parameter_values={'c_0': 2})
+        self.assertEqual(rebuilt.parameter_values, {sympy.Symbol('c_0'): sympy.Integer(2)})
+
+    def test_the_constructor_checks_them_against_its_constraints(self):
+        system = self.system()
+        system.add_constraint('c_1 = c_0')
+        with self.assertRaises(ConflictingParameterValues):
+            ODESystem(system.symbols, system.derivatives,
+                      constraints=list(system.constraints),
+                      parameter_values={'c_0': 2, 'c_1': 3})
+
+    def test_repr_names_the_values(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        self.assertIn('parameter values: c_0 = 2', repr(system))
+
+    def test_repr_is_unchanged_when_no_value_is_known(self):
+        self.assertNotIn('parameter values', repr(self.system()))
+
+    def test_a_renaming_substitution_carries_the_value_to_the_new_name(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        renamed = system.subs({'c_0': 'd_0'})
+        self.assertEqual(renamed.parameter_values,
+                         {sympy.Symbol('d_0'): sympy.Integer(2)})
+
+    def test_substituting_a_parameter_to_its_known_value_is_fine(self):
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        substituted = system.subs({'c_0': '2'})
+        self.assertEqual(substituted.parameter_values, {})
+
+    def test_substituting_a_parameter_to_a_different_number_is_refused(self):
+        # Two statements about the same quantity.  Dropping either one quietly is how a
+        # wrong number reaches a paper.
+        system = self.system()
+        system.update_parameter_values({'c_0': 2})
+        with self.assertRaises(ConflictingParameterValues) as caught:
+            system.subs({'c_0': '7'})
+        self.assertIn('c_0', str(caught.exception))

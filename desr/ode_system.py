@@ -4,9 +4,66 @@ import re
 import sympy
 
 from desr.matrix_normal_forms import hnf_col, hnf_row, normal_hnf_col
-from desr.sympy_helper import (expressions_to_variables, unique_array_stable,
-                               monomial_to_powers, sympify_expression, to_symbol)
+from desr.sympy_helper import (CONSISTENCY_TOLERANCE, expressions_to_variables,
+                               unique_array_stable, monomial_to_powers,
+                               sympify_expression, to_symbol)
 from desr.tex_tools import TexParseError, expr_to_tex, var_to_tex, tex_to_sympy
+
+
+def _as_constraint_sides(constraint):
+    '''
+    Split a whole constraint into its two sides.
+
+    A constraint is written as one equation on paper, so :meth:`ODESystem.add_constraint`
+    takes it that way too -- as a string, or as a :class:`sympy.Eq`.
+
+    Args:
+        constraint: A string holding one ``=`` or ``==``, or a :class:`sympy.Eq`.
+
+    Returns:
+        tuple: `(lhs, rhs)`, each still in whatever form it arrived in.
+
+    Raises:
+        ValueError: If there is no equals sign, or more than one.
+    '''
+    if isinstance(constraint, sympy.Eq):
+        return constraint.lhs, constraint.rhs
+
+    if not isinstance(constraint, str):
+        raise ValueError(
+            'add_constraint was given a single {}, which is one side of a constraint and '
+            'not a whole one.  Pass both sides, or one string or sympy.Eq holding the '
+            'equation.'.format(type(constraint).__name__))
+
+    # One or more `=` is one separator, so `=` and `==` read the same way -- the second is
+    # how the constraint prints, and retyping what was printed should work.
+    sides = [side.strip() for side in re.split(r'=+', constraint)]
+    if len(sides) != 2:
+        raise ValueError(
+            '{!r} has {} equals signs, so it is not one constraint.  Write one equation, '
+            'or pass the two sides separately.'.format(constraint, len(sides) - 1))
+
+    return sides[0], sides[1]
+
+
+class ConflictingParameterValues(ValueError):
+    '''
+    Raised when the values given for a system's parameters contradict one of its
+    constraints.
+
+    A constraint says something true of the parameters, so values that do not satisfy it
+    and a constraint that the values do not satisfy are the same mistake seen from two
+    sides, and there is no way to tell which of them the caller got wrong.  Preferring
+    either silently is how a wrong number reaches a paper.
+
+    The numeric half of the library raises its own
+    :class:`desr.numerics.ConflictingKnownValues` for the neighbouring case: values of
+    the original symbols *at a point* on a solution that do not agree with each other.
+    Two exceptions, because `parameter_values` and `known_values` are two different
+    things -- the first holds constants of the model, true everywhere, and the second
+    holds measurements at one time.
+    '''
+    pass
 
 
 def _as_substitution_pairs(to_sub, extra_args):
@@ -100,7 +157,7 @@ class ODESystem(object):
             reduced system's own equations records it.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -108,6 +165,7 @@ class ODESystem(object):
 
         # initialize some class member storage
         self._initial_conditions = {}
+        self._parameter_values = {}
         self._constraints = []
         self._requires_same_unit = {} # a dict of {Symbol : Expression}
         self._is_reduced = is_reduced
@@ -142,6 +200,11 @@ class ODESystem(object):
                 if not isinstance(c,sympy.core.relational.Equality):
                     raise TypeError(f'{c} is not a sympy equality.  Constraints must be sympy equalities.')
             self._constraints = constraints
+
+        # After the constraints, because a value is checked against them, and this branch
+        # assigns `_constraints` directly rather than going through `add_constraint`.
+        if parameter_values is not None:
+            self.update_parameter_values(parameter_values)
 
         self._variable_sanity_check()
 
@@ -188,6 +251,10 @@ class ODESystem(object):
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
+        # After the constraints, so the copy's values are checked against them exactly as
+        # the original's were.  A copy that could not reproduce the original would mean
+        # the original was never valid.
+        system.update_parameter_values(self.parameter_values)
 
         
         return system
@@ -700,7 +767,159 @@ class ODESystem(object):
                 self._add_parameters([init_cond])
 
             self._initial_conditions[variable] = init_cond
-    
+
+
+    @property
+    def parameter_values(self):
+        '''
+        The numeric values of the parameters, for those that are known.
+
+        Returns:
+            dict: {sympy.Symbol: sympy.Expr} for each parameter whose value has been set.
+
+        A parameter is a constant of the model, so its value is true everywhere, which is
+        what makes it a fact the *system* can carry.  That is a different thing from
+        :mod:`desr.numerics`' ``known_values``, which are values of the original symbols
+        at one point on a solution and may name a dependent variable; see
+        :meth:`update_parameter_values`.
+        '''
+        return self._parameter_values.copy()
+
+    def update_parameter_values(self, parameter_values):
+        '''
+        Record numeric values for some of the parameters.
+
+        Args:
+            parameter_values (dict): {parameter: number}.  Keys may be strings.
+
+        Raises:
+            ValueError: If a key is not a parameter, or a value is not a number.
+            ConflictingParameterValues: If the values contradict one of the system's
+                constraints.
+
+        >>> eqns = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+        >>> system = ODESystem.from_equations(eqns)
+        >>> system.update_parameter_values({'c_0': 2})
+        >>> system.parameter_values
+        {c_0: 2}
+
+        >>> system
+        dt/dt = 1
+        dx/dt = c_0*x*y
+        dy/dt = c_1*(1 - x)*(1 - y)
+        parameters: c_0, c_1
+        parameter values: c_0 = 2
+
+        A dependent variable has no single value to record, so it is refused and told
+        where such a value does belong:
+
+        >>> system.update_parameter_values({'x': 2})
+        Traceback (most recent call last):
+            ...
+        ValueError: x is a dependent variable, so it has no one value to record; parameter_values holds constants of the model.  For its value at a point on a solution, pass known_values= to desr.numerics.NumericTranslation.reverse.
+
+        A value is a number.  A relation among parameters is a constraint:
+
+        >>> system.update_parameter_values({'c_1': 'c_0 + 1'})
+        Traceback (most recent call last):
+            ...
+        ValueError: c_0 + 1 is not a number, so it cannot be the value of c_1.  A relation among parameters is a constraint; add it with add_constraint.
+
+        Values are checked against the constraints, in whichever order the two arrive:
+
+        >>> system.add_constraint('c_2', 'c_0 + c_1')
+        >>> system.update_parameter_values({'c_1': 3, 'c_2': 5})
+        >>> try:  # ConflictingParameterValues, which is a ValueError
+        ...     system.update_parameter_values({'c_2': 6})
+        ... except ValueError as caught:
+        ...     print(caught)
+        The constraint c_2 == c_0 + c_1 reads 6 == 5 under the given values, which do not satisfy it.  Values involved: c_0 = 2, c_1 = 3, c_2 = 6.
+
+        The check is the same one whichever of the two arrives second, so a constraint
+        added after the values is refused as well.  It has to relate parameters that are
+        already valued: one naming a new parameter can always be satisfied by choosing
+        that parameter's value, so it says nothing yet.
+
+        >>> try:
+        ...     system.add_constraint('c_1', 'c_0')
+        ... except ValueError as caught:
+        ...     print(caught)
+        The constraint c_1 == c_0 reads 3 == 2 under the given values, which do not satisfy it.  Values involved: c_0 = 2, c_1 = 3.
+        '''
+        new_values = {}
+        for parameter, value in parameter_values.items():
+            if not isinstance(parameter, sympy.Symbol):
+                parameter = to_symbol(parameter)
+
+            if isinstance(value, str):
+                value = sympify_expression(value)
+            else:
+                value = sympy.sympify(value)
+
+            if parameter in self.variables:
+                # The independent variable and the dependents both move, so neither has a
+                # value the system can hold.  Say where a point value does go, because
+                # `known_values` is the next thing such a caller will reach for and the
+                # names are close enough to be mixed up.
+                role = ('the independent variable' if parameter == self.independent_variable
+                        else 'a dependent variable')
+                raise ValueError(
+                    '{} is {}, so it has no one value to record; parameter_values holds '
+                    'constants of the model.  For its value at a point on a solution, '
+                    'pass known_values= to '
+                    'desr.numerics.NumericTranslation.reverse.'.format(parameter, role))
+
+            if parameter not in self.parameters:
+                raise ValueError(
+                    '{} is not a symbol of this system, so there is nothing to give a '
+                    'value to.  Its symbols are {}.'.format(
+                        parameter, ', '.join(map(str, self.symbols))))
+
+            if not value.is_number:
+                raise ValueError(
+                    '{} is not a number, so it cannot be the value of {}.  A relation '
+                    'among parameters is a constraint; add it with '
+                    'add_constraint.'.format(value, parameter))
+
+            new_values[parameter] = value
+
+        # All or nothing: a dict half applied before a later key raised would leave the
+        # system in a state the caller did not ask for and cannot see.
+        candidate = {**self._parameter_values, **new_values}
+        self._check_values_against_constraints(candidate, self.constraints)
+        self._parameter_values = candidate
+
+    def _check_values_against_constraints(self, values, constraints):
+        '''
+        Refuse parameter values that contradict a constraint.
+
+        Only a constraint whose every symbol has a value can be checked; the rest say
+        nothing yet and are left alone.  Both callers pass explicit arguments because each
+        is checking a state the system is not in yet -- :meth:`update_parameter_values` a
+        new set of values against the standing constraints, and :meth:`add_constraint` a
+        new constraint against the standing values.
+
+        Raises:
+            ConflictingParameterValues: If a fully-valued constraint does not hold.
+        '''
+        for eqn in constraints:
+            lhs, rhs = eqn.lhs.subs(values), eqn.rhs.subs(values)
+            if lhs.free_symbols or rhs.free_symbols:
+                continue
+
+            difference = abs(sympy.N(lhs - rhs))
+            scale = max(abs(sympy.N(lhs)), abs(sympy.N(rhs)), 1)
+            if difference / scale <= CONSISTENCY_TOLERANCE:
+                continue
+
+            involved = sorted((symbol for symbol in expressions_to_variables([eqn.lhs, eqn.rhs])
+                               if symbol in values), key=str)
+            raise ConflictingParameterValues(
+                'The constraint {} == {} reads {} == {} under the given values, which do '
+                'not satisfy it.  Values involved: {}.'.format(
+                    eqn.lhs, eqn.rhs, lhs, rhs,
+                    ', '.join('{} = {}'.format(symbol, values[symbol])
+                              for symbol in involved)))
 
     def require_same_unit(self,requirements):
         """
@@ -741,13 +960,15 @@ class ODESystem(object):
         self._requires_same_unit = result
 
 
-    def add_constraint(self, lhs, rhs):
+    def add_constraint(self, lhs, rhs=None):
         '''
         Add constraint that must be obeyed by the system.
 
         Args:
-            lhs (sympy.Expr): The left hand side of the constraint.
-            rhs (sympy.Expr): The right hand side of the constraint.
+            lhs: The left hand side of the constraint, or -- with `rhs` left out -- the
+                whole of it, written the way it is written on paper: a single string
+                ``'K_m = (k_m1 + k_2) / k_1'``, or a :class:`sympy.Eq`.
+            rhs (sympy.Expr, optional): The right hand side of the constraint.
 
         Todo:
             * Finish docstring and tests, here and for: finding scaling symmetries and also translation
@@ -779,7 +1000,26 @@ class ODESystem(object):
         Traceback (most recent call last):
             ...
         ValueError: Cannot express equality constraint with 0. (c_0 == 0)
+
+        One string, written the way the constraint is written on paper, says the same
+        thing as the two sides passed separately:
+
+        >>> system.add_constraint('c_3 = c_0 * c_1')
+        >>> system.constraints[-1]
+        Eq(c_3, c_0*c_1)
+
+        >>> system.add_constraint('c_4 == c_0 - c_1')   # `==` reads the same way
+        >>> system.constraints[-1]
+        Eq(c_4, c_0 - c_1)
+
+        >>> system.add_constraint('c_5 = c_0 = c_1')
+        Traceback (most recent call last):
+            ...
+        ValueError: 'c_5 = c_0 = c_1' has 2 equals signs, so it is not one constraint.  Write one equation, or pass the two sides separately.
         '''
+        if rhs is None:
+            lhs, rhs = _as_constraint_sides(lhs)
+
         if isinstance(lhs, str):
             lhs = sympify_expression(lhs)
         if isinstance(rhs, str):
@@ -796,9 +1036,14 @@ class ODESystem(object):
             raise ValueError('Cannot add constraints involving the dependent variables {}. '.format(dependent_vars) +
                              ' Try to use substitution to incorporate the constraints directly into the system before construction.  (To do this automatically would be small project...')
 
+        # A constraint and the parameter values must agree, and the check is the same one
+        # whichever of them arrives second.
+        constraint = sympy.Eq(lhs, rhs)
+        self._check_values_against_constraints(self._parameter_values, [constraint])
+
         # Only parameters involved, no problem.  update the recorded symbols
         self._add_parameters(new_vars)
-        self._constraints.append(sympy.Eq(lhs, rhs))
+        self._constraints.append(constraint)
 
     def _add_parameters(self, new_vars):
         '''
@@ -1035,6 +1280,8 @@ class ODESystem(object):
         # every expression.
         subs_system = ODESystem(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
+                                parameter_values=self._substituted_parameter_values(
+                                    to_sub, new_vars),
                                 indep_var=self.independent_variable,
                                 constraints=constraints,
                                 is_reduced = self.is_reduced,
@@ -1047,6 +1294,42 @@ class ODESystem(object):
 
         subs_system._variable_sanity_check()
         return subs_system
+
+    def _substituted_parameter_values(self, to_sub, new_vars):
+        '''
+        Carry the known parameter values through a substitution.
+
+        A value belongs to a parameter, so where the substitution renames that parameter
+        the value follows the new name.  Where it replaces the parameter by a number, the
+        two statements are about the same quantity and must agree -- substituting
+        ``c_0 -> 1`` into a system that was told ``c_0 = 2`` is a contradiction, and the
+        quiet answer would be to drop one of them.
+
+        A parameter replaced by an expression, or pruned for appearing nowhere, keeps no
+        value: there is no symbol left to hold it.
+
+        Raises:
+            ConflictingParameterValues: If a substitution contradicts a known value.
+        '''
+        new_vars = set(new_vars)
+        substituted = {}
+        for parameter, value in self._parameter_values.items():
+            replacement = parameter.subs(to_sub)
+
+            if replacement.is_number:
+                difference = abs(sympy.N(replacement - value))
+                scale = max(abs(sympy.N(value)), 1)
+                if difference / scale > CONSISTENCY_TOLERANCE:
+                    raise ConflictingParameterValues(
+                        'Substituting {} -> {} contradicts its known value {} = {}.  '
+                        'Change the value, or substitute the value it has.'.format(
+                            parameter, replacement, parameter, value))
+                continue
+
+            if replacement in new_vars:
+                substituted[replacement] = value
+
+        return substituted
 
     @classmethod
     def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False, parameters=None):
@@ -1169,6 +1452,13 @@ class ODESystem(object):
             lines.append('{} == {}'.format(eqn.lhs, eqn.rhs))
         if self.parameters:
             lines.append('parameters: {}'.format(', '.join(map(str, self.parameters))))
+        # On its own line rather than annotating the one above, so that a system with no
+        # values known prints exactly as it always did.
+        if self._parameter_values:
+            lines.append('parameter values: {}'.format(
+                ', '.join('{} = {}'.format(parameter, self._parameter_values[parameter])
+                          for parameter in self.parameters
+                          if parameter in self._parameter_values)))
         return '\n'.join(lines)
 
     def to_tex(self):

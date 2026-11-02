@@ -18,6 +18,20 @@ from sympy.abc import _clash1, _clash2
 #: unless told otherwise.
 SYMBOL_CLASHES = dict(_clash1, **_clash2)
 
+#: How close two floating-point values must be to count as the same one.
+#:
+#: Shared by the symbolic and the numeric half of the library, which both have to decide
+#: whether two numbers agree: :meth:`desr.ode_system.ODESystem.update_parameter_values`
+#: checks a value against the system's constraints, and :mod:`desr.numerics` checks an
+#: over-determined set of known values against itself.  One constant, because a value the
+#: system accepted and the numerics then rejected would be a contradiction the caller
+#: could do nothing about.
+#:
+#: It lives here, rather than in :mod:`desr.numerics` where it was first written, because
+#: that module needs numpy and :mod:`desr.ode_system` must not.  It is still reachable as
+#: ``desr.numerics.CONSISTENCY_TOLERANCE``.
+CONSISTENCY_TOLERANCE = 1e-6
+
 
 def sympify_expression(expr, numeric=()):
     '''
