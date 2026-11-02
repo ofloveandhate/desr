@@ -113,6 +113,61 @@ class TestDelimitersAndFractions(TestCase):
         self.assertEqual(tex_to_sympy_one_line(r'V_{25}'), sympy.Symbol('V_25'))
 
 
+class TestLinesThatCollapse(TestCase):
+    '''
+    An equation whose two sides are already comparable is not an equation: sympy.Eq
+    evaluates it to a boolean.  Such a line states nothing about any system, and the
+    reason it happened is almost always that it was not read the way it was written --
+    the implicit-multiplication rule turns `x(0)` into `x*0`.  Returning the boolean
+    loses the line, so these raise.
+    '''
+
+    DYNAMIC = '\n'.join([r'\frac{d}{dt}x &= k_1 - k_2 x \\',
+                         r'\frac{d}{dt}y &= k_2 x - k_3 y'])
+
+    def test_an_initial_condition_of_zero_is_refused_rather_than_dropped(self):
+        # `x(0)` becomes `x*0`, so the line reads `0 = 0`.  It used to come back as
+        # sympy.true and vanish from the list of equations entirely.
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'x\left(0\right) &= 0')
+        message = str(caught.exception)
+        self.assertIn('true whatever the symbols stand for', message)
+        self.assertIn('update_initial_conditions', message)
+
+    def test_a_nonzero_initial_condition_still_gets_through_as_a_relation(self):
+        # Only the lines that collapse are caught here.  `x(0) = x_0` reads as
+        # `x*0 = x_0`, which is a real equation -- a false one -- so it survives parsing
+        # and arrives at add_constraint as `0 == x_0`.  Recognising it needs the line to
+        # be read as an initial condition before implicit multiplication runs.
+        self.assertEqual(tex_to_sympy_one_line(r'x\left(0\right) &= x_0'),
+                         sympy.Eq(sympy.Integer(0), sympy.Symbol('x_0')))
+
+    def test_a_tautology_is_refused(self):
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'k_1 &= k_1')
+        self.assertIn('nothing about the system', str(caught.exception))
+
+    def test_a_falsehood_says_so(self):
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'0 &= 1')
+        self.assertIn('no system satisfies it', str(caught.exception))
+
+    def test_from_tex_reports_it_instead_of_an_attribute_error(self):
+        # from_tex asked the boolean for its `.lhs`, so the whole build died with
+        # `'BooleanTrue' object has no attribute 'lhs'`.
+        with self.assertRaises(TexParseError):
+            ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'x\left(0\right) &= 0')
+
+    def test_a_real_equation_is_untouched(self):
+        x = sympy.Symbol('x')
+        self.assertEqual(tex_to_sympy_one_line(r'k_4 &= k_1 + x'),
+                         sympy.Eq(sympy.Symbol('k_4'), sympy.Symbol('k_1') + x))
+
+    def test_a_line_that_is_not_an_equation_is_untouched(self):
+        self.assertEqual(tex_to_sympy_one_line(r'k_{-1} C'),
+                         sympy.Symbol('k_m1') * sympy.Symbol('C'))
+
+
 class TestDerivativeNotation(TestCase):
     ''' Both ways a paper writes a derivative. '''
 

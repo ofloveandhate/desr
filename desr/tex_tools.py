@@ -324,11 +324,38 @@ def _parse_normalised(tex, primes):
         lhs, rhs = sides
         if primes == 'derivative':
             return _parse_prime_equation(lhs, rhs)
-        return sympy.Eq(_parse_side(lhs, primes), _parse_side(rhs, primes))
+        return _equation(_parse_side(lhs, primes), _parse_side(rhs, primes), tex)
     if len(sides) != 1:
         raise TexParseError('Too many = in {}.'.format(tex))
 
     return _parse_side(tex, primes)
+
+
+def _equation(lhs, rhs, tex):
+    '''
+    Build an equation, refusing one that has already collapsed to a boolean.
+
+    :func:`sympy.Eq` evaluates when it can, so a line whose two sides came out identical
+    is :data:`sympy.true` and not an equation at all.  Such a line says nothing about the
+    system, and in practice it means the line was not read the way it was written -- a
+    name against a parenthesis is multiplication here, so ``x(0) = 0`` arrives as
+    ``x*0 = 0``.  Handing the boolean back loses the line, and the caller then asks a
+    boolean for its ``lhs``.
+    '''
+    equation = sympy.Eq(lhs, rhs)
+    if isinstance(equation, sympy.Eq):
+        return equation
+
+    # Eq evaluated, so the line is true or false on its own and states nothing about any
+    # system.  Say what it was read as, because the reading is the surprising part.
+    complaint = ('is true whatever the symbols stand for, so it says nothing about the '
+                 'system' if equation else
+                 'is false whatever the symbols stand for, so no system satisfies it')
+    raise TexParseError(
+        '{!r} was read as `{} = {}`, which {}.  A name against a parenthesis is '
+        'multiplication -- desr has no function-valued variables -- so `x(0)` reads as '
+        '`x*0`.  An initial condition is set with '
+        'ODESystem.update_initial_conditions.'.format(tex.strip(), lhs, rhs, complaint))
 
 
 def _parse_prime_equation(lhs, rhs):
@@ -345,7 +372,8 @@ def _parse_prime_equation(lhs, rhs):
             raise TexParseError(
                 "primes='derivative' can only read a prime on a bare variable, not in "
                 "{!r}.".format(lhs.strip()))
-        return sympy.Eq(_parse_side(lhs, 'derivative'), _parse_side(rhs, 'derivative'))
+        return _equation(_parse_side(lhs, 'derivative'), _parse_side(rhs, 'derivative'),
+                         '='.join((lhs, rhs)))
 
     name, marks = match.groups()
     if len(marks) > 1:
@@ -354,8 +382,8 @@ def _parse_prime_equation(lhs, rhs):
             "If the primes are part of the variable's name, parse with "
             "primes='name'.".format(name, marks))
 
-    return sympy.Eq(sympy.Derivative(to_symbol(name), to_symbol(PRIME_INDEP_VAR)),
-                    _parse_side(rhs, 'derivative'))
+    return _equation(sympy.Derivative(to_symbol(name), to_symbol(PRIME_INDEP_VAR)),
+                     _parse_side(rhs, 'derivative'), '='.join((lhs, rhs)))
 
 
 def _parse_side(tex, primes):
