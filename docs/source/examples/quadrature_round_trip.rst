@@ -2,7 +2,7 @@ Recovering auxiliary variables by quadrature
 ============================================
 
 One reason to do a scaling symmetry reduction is to produce a system with fewer symbols.  An application that solves a system thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
-:meth:`~desr.ode_translation.ODETranslation.translate_general` offers
+:meth:`~desr.ode_translation.ODETranslator.translate_general` offers
 ``include_aux_vars=False`` for exactly that: it returns the invariants and reduced equations, and throws
 auxiliary variables away.
 
@@ -60,7 +60,7 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
-    >>> from desr.numerics import NumericTranslation
+    >>> from desr import NumericTranslation
 
     >>> eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
     >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
@@ -70,28 +70,22 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
 And nondimensionalize.
 
-    >>> translation = ODETranslation.from_ode_system(system)
-    >>> translation.invariants()
-    Matrix([[t*z1**3, z1**5*z2]])
-    >>> translation.auxiliaries()
-    Matrix([[z1**4*z2]])
+    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator.invariant_monomials()
+    Matrix([[t*z1**3, z1**2*z2/t]])
+    >>> translator.auxiliary_monomials()
+    Matrix([[t*z1**2]])
 
 Hubert-Labahn has :math:`y_1 = t z_1^3`, :math:`y_2 = z_1^2 z_2 / t` and the auxiliary
-:math:`t z_1^2`.  Those are products of integer powers of desr's invariants, and correspondingly, desr's of theirs.  
-HL's :math:`y_2` is desr's :math:`z_1^5 z_2 / (t z_1^3)`; two column operations on the Hermite multiplier move
-desr onto the paper's basis, so that everything below can be compared with p. 504 directly.
-
-    >>> translation.multiplier_add_columns(2, 1, -1)   # y2  <-  y2 / y1
-    >>> translation.multiplier_add_columns(0, 2, -1)   # x   <-  x / y2
-    >>> translation.invariants()
-    Matrix([[t*z1**3, z1**2*z2/t]])
-    >>> translation.auxiliaries()
-    Matrix([[t*z1**2]])
+:math:`t z_1^2`, which is what desr computes, so everything below can be compared with
+p. 504 directly.  Any other choice of basis would be a product of integer powers of these,
+and equally valid; :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns` is how
+one moves between such choices.
 
 Reducing the usual way keeps the auxiliary :math:`x_0` as a variable of the reduced system,
 and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
 
-    >>> translation.translate_general(system)
+    >>> translator.translate_general(system)
     dt/dt = 1
     dx0/dt = x0*(2*y0*y1/3 - 1/3)/t
     dy0/dt = y0*(y0*y1 - 1)/t
@@ -100,7 +94,7 @@ and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:
 Notably for this page's teaching mission, :math:`x_0` appears nowhere but in its own equation -- it's an auxiliary.
 Asking for the invariants alone drops it, leaving one fewer equation to integrate:
 
-    >>> reduced_system = translation.translate_general(system, include_aux_vars=False)
+    >>> reduced_system = translator.translate_general(system, include_aux_vars=False)
     >>> reduced_system
     dt/dt = 1
     dy0/dt = y0*(y0*y1 - 1)/t
@@ -113,9 +107,9 @@ Construct a `NumericTranslation`
 :class:`~desr.numerics.NumericTranslation` is happy to work with a reduction with its auxiliaries
 dropped.  We do need to pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
 
-    >>> numeric_translation = NumericTranslation(system, translation, reduced_system)
+    >>> numeric_translation = NumericTranslation(system, translator, reduced_system)
     >>> numeric_translation.scheme
-    Scheme.GENERAL
+    ReductionScheme.GENERAL
     >>> numeric_translation.carries_auxiliaries
     False
     >>> numeric_translation.r
@@ -152,10 +146,10 @@ the constants used below --
 Write these down and check that they satisfy the system desr produced, which is the most
 direct confirmation that the two reductions are the same.
 
-    >>> t, z1, z2 = system.variables
-    >>> y0, y1 = numeric_translation.invariant_variables
-    >>> with_aux = translation.translate_general(system)
-    >>> x0 = with_aux.variables[1]
+    >>> t, z1, z2 = system.symbols
+    >>> y0, y1 = numeric_translation.invariant_names
+    >>> with_aux = translator.translate_general(system)
+    >>> x0 = with_aux.symbols[1]
     >>> c1, c2, c3 = sympy.symbols('c1 c2 c3')
     >>> L = sympy.log(c1 - t) - sympy.log(t) + c2
     >>> exact = {x0: c3 / (t**sympy.Rational(1, 3) * L**sympy.Rational(2, 3)),
@@ -192,7 +186,7 @@ Solving the reduced system
 Solve the two-equation system numerically.  We use sympy to turn the symbolic differential equations into numpy callables, so that scipy can integrate.
 
     >>> def as_function(a_system):
-    ...     variables = list(a_system.non_constant_variables)
+    ...     variables = list(a_system.dependents)
     ...     rhs = [a_system.derivative_dict[x] for x in variables]
     ...     return sympy.lambdify([a_system.indep_var, variables], rhs, modules='numpy')
 
@@ -251,7 +245,7 @@ invariants wherever it likes.)
     ...                             invariants_at=solution.sol)
 
 Hubert-Labahn reverse-translates the exact solution, and desr's symbolic
-:meth:`~desr.ode_translation.ODETranslation.reverse_translate_general` does the same
+:meth:`~desr.ode_translation.ODETranslator.reverse_translate_general` does the same
 computation: it rebuilds :math:`z_1` and :math:`z_2` from :math:`x`, :math:`y_1` and
 :math:`y_2`, then rescales time by a constant that the arbitrary :math:`c_i` leave free --
 here :math:`c_3^3 / c_1^2`.  With the constants fixed by our starting point that factor is
@@ -259,7 +253,7 @@ exactly :math:`1`.
 
     >>> sympy.simplify(constants[c3]**3 / constants[c1]**2)
     1
-    >>> z1_exact, z2_exact = translation.reverse_translate_general(
+    >>> z1_exact, z2_exact = translator.reverse_translate_general(
     ...     (t, exact[x0], exact[y0], exact[y1]))
     >>> z1_exact = sympy.lambdify(t, z1_exact.subs(constants), modules='numpy')
     >>> z2_exact = sympy.lambdify(t, z2_exact.subs(constants), modules='numpy')

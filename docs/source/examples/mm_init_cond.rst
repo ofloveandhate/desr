@@ -28,8 +28,10 @@ After using the law of mass action, we are able to translate to the ODE system
     \begin{align}
     \frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\
     \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c \\
-    s(0) &= s_0.
+    s(0) &= s_0, & c(0) &= 0.
     \end{align}
+
+Both initial conditions are part of the model: the complex starts at nothing.
 
 
 
@@ -46,61 +48,86 @@ Add the constraint with the Michaelis-Menten constant :math:`K_m = k_2 + k_{-1}`
     
     >>> system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
 
-To match the analysis in Murray, We need to add in our initial condition for :math:`s`.
+To match the analysis in Murray, we need our initial conditions.  Both of them: the
+substrate starts at :math:`s_0`, and the complex starts at nothing.
 
-    >>> system.update_initial_conditions({'s': 's_0'})
+    >>> system.update_initial_conditions(['s(0) = s_0', 'c(0) = 0'])
+    >>> system.initial_conditions
+    {s: s_0, c: c_0}
 
+A number still carries units in a system that has not been reduced -- a zero concentration
+is a concentration -- so it is recorded as the *value* of a symbol, and the symbol is what
+carries the units into the scaling.  The name is inferred from the variable's:
+
+    >>> system.initial_condition_values
+    {c: 0}
+
+Reading the two together: :math:`c(0)` is :math:`c_0`, and :math:`c_0` is zero.
+
+Choose the variable order.  :math:`c_0` goes towards the back, which is the end that is
+*kept*: the front is the end that gets scaled by, and a quantity known to be zero must not
+be scaled by.
+
+    >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
+
+Now the exponent matrix can be read against that order: one row per variable, in the order
+just chosen, and one column per monomial appearing in the system.
 
     >>> system.exponent_matrix()
     Matrix([
-    [1, 1, 1,  1, 1, 1,  1,  0,  0,  0],
-    [0, 0, 0, -1, 0, 1,  1,  0,  0,  0],
-    [1, 0, 0,  1, 0, 0, -1,  1,  0,  0],
-    [0, 0, 0,  1, 1, 0,  0,  0,  0,  0],
-    [1, 0, 0,  1, 1, 1,  0,  0,  1,  0],
-    [0, 1, 0,  0, 0, 0,  0,  0,  0,  1],
-    [0, 0, 1,  0, 0, 0,  1,  0, -1, -1],
-    [0, 0, 0,  0, 0, 0,  0,  0,  1,  0],
-    [0, 0, 0,  0, 0, 0,  0, -1,  0,  0]])
+    [0, 0,  0, 0, 0, 0,  0, -1,  0,  0,  0],
+    [1, 0,  0, 0, 0, 0,  1,  0,  0,  0,  0],
+    [1, 1,  0, 1, 0, 0,  1,  0,  0,  1,  0],
+    [0, 0,  0, 0, 1, 0,  0,  0,  0,  0,  1],
+    [0, 0,  1, 0, 0, 1,  0,  0,  0, -1, -1],
+    [0, 0,  0, 0, 0, 0,  0,  0,  0,  1,  0],
+    [0, 0,  0, 0, 0, 0,  0,  0, -1,  0,  0],
+    [1, 1,  1, 1, 1, 1,  1,  0,  0,  0,  0],
+    [0, 0, -1, 1, 0, 0,  1,  1,  0,  0,  0],
+    [0, 1,  1, 0, 0, 0, -1,  0,  1,  0,  0]])
 
+Compute the reduced system by making an `ODETranslator` from the original system,
 
+The reduced parameters are named :math:`\kappa_i`.  Here :math:`c` is a dependent variable
+and its initial value is :math:`c_0`, which a parameter named :math:`c_0` would be hard to
+read beside.
 
-
-Choose the variable order.
-
-    >>> system.reorder_variables(['t', 's', 'c', 'K_m', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
-
-Compute the reduced system by making an `ODETranslation` from the original system,
-
-    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('t',['s','c'], 'c'))
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 't', 'dependents': ['s','c']})
 
 Optionally, observe some properties.  First, the scaling matrix :math:`A`:
 
-    >>> translation.scaling_matrix
+    >>> translator.scaling_matrix
     Matrix([
-    [1, 0, 0, 0, -1, -1, -1, 0, 0],
-    [0, 1, 1, 1,  0,  0, -1, 1, 1]])
+    [0, 0, -1, -1, -1, 0, 0, 1, 0, 0],
+    [1, 1, -1,  0,  0, 1, 1, 0, 1, 1]])
 
 The corresponding scaling invariants:
 
-    >>> translation.invariants()
-    Matrix([[k_1*s_0*t, s/s_0, c/s_0, K_m/s_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    >>> translator.invariant_monomials()
+    Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, c_0/s_0, k_1*s_0*t, s/s_0, c/s_0]])
 
 These don't match those from Murray, but they are very close.   We'll recover it next.
 
+The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
+among them.
+
+    >>> translator.symbols_that_must_not_be_zero()
+    (s_0, k_1)
 
 Just for curiosity, here's what we get if we translate the system at this point:
 
-    >>> translation.translate(system)
+    >>> translator.translate(system)
     dt/dt = 1
-    dc/dt = -c*c1 - c*c2 - c*s + c3*s
-    ds/dt = c*c1 + c*s - c3*s
-    dc1/dt = 0
-    dc2/dt = 0
-    dc3/dt = 0
-    dc0/dt = 0
+    dc/dt = -c*kappa1 - c*kappa2 - c*s + kappa0*s
+    ds/dt = c*kappa2 + c*s - kappa0*s
+    c(0) = kappa4
     s(0) = 1
-    c0 == c1 + c2
+    kappa3 == kappa1 + kappa2
+    parameters: kappa0, kappa1, kappa2, kappa3, kappa4
+    parameter values: kappa4 = 0
+
+:math:`\kappa_4` is :math:`c_0/s_0`, so it is zero as well: the complex starts at nothing
+in the reduced system too.
 
 Column operations to match the canonical system
 *************************************************
@@ -111,56 +138,85 @@ Returning back to the original system with initial conditions,
     dt/dt = 1
     ds/dt = c*k_1*s + c*k_m1 - e_0*k_1*s
     dc/dt = -c*k_1*s - c*k_2 - c*k_m1 + e_0*k_1*s
-    dK_m/dt = 0
-    dk_m1/dt = 0
-    dk_2/dt = 0
-    dk_1/dt = 0
-    de_0/dt = 0
-    ds_0/dt = 0
     s(0) = s_0
+    c(0) = c_0
     K_m == (k_2 + k_m1)/k_1
-    >>> translation = ODETranslation.from_ode_system(system, naming_scheme=('tau',['u','v'], 'c'))
+    parameters: s_0, e_0, k_1, k_2, k_m1, K_m, c_0
+    parameter values: c_0 = 0
+    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['u','v']})
 
 Do some column operations on the Hermite multiplier
 
-    >>> translation.multiplier_add_columns(2, 8, 1)  # Scale time by e_0 not s_0
-    >>> translation.multiplier_add_columns(4, 8, -1)  # Scale c by e_0
+Rather than writing the column numbers in directly, ask which column holds which invariant.
+The numbers are the same, and still worth knowing -- but now they are derived on the page
+instead of appearing from nowhere.
+
+    >>> clock = translator.column_of('k_1*s_0*t')
+    >>> scale = translator.column_of('e_0/s_0')
+    >>> concentration = translator.column_of('c/s_0')
+    >>> clock, scale, concentration
+    (7, 2, 9)
+
+    >>> translator.multiplier_add_columns(clock, scale)  # Scale time by e_0 not s_0
+    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0
 
 Optionally, see the invariants and substitutions
 
-    >>> translation.invariants()
-    Matrix([[e_0*k_1*t, s/s_0, c/e_0, K_m/s_0, k_m1/(k_1*s_0), k_2/(k_1*s_0), e_0/s_0]])
+    >>> translator.invariant_monomials()
+    Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, c_0/s_0, e_0*k_1*t, s/s_0, c/e_0]])
 
 We have substitutions to make.  Note that many get normalized to :math:`1`.
 
-    >>> translation.translate_parameter_substitutions(system)
-    {t: tau/c3, s: u, c: c3*v, K_m: c0, k_m1: c1, k_2: c2, k_1: 1, e_0: c3, s_0: 1}
+    >>> translator.translate_parameter_substitutions(system)
+    {s_0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, K_m: kappa3, c_0: kappa4, t: tau/kappa0, s: u, c: kappa0*v}
 
 Translate
 
-    >>> reduced_system = translation.translate(system)
+    >>> reduced_system = translator.translate(system)
     >>> reduced_system
     dtau/dtau = 1
-    du/dtau = c1*v + u*v - u
-    dv/dtau = -c1*v/c3 - c2*v/c3 - u*v/c3 + u/c3
-    dc1/dtau = 0
-    dc2/dtau = 0
-    dc3/dtau = 0
-    dc0/dtau = 0
+    du/dtau = kappa2*v + u*v - u
+    dv/dtau = -kappa1*v/kappa0 - kappa2*v/kappa0 - u*v/kappa0 + u/kappa0
     u(0) = 1
-    c0 == c1 + c2
+    v(0) = kappa4/kappa0
+    kappa3 == kappa1 + kappa2
+    parameters: kappa0, kappa1, kappa2, kappa3, kappa4
+    parameter values: kappa4 = 0
+
+The complex is now measured in units of the enzyme, so :math:`v(0)` is a ratio of two
+reduced parameters.  It is zero for any :math:`\kappa_0`, since :math:`\kappa_4` is zero.
+An initial condition can be read as its expression or as its value:
+
+    >>> reduced_system.initial_condition_values
+    {u: 1, v: 0}
 
 Now we have a system, but the names of symbols don't match.  We'll do substitutions.
-    
-    >>> to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
-    >>> reduced_system.diff_subs(to_sub, subs_constraints=True)
+Murray has no name for :math:`\kappa_4`, because he sets it to zero; :math:`\gamma` until
+we do the same.
+
+    >>> to_sub =  {'kappa0': 'epsilon', 'kappa1': 'L', 'kappa2':'K-L', 'kappa3':'K', 'kappa4': 'gamma'}
+    >>> reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
+    >>> reduced_system
     dtau/dtau = 1
     du/dtau = K*v - L*v + u*v - u
     dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
-    dK/dtau = 0
-    dL/dtau = 0
-    depsilon/dtau = 0
     u(0) = 1
+    v(0) = gamma/epsilon
+    parameters: K, L, epsilon, gamma
+    parameter values: gamma = 0
+
+Murray writes three groups, not four, because he sets the initial complex to zero.
+Substituting the value the system holds for :math:`\gamma` does the same, and the group
+goes with it.  Substituting any other value is refused, since it would contradict
+:math:`c(0) = 0`.
+
+    >>> reduced_system.subs({'gamma': 0})
+    dtau/dtau = 1
+    du/dtau = K*v - L*v + u*v - u
+    dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
+    u(0) = 1
+    v(0) = 0
+    parameters: K, L, epsilon
 
 The only step that `desr` cannot do is multiply :math:`\frac{dv}{d\tau}` by :math:`\epsilon`.  That has to be done by hand.  And finally we have the result from :cite:`murray` (6.13).
 

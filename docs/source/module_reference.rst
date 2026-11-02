@@ -62,10 +62,3 @@ desr.tex_tools module
     :undoc-members:
     :show-inheritance:
 
-desr.unittests module
----------------------
-
-.. automodule:: desr.unittests
-    :members:
-    :undoc-members:
-    :show-inheritance:

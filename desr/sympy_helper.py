@@ -9,6 +9,99 @@ Author: Richard Tanburn (richard.tanburn@gmail.com)
 import fractions
 import re
 import sympy
+from sympy.abc import _clash1, _clash2
+
+#: Names sympy would otherwise read as something other than a symbol.  `_clash1` holds the
+#: single letters -- `E I N O Q S` -- and `_clash2` the multi-letter ones -- `beta gamma
+#: pi zeta`.  A modeller writing `dS/dt = -beta*S*I` means five symbols, not Euler's
+#: number, the imaginary unit and two sympy functions, so desr reads every name as a symbol
+#: unless told otherwise.
+SYMBOL_CLASHES = dict(_clash1, **_clash2)
+
+#: How close two floating-point values must be to count as the same one.
+#:
+#: Shared by the symbolic and the numeric half of the library, which both have to decide
+#: whether two numbers agree: :meth:`desr.ode_system.ODESystem.update_parameter_values`
+#: checks a value against the system's constraints, and :mod:`desr.numerics` checks an
+#: over-determined set of known values against itself.  One constant, because a value the
+#: system accepted and the numerics then rejected would be a contradiction the caller
+#: could do nothing about.
+#:
+#: It lives here, rather than in :mod:`desr.numerics` where it was first written, because
+#: that module needs numpy and :mod:`desr.ode_system` must not.  It is still reachable as
+#: ``desr.numerics.CONSISTENCY_TOLERANCE``.
+CONSISTENCY_TOLERANCE = 1e-6
+
+
+def sympify_expression(expr, numeric=()):
+    '''
+    Sympify a user-supplied expression, reading every name as a symbol.
+
+    This is the one place desr turns text into sympy, so that a name means the same thing
+    whichever way it entered: through :meth:`~desr.ode_system.ODESystem.from_tex`, through
+    an initial condition, through a constraint, or through
+    :mod:`desr.numerics`.
+
+    Args:
+        expr: A string, or anything else sympify accepts.  Non-strings are passed straight
+            through, so an expression that is already sympy is untouched.
+        numeric (iter of str): Names to leave with their usual sympy meaning instead of
+            reading them as symbols.  `numeric=['pi']` is the way to write 3.14159 as
+            `pi`; without it, `pi` is a parameter like any other.
+
+    Returns:
+        sympy.Expr
+
+    >>> sympify_expression('beta*S*I')
+    I*S*beta
+    >>> sorted(sympify_expression('beta*S*I').free_symbols, key=str)
+    [I, S, beta]
+
+    Left to itself sympy reads `beta` as a function and the expression does not parse at
+    all.  `pi` is worse, because it parses and quietly loses the symbol:
+
+    >>> sympy.sympify('pi*x').free_symbols
+    {x}
+
+    So `pi` is a symbol here too, unless it is asked for as a number:
+
+    >>> sympify_expression('pi*x')
+    pi*x
+    >>> sympify_expression('pi*x').free_symbols == {sympy.Symbol('pi'), sympy.Symbol('x')}
+    True
+    >>> sympify_expression('pi*x', numeric=['pi'])
+    pi*x
+    >>> sympify_expression('pi*x', numeric=['pi']).free_symbols
+    {x}
+    '''
+    if not isinstance(expr, str):
+        return sympy.sympify(expr)
+    locals_ = {name: symbol for name, symbol in SYMBOL_CLASHES.items()
+               if name not in set(numeric)}
+    return sympy.sympify(expr, locals=locals_)
+
+
+def to_symbol(name, numeric=()):
+    '''
+    Turn a single user-supplied name into a symbol, by the same convention as
+    :func:`sympify_expression`.
+
+    Args:
+        name: A string, or a sympy object, which is returned unchanged.
+        numeric (iter of str): As :func:`sympify_expression`.
+
+    Returns:
+        sympy.Symbol
+
+    >>> to_symbol('S')
+    S
+    >>> to_symbol('S') == sympy.Symbol('S')
+    True
+    >>> to_symbol('beta') == sympy.Symbol('beta')
+    True
+    '''
+    return sympify_expression(name, numeric=numeric)
+
 
 def is_monomial(expr):
    ''' Determine whether expr is a monomial

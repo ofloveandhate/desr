@@ -12,6 +12,9 @@ numpy
 scipy
 matplotlib
 
+# Test runner
+pytest
+
 # Sphinx dependencies
 Sphinx
 sphinxcontrib-bibtex
