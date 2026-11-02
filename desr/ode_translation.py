@@ -1297,23 +1297,39 @@ class ODETranslator(object):
         # Last, because a value is checked against the constraints just added, and because
         # it is derived from everything above rather than carried through it.
         reduced_system.update_parameter_values(
-            self._propagated_parameter_values(system, reduced_system))
+            self._propagated_parameter_values(system, reduced_system,
+                                              ReductionScheme.PARAMETER))
 
         self._refuse_name_clashes(system, reduced_system)
         return reduced_system
 
-    def _propagated_parameter_values(self, system, reduced_system):
+    def _propagated_parameter_values(self, system, reduced_system, scheme,
+                                     include_aux_vars=True):
         '''
         The values of the reduced system's parameters, worked out from the original's.
 
-        A reduced parameter is an invariant, and an invariant is a monomial in the original
-        symbols, so its value is known exactly when every symbol in that monomial is --
-        which makes this a derived fact rather than one the caller restates.  It is how a
-        value of zero reaches the reduced system: the parameter whose monomial has the
-        zero-valued symbol in its numerator is itself zero.
+        Every symbol of a reduced system stands for a monomial in the original symbols, so
+        its value is known exactly when that monomial's is -- which makes this a derived
+        fact rather than one the caller restates.  It is how a value of zero reaches the
+        reduced system: the parameter whose monomial holds the zero-valued symbol in its
+        numerator is itself zero.
+
+        Read off :meth:`named_symbols` rather than by pairing names with monomials here,
+        because that pairing is the one thing which differs between the three schemes --
+        the parameter scheme has only invariants, while the other two keep the clock and
+        then the auxiliaries.  One place gets that right and everything else asks it.
+
+        `scheme` is passed rather than inferred: a caller may reach for
+        :meth:`translate_general` on a system that :meth:`scheme` would answer
+        ``PARAMETER`` for, and then the names would be the wrong ones.
+
+        Only reduced *parameters* are given values.  The clock and the dependents are
+        variables, so a value for one would be a category error -- and a known zero can
+        settle a monomial that names a dependent, so they have to be filtered rather than
+        assumed to come out unknown.
 
         Nothing divides by zero here, because :meth:`_refuse_zero_scales` has already
-        refused a zero value for any symbol that appears in a denominator.
+        refused a zero value for any symbol a denominator names.
 
         Returns:
             dict: {reduced parameter: value}, for those that are known.
@@ -1324,8 +1340,8 @@ class ODETranslator(object):
 
         parameters = set(reduced_system.parameters)
         propagated = {}
-        for name, monomial in zip(self.invariant_names(system),
-                                  self.invariant_monomials()):
+        for name, monomial in self.named_symbols(system, scheme,
+                                                 include_aux_vars).items():
             if name not in parameters:
                 continue
             value = monomial.subs(values)
@@ -1356,11 +1372,6 @@ class ODETranslator(object):
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
-        if system.parameter_values:
-            # Refused rather than dropped.  Propagating them means pairing reduced
-            # parameters with the monomials they stand for, and this scheme's symbols are
-            # not laid out the way `translate_parameter`'s are.
-            raise NotImplementedError('`translate_dep_var` not yet implemented for systems with parameter values')
         # First check that our scaling action doesn't act on the independent variable
         if self.n == len(system.symbols):
             if not self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix:
@@ -1430,6 +1441,9 @@ class ODETranslator(object):
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names)
         reduced = _rename_indep_var(reduced, scheme['independent'])
+        reduced.update_parameter_values(
+            self._propagated_parameter_values(system, reduced,
+                                              ReductionScheme.DEP_VAR))
         self._refuse_name_clashes(system, reduced)
         return reduced
 
@@ -1476,9 +1490,6 @@ class ODETranslator(object):
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
-        if system.parameter_values:
-            # See `translate_dep_var`: refused rather than dropped.
-            raise NotImplementedError('General translation not yet implemented for systems with parameter values')
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
@@ -1537,6 +1548,10 @@ class ODETranslator(object):
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names if include_aux_vars else ())
         reduced = _rename_indep_var(reduced, scheme['independent'])
+        reduced.update_parameter_values(
+            self._propagated_parameter_values(system, reduced,
+                                              ReductionScheme.GENERAL,
+                                              include_aux_vars))
         self._refuse_name_clashes(system, reduced)
         return reduced
 

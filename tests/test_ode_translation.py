@@ -791,23 +791,60 @@ class TestParameterValuesThroughTranslation(TestCase):
         reduced = ODETranslator.from_ode_system(system).translate(system)
         self.assertTrue(set(reduced.parameter_values) <= set(reduced.parameters))
 
-    def test_the_general_scheme_refuses_rather_than_dropping(self):
-        # Called directly, since `translate` would pick the parameter scheme here.  The
-        # point is that a value is never silently lost.
+    def test_the_general_scheme_propagates_too(self):
+        # Called directly, since `translate` would pick the parameter scheme here.  Every
+        # symbol of a reduced system stands for a monomial whatever the scheme, so there is
+        # nothing scheme-specific about knowing its value.
         system = self.system()
-        system.update_parameter_values({'k_m1': 3})
-        translator = ODETranslator.from_ode_system(system)
-        with self.assertRaises(NotImplementedError) as caught:
-            translator.translate_general(system)
-        self.assertIn('parameter values', str(caught.exception))
+        system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
+        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        # y0 = k_2/(e_0*k_1) = 3/10
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('y0')],
+                         sympy.Rational(3, 10))
 
-    def test_the_dependent_variable_scheme_refuses_rather_than_dropping(self):
+    def test_the_general_scheme_values_its_auxiliaries(self):
+        # An auxiliary is free as far as the reduced *dynamics* go, but it still denotes a
+        # monomial, so these values are the ones this particular original system has.
         system = self.system()
-        system.update_parameter_values({'k_m1': 3})
+        system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
+        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('x1')],   # x1 = e_0
+                         sympy.Integer(5))
+
+    def test_dropping_the_auxiliaries_drops_their_values(self):
+        system = self.system()
+        system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
+        reduced = ODETranslator.from_ode_system(system).translate_general(
+            system, include_aux_vars=False)
+        self.assertNotIn(sympy.Symbol('x1'), reduced.parameter_values)
+        self.assertIn(sympy.Symbol('y0'), reduced.parameter_values)
+
+    def test_the_dependent_variable_scheme_propagates_too(self):
+        system = ODESystem.from_equations(['dz1/dt = a*z1*(1+z1*z2)',
+                                           'dz2/dt = z2*(1/t - z1*z2)'])
+        system.update_parameter_values({'a': 7})
         translator = ODETranslator.from_ode_system(system)
-        with self.assertRaises(NotImplementedError) as caught:
-            translator.translate_dep_var(system)
-        self.assertIn('parameter values', str(caught.exception))
+        self.assertEqual(translator.scheme(system), ReductionScheme.DEP_VAR)
+        reduced = translator.translate_dep_var(system)
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('y0')],
+                         sympy.Integer(7))
+
+    def test_every_scheme_values_exactly_its_known_parameters(self):
+        # The invariant across all three: a reduced parameter has a value exactly when the
+        # monomial it stands for does, and nothing else is given one.
+        system = self.system()
+        system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
+        translator = ODETranslator.from_ode_system(system)
+        for name, reduce in [(ReductionScheme.PARAMETER,
+                              translator.translate_parameter),
+                             (ReductionScheme.GENERAL,
+                              translator.translate_general)]:
+            with self.subTest(scheme=name):
+                reduced = reduce(system)
+                named = translator.named_symbols(system, name)
+                expected = {symbol for symbol in reduced.parameters
+                            if system.value_of(named[symbol]) is not None}
+                self.assertEqual(set(reduced.parameter_values), expected)
 
 
 class TestGeneratedNameClashes(TestCase):
