@@ -149,13 +149,10 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
-# CI builds the HTML with -W, so a warning fails the build.  One warning is deliberate and
-# has to be excused: `intro.rst` cites `ArxivLinkHere`, a placeholder for the preprint's
-# key, which cannot resolve until the preprint is posted.
-#
-# **Delete this line when the arXiv entry exists and the real key replaces the
-# placeholder.**  Leaving it in longer than that would hide a genuinely missing citation.
-suppress_warnings = ['bibtex.key_not_found']
+# Nothing is suppressed.  `bibtex.key_not_found` used to be, to excuse the placeholder key
+# `ArxivLinkHere` that stood in for the preprint before it was posted; the preprint is
+# `Tanburn2025` now, so a missing citation key fails the `-W` build again, which is the
+# point of building with `-W`.
 
 # -- Options for doctest ----------------------------------------------
 # Import files for  doctests
