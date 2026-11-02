@@ -1594,6 +1594,14 @@ class ODESystem(object):
                 lines.append('{}\\left(0\\right) &= {}'.format(var_to_tex(v), expr_to_tex(init_cond)))
         for eqn in self.constraints:
             lines.append('{} &= {}'.format(expr_to_tex(eqn.lhs), expr_to_tex(eqn.rhs)))
+        # A known value is a stated fact about the system, like a constraint, so it is
+        # written down.  Leaving it out was the one thing `from_tex` could not recover from
+        # `to_tex`, and losing it silently is worse than a line a reader can delete.
+        for parameter in self.parameters:
+            if parameter in self._parameter_values:
+                lines.append('{} &= {}'.format(
+                    var_to_tex(parameter),
+                    expr_to_tex(self._parameter_values[parameter])))
         return ' \\\\\n'.join(lines)
 
     @classmethod
@@ -1602,10 +1610,15 @@ class ODESystem(object):
         """
         Given the LaTeX of a system of differential equations, return a ODESystem of it.
 
-        Every line of the tex is one of three things, and which one is decided by what the
+        Every line of the tex is one of five things, and which one is decided by what the
         line mentions rather than by where it sits:
 
         - a **derivative**, which is an equation of the system;
+        - a variable **at zero** -- `C(0) = C_0`, or `C(0) = 0` -- which is an initial
+          condition;
+        - a parameter given a **number** -- `k_1 = 2` -- which is its value.  A paper
+          means a value when it writes that, not a relation, and a constraint cannot hold
+          a number anyway;
         - a relation among **parameters** only, which becomes a constraint;
         - a **definition** of something in terms of a dependent variable, which cannot be
           a constraint -- a constraint is a statement about parameters -- and so is either
@@ -1640,21 +1653,44 @@ class ODESystem(object):
         dS/dt = C*k_m1 - E*S*k_1
         parameters: k_1, k_2, k_m1
 
-        Todo:
-            * Allow initial conditions to be set from tex.
+        Initial conditions are read from the tex too, which is what :meth:`to_tex` has
+        been writing all along, so a system now survives the round trip:
+
+        >>> eqns = eqns + ['\\\\\\\\ S\\\\left(0\\\\right) &= S_0 \\\\\\\\',
+        ...                'C\\\\left(0\\\\right) &= 0']
+        >>> system = ODESystem.from_tex('\\n'.join(eqns))
+        >>> system
+        dt/dt = 1
+        dC/dt = -C*k_2 - C*k_m1 + E*S*k_1
+        dE/dt = C*k_2 + C*k_m1 - E*S*k_1
+        dP/dt = C*k_2
+        dS/dt = C*k_m1 - E*S*k_1
+        C(0) = C_0
+        S(0) = S_0
+        parameters: k_1, k_2, k_m1, S_0, C_0
+        parameter values: C_0 = 0
         """
         sympification = tex_to_sympy(tex, primes=primes)
         derivative_dict = {}
         indep_var = None
 
-        relations = {}
+        # A list, not a dict keyed by the left-hand side: `K_m = ...` and `K_m = 3` are
+        # both meaningful and both about K_m, and a dict silently kept only the later one.
+        relations = []
+        initial_conditions = {}
 
         for eqn in sympification:
-            if not isinstance(eqn.lhs, sympy.Derivative):
+            if isinstance(eqn.lhs, sympy.core.function.AppliedUndef):
+                # `C(0) = ...`.  A variable evaluated at zero is an initial condition, and
+                # it cannot be applied until the system exists and knows which variables
+                # are dependent.
+                initial_conditions[to_symbol(eqn.lhs.func.__name__)] = eqn.rhs
+
+            elif not isinstance(eqn.lhs, sympy.Derivative):
                 # Not a derivative, so it relates existing quantities.  Which kind of
                 # relation it is cannot be known until every derivative line has been
                 # read, because that is what says which variables are dependent.
-                relations[eqn.lhs] = eqn.rhs
+                relations.append((eqn.lhs, eqn.rhs))
 
             else:
                 # add to the dict from which we will construct the system
@@ -1671,18 +1707,25 @@ class ODESystem(object):
         system = cls.from_dict(deriv_dict=derivative_dict, is_reduced=is_reduced,
                                parameters=parameters)
 
-        constraints, definitions = cls._classify_relations(system, relations, sub_defns)
+        constraints, definitions, values = cls._classify_relations(system, relations,
+                                                                   sub_defns)
 
         if definitions:
             system = system.subs(definitions)
 
         # Add the constraints.  These mention parameters only, so they cannot be refused.
-        for lhs, rhs in constraints.items():
+        for lhs, rhs in constraints:
             system.add_constraint(lhs, rhs)
 
-        # Add the initial conditions
-        # todo: code here
+        # An initial condition names a dependent variable and may mint a parameter, so the
+        # system has to be built and its definitions substituted first.
+        if initial_conditions:
+            system.update_initial_conditions(initial_conditions)
 
+        # Last of all, because a value may be for a parameter an initial condition minted,
+        # and because it is checked against the constraints already added.
+        if values:
+            system.update_parameter_values(values)
 
         # cuz i'd prefer to NOT be insane.
         system._variable_sanity_check()
@@ -1692,35 +1735,64 @@ class ODESystem(object):
     @staticmethod
     def _classify_relations(system, relations, sub_defns):
         '''
-        Split the non-derivative lines of some tex into constraints and definitions.
+        Split the non-derivative lines of some tex into values, constraints and
+        definitions.
 
-        A relation mentioning only parameters is a **constraint**: it says something true
-        of the constants of the model, and the system can carry it as one.  A relation
-        mentioning a dependent variable is a **definition** -- it gives a quantity in terms
-        of things that move -- and :meth:`add_constraint` rightly refuses those, so it is
-        either substituted away or reported.
+        A symbol given a number is a **value** -- `k_1 = 2` means what a paper means by
+        it.  Otherwise, a relation mentioning only parameters is a **constraint**: it says
+        something true of the constants of the model, and the system can carry it as one.
+        A relation mentioning a dependent variable is a **definition** -- it gives a
+        quantity in terms of things that move -- and :meth:`add_constraint` rightly refuses
+        those, so it is either substituted away or reported.
 
         Args:
             system (ODESystem): The system built from the derivative lines, which is what
                 knows which variables are dependent.
-            relations (dict): {lhs: rhs} for each non-derivative line.
+            relations (list): `(lhs, rhs)` for each non-derivative line, in the order the
+                lines were written.  A list, because two lines may share a left-hand side
+                and mean different things -- `K_m = (k_2 + k_m1)/k_1` is a constraint and
+                `K_m = 3` is a value, and both are about `K_m`.
             sub_defns (bool): Whether a definition may be substituted away.
 
         Returns:
-            tuple: (constraints, definitions), both {lhs: rhs} dicts.
+            tuple: (constraints, definitions, values).  `constraints` is a list of
+            `(lhs, rhs)`; the other two are dicts keyed by the symbol, since a symbol has
+            one definition and one value.
 
         Raises:
-            TexParseError: On a definition when `sub_defns` is False.
+            TexParseError: On a definition when `sub_defns` is False, or on a symbol given
+                two different definitions or two different values.
             NotImplementedError: On a definition that refers to another definition.
         '''
         dependent = set(system.dependents)
 
-        constraints, definitions = {}, {}
-        for lhs, rhs in relations.items():
+        constraints, definitions, values = [], {}, {}
+        for lhs, rhs in relations:
             if expressions_to_variables([lhs, rhs]) & dependent:
+                if lhs in definitions and definitions[lhs] != rhs:
+                    raise TexParseError(
+                        '{} is defined twice, as {} and as {}, and substituting both is '
+                        'not a thing that can be done.'.format(lhs, definitions[lhs], rhs))
                 definitions[lhs] = rhs
+                continue
+
+            # A symbol given a number is its **value**.  That is what a paper means by
+            # `k_1 = 2`, and a constraint could not hold it anyway -- `add_constraint`
+            # refuses a side that is zero, so `C_0 = 0` had nowhere to go at all.  Either
+            # way round, since a paper may write the number first.
+            if isinstance(lhs, sympy.Symbol) and rhs.is_number:
+                symbol, value = lhs, rhs
+            elif isinstance(rhs, sympy.Symbol) and lhs.is_number:
+                symbol, value = rhs, lhs
             else:
-                constraints[lhs] = rhs
+                constraints.append((lhs, rhs))
+                continue
+
+            if symbol in values and values[symbol] != value:
+                raise TexParseError(
+                    '{} is given two values, {} and {}.'.format(symbol, values[symbol],
+                                                                value))
+            values[symbol] = value
 
         if definitions and not sub_defns:
             raise TexParseError(
@@ -1751,7 +1823,7 @@ class ODESystem(object):
                         lhs, ', '.join(sorted(map(str, chained))),
                         'is' if len(chained) == 1 else 'are'))
 
-        return constraints, definitions
+        return constraints, definitions, values
 
     def _expressions(self):
         """

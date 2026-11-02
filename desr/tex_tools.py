@@ -131,6 +131,13 @@ _SUBSCRIPT = re.compile(r'_\{([^{}]*)\}')
 #: Anything that makes bracket contents mathematics rather than a name.
 _NOT_A_NAME = re.compile(r'[-+*/^()\\]')
 
+#: One side of an equation that is a variable evaluated at zero -- ``C(0)``, which is how a
+#: paper and :meth:`desr.ode_system.ODESystem.to_tex` both write an initial condition.
+#: Matched on a whole side, and only for the literal ``0``, so the rule that a name against
+#: a parenthesis is multiplication still holds for everything else: ``k_3(x - y)`` is a
+#: product and ``C(t)`` is not an initial condition.
+_AT_ZERO = re.compile(r'\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*0\s*\)\s*\Z')
+
 #: The independent variable assumed when a prime is read as a derivative.  ``x'`` does not
 #: say what it is differentiated with respect to, so there is nothing to infer.
 PRIME_INDEP_VAR = 't'
@@ -322,6 +329,15 @@ def _parse_normalised(tex, primes):
     sides = tex.split('=')
     if len(sides) == 2:
         lhs, rhs = sides
+
+        # An initial condition, before implicit multiplication gets a chance to read
+        # `C(0)` as `C*0`.  It comes back the way a derivative line does -- as the sympy
+        # object for the notation, here an applied undefined function -- so that the
+        # caller classifies the line by what it is rather than by where it sat.
+        initial_condition = _as_initial_condition(lhs, rhs, primes, tex)
+        if initial_condition is not None:
+            return initial_condition
+
         if primes == 'derivative':
             return _parse_prime_equation(lhs, rhs)
         return _equation(_parse_side(lhs, primes), _parse_side(rhs, primes), tex)
@@ -329,6 +345,44 @@ def _parse_normalised(tex, primes):
         raise TexParseError('Too many = in {}.'.format(tex))
 
     return _parse_side(tex, primes)
+
+
+def _as_initial_condition(lhs, rhs, primes, tex):
+    '''
+    Read an equation that states an initial condition, or return :const:`None`.
+
+    ``C(0) = C_0`` is how a paper writes one, and how
+    :meth:`desr.ode_system.ODESystem.to_tex` writes one, but it cannot go through
+    :func:`_parse_side`: a name against a parenthesis is multiplication there -- desr has
+    no function-valued variables -- so ``C(0)`` would become ``C*0`` and the line would
+    collapse.  So the side is recognised before that, and only when it is *entirely*
+    ``name(0)``, which leaves `k_3(x - y)` a product and `C(t)` not an initial condition.
+
+    Either side may be the one at zero, since a paper may write ``C_0 = C(0)``.
+
+    Returns:
+        sympy.Eq, None: ``Eq(C(0), rhs)`` with `C` an applied undefined function, the way
+        a derivative line comes back as a :class:`sympy.Derivative`.  :const:`None` when
+        neither side is a variable at zero, leaving the line to be read as usual.
+
+    Raises:
+        TexParseError: If both sides are, which says nothing about any system.
+    '''
+    at_zero, other = _AT_ZERO.match(lhs), _AT_ZERO.match(rhs)
+
+    if at_zero and other:
+        raise TexParseError(
+            '{!r} has a variable at zero on both sides, so it does not say what either '
+            'of them starts at.'.format(tex.strip()))
+
+    if at_zero is None and other is None:
+        return None
+
+    if other is not None:
+        at_zero, lhs, rhs = other, rhs, lhs
+
+    variable = to_symbol(at_zero.group(1))
+    return sympy.Eq(sympy.Function(variable.name)(0), _parse_side(rhs, primes))
 
 
 def _equation(lhs, rhs, tex):
