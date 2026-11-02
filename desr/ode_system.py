@@ -876,9 +876,18 @@ class ODESystem(object):
                 if init_cond.is_constant():
                     raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.")
 
-            # silviana: i think we should guard against having 1 be a variable...
-            if (init_cond not in self.symbols) and not init_cond.is_constant(): # checking emptiness on ics_vars
-                self._add_parameters([init_cond])
+            # Whatever symbols the initial condition names and the system does not yet
+            # have become parameters -- the *symbols*, never the expression itself.
+            #
+            # The expression is the case worth spelling out.  A reduced system's initial
+            # condition need not be a single symbol: once a column operation changes what
+            # a dependent is measured in, `v(0)` comes out as a monomial in two reduced
+            # parameters, such as `kappa4/kappa0`.  Adding that to the symbol list made it
+            # a "parameter" that is not a variable at all, and the next `subs` died in
+            # `_variable_sanity_check` saying so.
+            new_symbols = sorted(init_cond.free_symbols - set(self.symbols), key=str)
+            if new_symbols:
+                self._add_parameters(new_symbols)
 
             self._initial_conditions[variable] = init_cond
 
@@ -1422,14 +1431,24 @@ class ODESystem(object):
         # Now need to substitute in the variable order and initial conditions
 
         
+        # An initial condition's *value* is an expression in the system's symbols, so a
+        # substitution applies to it like any other -- whether or not any dependent
+        # variable is being renamed.  This used to sit inside the loop below, so renaming
+        # only parameters left the initial conditions written in the old names: after a
+        # column operation `v(0)` is a monomial such as `kappa4/kappa0`, and it kept both
+        # stale symbols alive in the reduced system.
+        initial_conditions = {var: ics.subs(to_sub)
+                              for var, ics in initial_conditions.items()}
+
         for renaming in variable_renamings: # i am sure there is a more elegant way of doing this
             lhs, rhs = renaming # unpack
 
             # replace in variables.  the derivatives are implicitly stored in this order, so this also renames the derivative
             variables = [v if v!=lhs else rhs for v in variables]
-            
-            # replace in initial conditions.  the key in the dict is the name of the variable that has an ICS
-            initial_conditions = { (v if v!=lhs else rhs) : ics.subs(to_sub) for v,ics in initial_conditions.items()}
+
+            # replace in initial conditions.  the key in the dict is the name of the
+            # variable that has an ICS, and only the key needs the renaming here.
+            initial_conditions = { (v if v!=lhs else rhs) : ics for v,ics in initial_conditions.items()}
 
 
         # silviana says: why would we ever not want to do this?  if you make a sub, shouldn't it affect the entire system?!
