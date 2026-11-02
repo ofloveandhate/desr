@@ -210,11 +210,19 @@ def michaelis_menten_two_variable(verbose=True):
 
 
 
-        print('\n\nAdding in the initial condition for s')
+        print('\n\nAdding in the initial conditions')
         print('-------------------------------------')
-        system.update_initial_conditions({'s': 's0'})
+        # The complex starts at nothing.  Saying so used to be impossible, and the
+        # literature just glosses over it; `c(0) = 0` records the value against a symbol
+        # `c_0`, which is what carries the units -- a zero concentration is still a
+        # concentration, and the reduction stays entirely symbolic.
+        system.update_initial_conditions(['s(0) = s0', 'c(0) = 0'])
+        print('initial conditions:', system.initial_conditions)
+        print('as values         :', system.initial_condition_values)
 
-        system.reorder_variables(['s0','e_0', 'k_1', 'k_2', 'k_m1', 'Km',  't', 'c', 's'])
+        # `c_0` goes towards the back, which is the end that is *kept*.  A zero must not be
+        # scaled by, and the front of the order is the scale-by end.
+        system.reorder_variables(['s0','e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0', 't', 'c', 's'])
 
 
         print('System:', system)
@@ -223,7 +231,15 @@ def michaelis_menten_two_variable(verbose=True):
         print('Exponent Matrix:', system.exponent_matrix().__repr__())
         # The dependents are in the order (c, s), so Murray's names go (v, u): his `u` is
         # the substrate and his `v` is the complex.
-        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['v','u']})
+        #
+        # `kappa` rather than `c` for the parameters.  They are substituted to Murray's
+        # names below, so the letter is arbitrary -- but `c` is a dependent variable here,
+        # whose initial value is the minted `c_0`, and printing `c_0` beside `c0, c1, ...`
+        # asks a reader to tell apart two things that look the same.  They are different
+        # symbols, so nothing breaks; it just cannot be read.
+        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['v','u']})
+        print('symbols this reduction divides by, so none of them may be zero:',
+              translator.symbols_that_must_not_be_zero())
 
 
         print('Scaling matrix:',translator.scaling_matrix.__repr__())
@@ -278,20 +294,27 @@ def michaelis_menten_two_variable(verbose=True):
         print('Reduced system, in arbitrary parameter names:')
         print(reduced_system)#.to_tex()
 
-        # Read off the monomials rather than guessed at, because the order of the c_i
+        print('the initial conditions, as values:',
+              reduced_system.initial_condition_values)
+
+        # Read off the monomials rather than guessed at, because the order of the kappa_i
         # follows the variable order and so is not something to remember:
         #
-        #   c0 = e_0/s0        = epsilon
-        #   c1 = k_2/(k_1 s0)  = lambda, which this script calls L
-        #   c2 = k_m1/(k_1 s0) = K - L
-        #   c3 = Km/s0         = K
+        #   kappa0 = e_0/s0        = epsilon
+        #   kappa1 = k_2/(k_1 s0)  = lambda, which this script calls L
+        #   kappa2 = k_m1/(k_1 s0) = K - L
+        #   kappa3 = Km/s0         = K
+        #   kappa4 = c_0/s0        = the initial complex, in substrate units
         #
-        # The check is the constraint.  `c3 == c1 + c2` has to become `K == L + (K - L)`,
-        # a tautology, and so disappear.  If a constraint survives the substitution, the
-        # mapping is wrong -- which is how this was caught: it used to leave the false
-        # `epsilon == K` behind.
+        # Murray has no name for the last one because he sets it to zero, which is exactly
+        # what we have recorded.  `gamma` until then.
+        #
+        # The check is the constraint.  `kappa3 == kappa1 + kappa2` has to become
+        # `K == L + (K - L)`, a tautology, and so disappear.  If a constraint survives the
+        # substitution, the mapping is wrong -- which is how this was caught: it used to
+        # leave the false `epsilon == K` behind.
         to_sub = dict(zip(translator.invariant_names(system),
-                          ['epsilon', 'L', 'K - L', 'K']))
+                          ['epsilon', 'L', 'K - L', 'K', 'gamma']))
         print('substituting Murray\'s names:', to_sub)
         reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
         assert not reduced_system.constraints, (
@@ -300,6 +323,24 @@ def michaelis_menten_two_variable(verbose=True):
 
         print('after subbing into canonical names from Murray')
         print(reduced_system)#.to_tex()
+
+        # `v(0) = gamma/epsilon`, and gamma is zero, so v starts at nothing however small
+        # epsilon is.  Both faces of that are available: the expression says *what* the
+        # initial value is, and the value says what it *is*.
+        print('the initial conditions, as values:',
+              reduced_system.initial_condition_values)
+
+        # Murray writes three groups, not four, because he sets the initial complex to
+        # zero.  Substituting the value the system already holds does that, and the group
+        # goes with it -- derived from the stated initial condition rather than asserted.
+        # Substituting anything else here is refused, since it would contradict `c(0) = 0`.
+        print('\nSubstituting the initial complex, which is known to be zero')
+        print('-----------------------------------------------------------')
+        reduced_system = reduced_system.subs({'gamma': 0})
+        print(reduced_system)
+        assert set(map(str, reduced_system.parameters)) == {'K', 'L', 'epsilon'}, (
+            'expected Murray (6.20) three groups, got {}'.format(
+                reduced_system.parameters))
 
         return
 
