@@ -221,7 +221,9 @@ def michaelis_menten_two_variable(verbose=True):
         print('Variable order: ', system.symbols)
 
         print('Exponent Matrix:', system.exponent_matrix().__repr__())
-        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u','v']})
+        # The dependents are in the order (c, s), so Murray's names go (v, u): his `u` is
+        # the substrate and his `v` is the complex.
+        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['v','u']})
 
 
         print('Scaling matrix:',translator.scaling_matrix.__repr__())
@@ -234,11 +236,24 @@ def michaelis_menten_two_variable(verbose=True):
         print(translator.translate(system))#.to_tex()
 
 
-        # print('\nMichaelis-Menten Reparametrisation 1')
         print('Changing invariants by column operations on the Hermite multiplier')
-        # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        # translator.multiplier_add_columns(i=2, j=8, power=1)
-        # translator.multiplier_add_columns(i=4, j=8, power=-1)
+
+        # Two groups still differ from Murray's: his clock is k_1 e_0 t rather than
+        # k_1 s0 t, and he measures the complex in units of the enzyme, c/e_0, rather than
+        # of the substrate.  Both are a factor of epsilon = e_0/s0 away, so both are one
+        # column operation.
+        #
+        # The column numbers come from `column_of`, so they are derived from the invariant
+        # each one carries rather than counted off by hand.  They can still be printed and
+        # quoted -- and they move when the variable order moves, which is exactly why they
+        # should not be written as literals.
+        clock = translator.column_of('k_1*s0*t')
+        epsilon = translator.column_of('e_0/s0')
+        complexed = translator.column_of('c/s0')
+        print(f'{clock=}, {epsilon=}, {complexed=}')
+
+        translator.multiplier_add_columns(clock, epsilon)              # tau -> k_1 e_0 t
+        translator.multiplier_add_columns(complexed, epsilon, power=-1)  # v -> c/e_0
 
         print('Invariants: ',
             ['{}={}'.format(a,b) for a,b in zip(translator.invariant_names(system), translator.invariant_monomials())])
@@ -263,8 +278,25 @@ def michaelis_menten_two_variable(verbose=True):
         print('Reduced system, in arbitrary parameter names:')
         print(reduced_system)#.to_tex()
 
-        to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
+        # Read off the monomials rather than guessed at, because the order of the c_i
+        # follows the variable order and so is not something to remember:
+        #
+        #   c0 = e_0/s0        = epsilon
+        #   c1 = k_2/(k_1 s0)  = lambda, which this script calls L
+        #   c2 = k_m1/(k_1 s0) = K - L
+        #   c3 = Km/s0         = K
+        #
+        # The check is the constraint.  `c3 == c1 + c2` has to become `K == L + (K - L)`,
+        # a tautology, and so disappear.  If a constraint survives the substitution, the
+        # mapping is wrong -- which is how this was caught: it used to leave the false
+        # `epsilon == K` behind.
+        to_sub = dict(zip(translator.invariant_names(system),
+                          ['epsilon', 'L', 'K - L', 'K']))
+        print('substituting Murray\'s names:', to_sub)
         reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
+        assert not reduced_system.constraints, (
+            'a constraint survived the renaming, so the names do not match the monomials: '
+            '{}'.format(reduced_system.constraints))
 
         print('after subbing into canonical names from Murray')
         print(reduced_system)#.to_tex()
