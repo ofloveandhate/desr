@@ -1126,3 +1126,113 @@ class TestPassingAPrebuiltExpression(TestCase):
         with self.assertRaises(ValueError) as caught:
             self.translator.extend_from_invariants(sympify_expression('E*k_1/(2*k_2)'))
         self.assertIn('without its factor of', str(caught.exception))
+
+
+class TestMurraySixTwenty(TestCase):
+    '''
+    Michaelis-Menten as Murray writes it, *Mathematical Biology I* 6.1 (6.20):
+
+        u = s/s_0,  v = c/e_0,  tau = k_1 e_0 t
+        lambda = k_2/(k_1 s_0),  K = K_m/s_0,  epsilon = e_0/s_0
+
+        du/dtau         = -u + (u + K - lambda) v
+        epsilon dv/dtau = u - (u + K) v
+
+    `examples/michaelis_menten.py` reproduces this, and it had rotted: the mapping from
+    the reduced parameters to Murray's names was wrong, so the tautologous constraint
+    `K == lambda + (K - lambda)` survived as the false `epsilon == K` instead of
+    disappearing.  Asserted here because a reduction that silently reparametrises to the
+    wrong names is exactly the failure an example script cannot catch by running.
+    '''
+
+    def setUp(self):
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        system.add_constraint('Km', '(k_m1 + k_2) / k_1')
+        system.update_initial_conditions({'s': 's0'})
+        system.reorder_variables(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km',
+                                  't', 'c', 's'])
+        self.system = system
+        # Dependents come in the order (c, s), so Murray's names go (v, u).
+        self.translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'c', 'independent': 'tau',
+                                   'dependents': ['v', 'u']})
+
+    def murrays_groups(self):
+        '''The two column operations that take the reduction to Murray's groups.'''
+        clock = self.translator.column_of('k_1*s0*t')
+        epsilon = self.translator.column_of('e_0/s0')
+        complexed = self.translator.column_of('c/s0')
+        self.translator.multiplier_add_columns(clock, epsilon)
+        self.translator.multiplier_add_columns(complexed, epsilon, power=-1)
+        return clock, epsilon, complexed
+
+    def test_the_invariants_before_any_operation(self):
+        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+                         self.translator.invariant_monomials()))
+        self.assertEqual(named['c0'], sympify_expression('e_0/s0'))
+        self.assertEqual(named['c1'], sympify_expression('k_2/(k_1*s0)'))
+        self.assertEqual(named['c2'], sympify_expression('k_m1/(k_1*s0)'))
+        self.assertEqual(named['c3'], sympify_expression('Km/s0'))
+
+    def test_the_two_operations_give_murrays_groups(self):
+        self.murrays_groups()
+        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+                         self.translator.invariant_monomials()))
+        self.assertEqual(named['tau'], sympify_expression('e_0*k_1*t'))
+        self.assertEqual(named['u'], sympify_expression('s/s0'))
+        self.assertEqual(named['v'], sympify_expression('c/e_0'))
+
+    def test_the_parameter_names_follow_the_monomials(self):
+        # The order of the c_i follows the variable order, so the mapping is read off
+        # rather than remembered.  This is the assertion the example lacked.
+        self.murrays_groups()
+        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+                         self.translator.invariant_monomials()))
+        self.assertEqual(named['c0'], sympify_expression('e_0/s0'))      # epsilon
+        self.assertEqual(named['c1'], sympify_expression('k_2/(k_1*s0)'))  # lambda
+        self.assertEqual(named['c3'], sympify_expression('Km/s0'))       # K
+
+    def test_the_renaming_leaves_no_constraint(self):
+        # K == lambda + (K - lambda) is a tautology and must disappear.  A constraint
+        # surviving the substitution means the names do not match the monomials, which is
+        # how the example's error announced itself.
+        self.murrays_groups()
+        reduced = self.translator.translate(self.system)
+        self.assertEqual(len(reduced.constraints), 1)
+        renamed = reduced.subs(dict(zip(
+            self.translator.invariant_names(self.system),
+            ['epsilon', 'L', 'K - L', 'K'])), subs_constraints=True)
+        self.assertEqual(renamed.constraints, [])
+        self.assertEqual(set(map(str, renamed.parameters)), {'K', 'L', 'epsilon'})
+
+    def test_the_wrong_mapping_leaves_a_false_constraint(self):
+        # The error as it stood, pinned so the tell is on record.
+        self.murrays_groups()
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs(dict(zip(
+            self.translator.invariant_names(self.system),
+            ['K', 'K - L', 'L', 'epsilon'])), subs_constraints=True)
+        self.assertNotEqual(renamed.constraints, [])
+
+    def test_the_equations_are_murrays(self):
+        self.murrays_groups()
+        reduced = self.translator.translate(self.system)
+        renamed = reduced.subs(dict(zip(
+            self.translator.invariant_names(self.system),
+            ['epsilon', 'L', 'K - L', 'K'])), subs_constraints=True)
+        u, v, K, L, epsilon = sympy.symbols('u v K L epsilon')
+        derivatives = renamed.derivative_dict
+
+        # du/dtau = -u + (u + K - lambda) v
+        self.assertEqual(sympy.simplify(derivatives[u] - (-u + (u + K - L) * v)), 0)
+        # epsilon dv/dtau = u - (u + K) v
+        self.assertEqual(
+            sympy.simplify(epsilon * derivatives[v] - (u - (u + K) * v)), 0)
+
+    def test_the_substrate_starts_at_one(self):
+        self.murrays_groups()
+        reduced = self.translator.translate(self.system)
+        self.assertEqual(reduced.initial_conditions[sympy.Symbol('u')],
+                         sympy.Integer(1))

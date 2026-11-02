@@ -2,7 +2,7 @@
 
 This example script walks through an analysis of the Michaelis Menten equations.
 
-The original source for the equations is 
+The original source for the equations is
 L. Michaelis and M. Menten, Die kinetik der Invertinwirkung, Biochem Z., 49 (1913), pp. 333–369.
 
 and for a modern source, see
@@ -22,7 +22,7 @@ from desr.tex_tools import expr_to_tex
 
 
 def michaelis_menten_four_variables():
-    """ 
+    """
     Example: Michaelis-Menten kinetics in four variables with initial conditions
 
     We start with ODEs.
@@ -35,7 +35,7 @@ def michaelis_menten_four_variables():
 
 
         # make string to hold the system in latex form
-        # note that, so make valid variable names, 
+        # note that, so make valid variable names,
         # minus signs  `-` in subscripts are changed to the character `m`
         system_tex = \
               '''\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\
@@ -47,9 +47,9 @@ def michaelis_menten_four_variables():
 
         return system
 
-    
-    # a 'lil helper function that moves values to the end.  assumes that `sorted` is a stable sort...
-    put_at_end = lambda v, order: sorted(order, key=lambda n: str(n)==v)
+
+    # a 'lil helper function that moves values to the front.  ⚠️ assumes that `sorted` is a stable sort...
+    put_at_front = lambda v, order: sorted(order, key=lambda n: str(n)!=v)
 
 
 
@@ -61,13 +61,13 @@ def michaelis_menten_four_variables():
 
         variable_order = list(system.symbols)
 
-        
 
-        # put s_0 and k_1 at the end so will likely get normalized out
-        variable_order = put_at_end('k_1', variable_order)
-        variable_order = put_at_end('k_2', variable_order)
-        variable_order = put_at_end('k_m1', variable_order)
-        variable_order = put_at_end('S_0', variable_order)
+
+        # put s_0 and k_1 at the front so will likely get normalized out
+        variable_order = put_at_front('k_1', variable_order)
+        variable_order = put_at_front('k_2', variable_order)
+        variable_order = put_at_front('k_m1', variable_order)
+        variable_order = put_at_front('S_0', variable_order)
         print(f'{variable_order=}')
 
         # variable_order[-1], variable_order[-4] = variable_order[-4], variable_order[-1]
@@ -97,19 +97,19 @@ def michaelis_menten_four_variables():
     def four_variable_using_specific_row_ops():
         print('\n\nFour-variable without ICs:\nWhat happens when we make k_2 the last variable?\n-----------------------------------')
 
-        # make the system 
+        # make the system
         system = system_four_variable_michaelis_menten()
 
 
         variable_order = list(system.symbols)
-        put_at_end('k_2',variable_order)
+        put_at_front('k_2',variable_order)
         system.reorder_variables(variable_order)
         print('New variable order:',variable_order)
-        
-        
+
+
         system_from_ode = ODETranslator.from_ode_system(system)
         print('Invariants:', ', '.join(map(str, system_from_ode.invariant_monomials())))
-        
+
         # Now do the reduction
         reduced_system = system_from_ode.translate(system)
         print('Reduced system:', reduced_system)
@@ -152,7 +152,7 @@ def michaelis_menten_four_variables():
 
         col_ops = sympy.Matrix.hstack(WdP, row_ops.inv()[:, 2:])  # col_ops is the column operations we're going to apply to Vn
         print(f'{col_ops=}')
-        
+
 
         print('New Vn\n',system_from_ode.herm_mult_n * col_ops)
 
@@ -168,7 +168,7 @@ def michaelis_menten_four_variables():
 
         print('Permuted Vn:\n',hermite_mult)
 
-        
+
         # We need to add on Vi - the original will do.
         hermite_mult = sympy.Matrix.hstack(system_from_ode.herm_mult_i, hermite_mult)
         translator = ODETranslator(system_from_ode.scaling_matrix, hermite_multiplier=hermite_mult)
@@ -183,8 +183,8 @@ def michaelis_menten_four_variables():
 
 
 def michaelis_menten_two_variable(verbose=True):
-    """ 
-    Example `sec:michaelis_menten_comparison_with_classical` 
+    """
+    Example `sec:michaelis_menten_comparison_with_classical`
     """
 
     print('\n\n----------------------\nmichaelis_menten_two_variable\n-----------------------\n\n')
@@ -196,109 +196,36 @@ def michaelis_menten_two_variable(verbose=True):
         return '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
              \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
 
-    def with_intitial_conditions_and_a_constant_K_not_Km():
-        system_tex = system_tex_two_var()
-        system_tex_reduced_km1 = system_tex.replace('k_{-1}', '(K - k_2)')
-        
-        reduced_system_km1 = ODESystem.from_tex(system_tex_reduced_km1)
-        
-        reduced_system_km1.reorder_variables(['t', 's', 'c', 'K', 'k_2', 'k_1', 'e_0'])
-        
-        # Print variable order
-        print('Variable order: ', reduced_system_km1.symbols)
-        
-        print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
-        
-        # Print scaling matrices
-        max_scal1 = ODETranslator.from_ode_system(reduced_system_km1)
-        print('Scaling matrix:')
-        print(max_scal1.scaling_matrix.__repr__())
-        
-        # Print invariants
-        print('Invariants: ', max_scal1.invariant_monomials())
-        # print(',\quad '.join(map(expr_to_tex, max_scal1.invariant_monomials())))
-        
-        # Print translated system
-        print('Reduced system:')
-        # print(max_scal1.translate(original_system))#.to_tex()
-        
-        print('Adding in the initial condition for s')
-        print('-------------------------------------')
-        reduced_system_km1.update_initial_conditions({'s': 's_0'})
-        max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
-        
-        print('Invariants: ', max_scal2.invariant_monomials())
-        print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-
-
-        print('\nMichaelis-Menten Reparametrisation 1')
-        print('Changing invariants by column operations on the Hermite multiplier')
-        max_scal2.multiplier_add_columns(2, -1, 1)
-        max_scal2.multiplier_add_columns(4, -1, -1)
-        
-        print('Invariants: ', max_scal2.invariant_monomials())
-        print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        
-        # Print translated system
-        print('Reduced system:')
-        print(max_scal2.translate(reduced_system_km1))#.to_tex()
-        
-        print('\nMichaelis-Menten Reparametrisation 2')
-        print('Changing invariants by column operations on the Hermite multiplier')
-        # Divide time through by epsilon
-        max_scal2.multiplier_add_columns(2, -1, -1)
-        
-        
-        print('Invariants: ', max_scal2.invariant_monomials())
-        # print(max_scal2.herm_mult.__repr__())
-        
-        # Print translated system
-        print('Reduced system:')
-        print(max_scal2.translate(reduced_system_km1))#.to_tex()
-
-        return
-
 
     def with_initial_conditions_and_a_constant():
         '''
-        silviana wants this one to exactly match the example in the paper, in the section by the same name.
+        this code reproduces the michaelis-menten example in the literature.
         '''
         system_tex = system_tex_two_var()
-        # system_tex_reduced_km1 = system_tex.replace('k_{-1}', '(K - k_2)')
-        
+
+
         system = ODESystem.from_tex(system_tex)
         system.add_constraint('Km', '(k_m1 + k_2) / k_1')
 
-        system.reorder_variables(['t', 's', 'c', 'Km', 'k_m1', 'k_2', 'k_1', 'e_0'])
-        
-        # Print variable order
 
-        
-        # # Print scaling matrices
-        # max_scal1 = ODETranslator.from_ode_system(system)
-        # print('Scaling matrix:')
-        # print(max_scal1.scaling_matrix.__repr__())
-        
-        # # Print invariants
-        # print('Hermite multiplier', max_scal1.herm_mult.__repr__())
-        # print('Invariants: ', max_scal1.invariant_monomials())
-        # # print(',\quad '.join(map(expr_to_tex, max_scal1.invariant_monomials())))
-        
-        # # Print translated system
-        # print('Reduced system:')
-        # print(max_scal1.translate(system))#.to_tex()
-        
+
+
         print('\n\nAdding in the initial condition for s')
         print('-------------------------------------')
         system.update_initial_conditions({'s': 's0'})
 
+        system.reorder_variables(['s0','e_0', 'k_1', 'k_2', 'k_m1', 'Km',  't', 'c', 's'])
 
+
+        print('System:', system)
         print('Variable order: ', system.symbols)
-        
-        print('Power Matrix:', system.exponent_matrix().__repr__())
-        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u','v']})
-        
-        
+
+        print('Exponent Matrix:', system.exponent_matrix().__repr__())
+        # The dependents are in the order (c, s), so Murray's names go (v, u): his `u` is
+        # the substrate and his `v` is the complex.
+        translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['v','u']})
+
+
         print('Scaling matrix:',translator.scaling_matrix.__repr__())
 
         print('Hermite multiplier', translator.herm_mult.__repr__())
@@ -307,26 +234,40 @@ def michaelis_menten_two_variable(verbose=True):
 
         print('Reduced system:')
         print(translator.translate(system))#.to_tex()
-        
 
-        # print('\nMichaelis-Menten Reparametrisation 1')
+
         print('Changing invariants by column operations on the Hermite multiplier')
-        # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        translator.multiplier_add_columns(i=2, j=8, power=1)
-        translator.multiplier_add_columns(i=4, j=8, power=-1)
-        
-        print('Invariants: ', translator.invariant_monomials())
+
+        # Two groups still differ from Murray's: his clock is k_1 e_0 t rather than
+        # k_1 s0 t, and he measures the complex in units of the enzyme, c/e_0, rather than
+        # of the substrate.  Both are a factor of epsilon = e_0/s0 away, so both are one
+        # column operation.
+        #
+        # The column numbers come from `column_of`, so they are derived from the invariant
+        # each one carries rather than counted off by hand.  They can still be printed and
+        # quoted -- and they move when the variable order moves, which is exactly why they
+        # should not be written as literals.
+        clock = translator.column_of('k_1*s0*t')
+        epsilon = translator.column_of('e_0/s0')
+        complexed = translator.column_of('c/s0')
+        print(f'{clock=}, {epsilon=}, {complexed=}')
+
+        translator.multiplier_add_columns(clock, epsilon)              # tau -> k_1 e_0 t
+        translator.multiplier_add_columns(complexed, epsilon, power=-1)  # v -> c/e_0
+
+        print('Invariants: ',
+            ['{}={}'.format(a,b) for a,b in zip(translator.invariant_names(system), translator.invariant_monomials())])
         print('Hermite multiplier', translator.herm_mult.__repr__())
-        
+
 
         # print('\nMichaelis-Menten Reparametrisation 2')
         # print('Changing invariants by column operations on the Hermite multiplier')
         # # Divide time through by epsilon
         # translator.multiplier_add_columns(i=0, j=8, power=1)
-        
+
         # print('Hermite multiplier', translator.herm_mult.__repr__())
         # print('Invariants: ', translator.invariant_monomials())
-        
+
         print('W:', translator.inv_herm_mult.__repr__())
         # Print translated system
 
@@ -337,8 +278,25 @@ def michaelis_menten_two_variable(verbose=True):
         print('Reduced system, in arbitrary parameter names:')
         print(reduced_system)#.to_tex()
 
-        to_sub =  {'c0': 'K', 'c1': 'K-L', 'c2':'L', 'c3':'epsilon'}
+        # Read off the monomials rather than guessed at, because the order of the c_i
+        # follows the variable order and so is not something to remember:
+        #
+        #   c0 = e_0/s0        = epsilon
+        #   c1 = k_2/(k_1 s0)  = lambda, which this script calls L
+        #   c2 = k_m1/(k_1 s0) = K - L
+        #   c3 = Km/s0         = K
+        #
+        # The check is the constraint.  `c3 == c1 + c2` has to become `K == L + (K - L)`,
+        # a tautology, and so disappear.  If a constraint survives the substitution, the
+        # mapping is wrong -- which is how this was caught: it used to leave the false
+        # `epsilon == K` behind.
+        to_sub = dict(zip(translator.invariant_names(system),
+                          ['epsilon', 'L', 'K - L', 'K']))
+        print('substituting Murray\'s names:', to_sub)
         reduced_system = reduced_system.subs(to_sub, subs_constraints=True)
+        assert not reduced_system.constraints, (
+            'a constraint survived the renaming, so the names do not match the monomials: '
+            '{}'.format(reduced_system.constraints))
 
         print('after subbing into canonical names from Murray')
         print(reduced_system)#.to_tex()
@@ -346,113 +304,6 @@ def michaelis_menten_two_variable(verbose=True):
         return
 
 
-    def another_way():
-
-        print('\n---------------\nSetting k_1 = (k_m1 + k_2) / Km, and seeing what happens\n-------\n')
-
-        system_tex = system_tex_two_var()
-        # system_tex_reduced_km1 = system_tex.replace('k_1', '(k_{-1} + k_2) / Km')
-        
-        reduced_system_km1 = ODESystem.from_tex(system_tex)
-        reduced_system_km1.add_constraint('k_1', '(k_m1 + k_2) / Km')
-
-        # print('\n\nAdding in the initial condition for s')
-        # print('-------------------------------------')
-        reduced_system_km1.update_initial_conditions({'s': 's_0'})
-
-        reduced_system_km1.reorder_variables(['t', 's', 'c', 'Km', 'k_m1', 'k_2', 'k_1', 'e_0', 's_0'])
-        
-        # Print variable order
-        
-        print('Power Matrix:', reduced_system_km1.exponent_matrix().__repr__())
-        print('parameters: ',reduced_system_km1.parameters)
-
-        max_scal2 = ODETranslator.from_ode_system(reduced_system_km1)
-        
-        print('Scaling matrix:',max_scal2.scaling_matrix.__repr__())
-        print('Variable order: ', reduced_system_km1.symbols)
-        print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        print('Invariants: ', max_scal2.invariant_monomials())
-        print('W:', max_scal2.inv_herm_mult.__repr__())
-        print('substitutions:',max_scal2.translate_parameter_substitutions(reduced_system_km1))
-        print('Reduced system:', max_scal2.translate(reduced_system_km1))#.to_tex()
-        
-
-        # # print('\nMichaelis-Menten Reparametrisation 1')
-        # print('Changing invariants by column operations on the Hermite multiplier')
-        # # Python start at 0, but  the paper starts at 1, so these are down by 1 from the paper
-        # max_scal2.multiplier_add_columns(i=2, j=8, power=1)
-        # max_scal2.multiplier_add_columns(i=4, j=8, power=-1)
-        
-        # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        # print('Invariants: ', max_scal2.invariant_monomials())
-        
-        
-        # # print('\nMichaelis-Menten Reparametrisation 2')
-        # # print('Changing invariants by column operations on the Hermite multiplier')
-        # # # Divide time through by epsilon
-        # # max_scal2.multiplier_add_columns(i=0, j=8, power=1)
-        
-        # # print('Hermite multiplier', max_scal2.herm_mult.__repr__())
-        # # print('Invariants: ', max_scal2.invariant_monomials())
-        
-        # print('W:', max_scal2.inv_herm_mult.__repr__())
-
-        
-        # print('Reduced system:', max_scal2.translate(reduced_system_km1))#.to_tex()
-
-        return
-
-    def multiple_timescales():
-        # print('Michaelis-Menten Reparametrisation 2')
-        print('What if epsilon = e_0 / s_0 is not small?')
-        
-        system_tex = system_tex_two_var()
-        # Substitute K_m into the equations
-        system_tex_reduced_l = system_tex.replace('k_{-1}', '(K - k_2)').replace('K', 'K_m k_1')
-        # Now set L = K_m + s_0
-        # system_tex_reduced_l = system_tex_reduced_km.replace('K_m', '(L - s_0)')
-
-        print('In order ')
-        print(system_tex_reduced_l)
-
-        # return
-        # print system_tex_reduced_km
-        reduced_system_l = ODESystem.from_tex(system_tex_reduced_l)
-        reduced_system_l.update_initial_conditions({'s': 's_0'})
-        reduced_system_l.add_constraint('L', 's_0 + K_m')
-        reduced_system_l.reorder_variables(['t', 's', 'c', 'k_2', 'k_1', 'e_0', 's_0', 'L', 'K_m'])
-
-        translator = ODETranslator.from_ode_system(reduced_system_l)
-
-        # print translator.invariant_monomials()
-        # Scale t correctly to t/t_C = k_1 L t
-        translator.multiplier_add_columns(2, -1, 1)
-        # Scale s correctly to s / s_0
-        translator.multiplier_add_columns(3, -2, -1)
-
-        # Scale c correctly to c / (e_0 s_0 / L)
-        translator.multiplier_add_columns(4, 6, -1)
-        translator.multiplier_add_columns(4, 7, -1)
-        translator.multiplier_add_columns(4, -1, 1)
-        # Find kappa = k_{-1} / k_2 = (K_m k_1 / k_2) - 1
-        translator.multiplier_negate_column(5)
-        # Find epsilon = e_0 / L
-        translator.multiplier_add_columns(6, -1, -1)
-        # Find sigma = s_0 / K_m
-
-        print('invariants:', translator.invariant_monomials())
-
-        # silviana says: i dislike that these are hardcoded.  these should be computed.
-        print('We now have:')
-        print('c_0 = kappa + 1')
-        print('c_1 = epsilon')
-        print('c_2 = sigma')
-        print('c_3 = L / K_m')
-        # print reduced_system_l
-        print(translator.translate(reduced_system_l))
-
-        return
 
 
     with_initial_conditions_and_a_constant()

@@ -31,9 +31,7 @@ EXAMPLES = pathlib.Path(__file__).resolve().parents[2] / 'examples'
 #: Scripts known to fail, each with the issue that tracks it.  Remove an entry when its
 #: issue closes; a script that starts passing while still listed here is reported as a
 #: surprise rather than quietly accepted.
-SKIP = {
-    'michaelis_menten.py': 'https://github.com/ofloveandhate/desr/issues/19',
-}
+SKIP = {}
 
 
 def run(script):
