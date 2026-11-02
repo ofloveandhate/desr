@@ -59,7 +59,12 @@ class ConflictingKnownValues(ValueError):
 # Relative tolerance within which known values must agree with each other and with the
 # reduced values.  Known values are measurements and reduced values are numerical solutions,
 # so this is looser than machine precision but far tighter than any real disagreement.
-CONSISTENCY_TOLERANCE = 1e-6
+#
+# Defined in `desr.sympy_helper` so that `desr.ode_system` can use the same number when it
+# checks parameter values against the system's constraints.  It cannot import this module
+# to get it: numerics needs numpy, and `import desr` must not.  Re-exported here, where it
+# was first written and where `__all__` still names it.
+from .sympy_helper import CONSISTENCY_TOLERANCE
 
 
 def _first(value):

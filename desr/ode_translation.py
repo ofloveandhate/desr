@@ -5,7 +5,7 @@ import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
-from desr.sympy_helper import sympify_expression
+from desr.sympy_helper import sympify_expression, to_symbol
 from desr.tex_tools import matrix_to_tex
 
 
@@ -1241,6 +1241,7 @@ class ODETranslator(object):
 
     def translate_parameter(self, system):
         ''' Translate according to parameter scheme '''
+        self._refuse_zero_scales(system)
 
         # make the substitutions
         to_sub = self.translate_parameter_substitutions(system=system)
@@ -1293,7 +1294,60 @@ class ODETranslator(object):
         # rename the time variable
         reduced_system.rename_indep_var(new_indep)
 
+        # Last, because a value is checked against the constraints just added, and because
+        # it is derived from everything above rather than carried through it.
+        reduced_system.update_parameter_values(
+            self._propagated_parameter_values(system, reduced_system,
+                                              ReductionScheme.PARAMETER))
+
+        self._refuse_name_clashes(system, reduced_system)
         return reduced_system
+
+    def _propagated_parameter_values(self, system, reduced_system, scheme,
+                                     include_aux_vars=True):
+        '''
+        The values of the reduced system's parameters, worked out from the original's.
+
+        Every symbol of a reduced system stands for a monomial in the original symbols, so
+        its value is known exactly when that monomial's is -- which makes this a derived
+        fact rather than one the caller restates.  It is how a value of zero reaches the
+        reduced system: the parameter whose monomial holds the zero-valued symbol in its
+        numerator is itself zero.
+
+        Read off :meth:`named_symbols` rather than by pairing names with monomials here,
+        because that pairing is the one thing which differs between the three schemes --
+        the parameter scheme has only invariants, while the other two keep the clock and
+        then the auxiliaries.  One place gets that right and everything else asks it.
+
+        `scheme` is passed rather than inferred: a caller may reach for
+        :meth:`translate_general` on a system that :meth:`scheme` would answer
+        ``PARAMETER`` for, and then the names would be the wrong ones.
+
+        Only reduced *parameters* are given values.  The clock and the dependents are
+        variables, so a value for one would be a category error -- and a known zero can
+        settle a monomial that names a dependent, so they have to be filtered rather than
+        assumed to come out unknown.
+
+        Nothing divides by zero here, because :meth:`_refuse_zero_scales` has already
+        refused a zero value for any symbol a denominator names.
+
+        Returns:
+            dict: {reduced parameter: value}, for those that are known.
+        '''
+        values = system.parameter_values
+        if not values:
+            return {}
+
+        parameters = set(reduced_system.parameters)
+        propagated = {}
+        for name, monomial in self.named_symbols(system, scheme,
+                                                 include_aux_vars).items():
+            if name not in parameters:
+                continue
+            value = monomial.subs(values)
+            if value.is_number:
+                propagated[name] = value
+        return propagated
 
 
 
@@ -1315,6 +1369,7 @@ class ODETranslator(object):
         dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
         '''
+        self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
         # First check that our scaling action doesn't act on the independent variable
@@ -1385,7 +1440,12 @@ class ODETranslator(object):
                             scheme=ReductionScheme.DEP_VAR,
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names)
-        return _rename_indep_var(reduced, scheme['independent'])
+        reduced = _rename_indep_var(reduced, scheme['independent'])
+        reduced.update_parameter_values(
+            self._propagated_parameter_values(system, reduced,
+                                              ReductionScheme.DEP_VAR))
+        self._refuse_name_clashes(system, reduced)
+        return reduced
 
     def translate_general(self, system, include_aux_vars = True):
         '''
@@ -1427,6 +1487,7 @@ class ODETranslator(object):
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
         '''
+        self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
@@ -1486,7 +1547,13 @@ class ODETranslator(object):
                             scheme=ReductionScheme.GENERAL,
                             num_scaling_symmetries=self.r,
                             auxiliary_names=auxiliary_names if include_aux_vars else ())
-        return _rename_indep_var(reduced, scheme['independent'])
+        reduced = _rename_indep_var(reduced, scheme['independent'])
+        reduced.update_parameter_values(
+            self._propagated_parameter_values(system, reduced,
+                                              ReductionScheme.GENERAL,
+                                              include_aux_vars))
+        self._refuse_name_clashes(system, reduced)
+        return reduced
 
     def _is_translate_parameter_compatible(self, system):
         '''
@@ -1935,6 +2002,224 @@ class ODETranslator(object):
         if len(variables) != num_var:
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
         return variables
+
+    def symbols_that_must_not_be_zero(self, system=None):
+        '''
+        The original symbols that this reduction divides by, and so which must not be zero
+        for it to mean anything.
+
+        A report, not a request: it is read off the multiplier as it currently stands, so a
+        :meth:`multiplier_add_columns` changes the answer.  The
+        :meth:`~desr.ode_system.ODESystem.require_same_unit` family is the other
+        direction -- there the caller asserts something, here the reduction says what
+        follows from the columns that were chosen.
+
+        The scaling group is a torus acting where every coordinate is nonzero, so the
+        change of variables lives there and nowhere else.  Which symbols it actually needs
+        is a sign condition on one **row** of the multiplier, and there are three cases,
+        not two:
+
+        - a nonzero entry in :math:`V_i` -- the symbol appears in an auxiliary, which the
+          reduction sets to 1.  A monomial containing a zero-valued symbol is 0 or
+          undefined, never 1, so either sign is fatal;
+        - a negative entry in :math:`V_n` -- the symbol is in the denominator of an
+          invariant, which is then undefined;
+        - a *positive* entry in :math:`V_n` and nothing in :math:`V_i` -- the symbol only
+          ever appears in a numerator, so the invariant is simply **0**.  That is a
+          reduced parameter whose value happens to be zero, which is fine, and is how a
+          zero initial condition survives a reduction.
+
+        So a symbol is listed when it meets either of the first two.  Whether it does is
+        decided by the variable order, which is the caller's to set: the front of the order
+        is the end that gets scaled by.
+
+        Args:
+            system (ODESystem, optional): The system being reduced, for its symbols.  Not
+                needed when the translator was built by
+                :meth:`from_ode_system`, which records them.
+
+        Returns:
+            tuple of sympy.Symbol: In the order the symbols are in, so the result reads
+            against the system.
+
+        Michaelis-Menten with the two initial-condition parameters at the front of the
+        parameter block.  They are what the reduction scales by, so they are exactly what
+        it cannot do without:
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.auxiliary_monomials()
+        Matrix([[1/(e_0*k_1), e_0]])
+        >>> translator.symbols_that_must_not_be_zero()
+        (e_0, k_1)
+
+        Move them towards the back and the reduction scales by something else.  ``e_0``
+        comes free and now appears only in a numerator, where a value of zero would be
+        harmless -- but ``k_1`` does not, because the reduction still needs a second
+        auxiliary and ``k_2/k_1`` is it.  Which is the point of asking rather than
+        assuming: one move is not guaranteed to be enough, and the report says so.
+
+        >>> system.reorder_parameters(['k_2', 'k_m1', 'k_1', 'e_0'])
+        >>> moved = ODETranslator.from_ode_system(system)
+        >>> moved.auxiliary_monomials()
+        Matrix([[1/k_2, k_2/k_1]])
+        >>> moved.symbols_that_must_not_be_zero()
+        (k_2, k_1)
+        >>> moved.invariant_monomials()
+        Matrix([[k_m1/k_2, e_0*k_1/k_2, k_2*t, c*k_1/k_2, k_1*s/k_2]])
+        '''
+        symbols = self._validate_variables(
+            None if system is None else tuple(system.symbols), self.n, 'y', True)
+
+        herm_mult_i, herm_mult_n = self.herm_mult_i, self.herm_mult_n
+        must_not_be_zero = []
+        for row, symbol in enumerate(symbols):
+            in_an_auxiliary = any(entry != 0 for entry in herm_mult_i[row, :])
+            in_a_denominator = any(entry < 0 for entry in herm_mult_n[row, :])
+            if in_an_auxiliary or in_a_denominator:
+                must_not_be_zero.append(symbol)
+        return tuple(must_not_be_zero)
+
+    def reduced_symbols_that_must_not_be_zero(self, system=None, scheme=None):
+        '''
+        The *reduced* symbols that recovering the original ones divides by, and so which
+        must not be zero for the reverse translation to mean anything.
+
+        The companion of :meth:`symbols_that_must_not_be_zero`, over the other set of
+        symbols.  The two directions are the ones :mod:`desr.numerics` calls ``forward``
+        and ``reverse``, and each has exactly one symbol set it can divide by -- going
+        forward, a reduced symbol is a monomial in the originals, so only an original can
+        sit in a denominator; coming back, an original is a monomial in the reduced ones,
+        read off a column of :math:`V^{-1}`, so only a reduced symbol can.  That is why
+        the two methods need no `direction` argument: naming the set names the direction.
+
+        The answers are genuinely different, and a reduction can be sound forward and
+        unrecoverable backward.  In Michaelis-Menten the forward reduction divides by
+        ``e_0`` and ``k_1``, while :math:`e_0 = \\tau / (\\kappa_0 \\kappa_1 x_1)` -- so a
+        zero ``k_2``, which makes :math:`\\kappa_0` zero, leaves ``e_0`` unrecoverable
+        though the reduction itself was fine.
+
+        Args:
+            system (ODESystem, optional): The system being reduced, for its symbols.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`column_names`, which supplies the names.
+
+        Returns:
+            tuple of sympy.Symbol: In column order, so the result reads against
+            :meth:`column_names`.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.symbols_that_must_not_be_zero()
+        (e_0, k_1)
+        >>> translator.reduced_symbols_that_must_not_be_zero(system)
+        (x1, kappa0, kappa1)
+        '''
+        names = self.column_names(system, scheme)
+        inverse = self.inv_herm_mult
+
+        # `scale_action(names, inv_herm_mult.T)` is what recovers the originals, so in
+        # `inv_herm_mult` the exponent of reduced symbol `column` in original symbol `row`
+        # is `inverse[row, column]`.  One reduced symbol is therefore one *column*, where
+        # in the forward direction one original symbol was one row.
+        return tuple(name for column, name in enumerate(names)
+                     if any(entry < 0 for entry in inverse[:, column]))
+
+    def _names_given_explicitly(self):
+        '''
+        The names the caller wrote out in the naming scheme, as opposed to patterns.
+
+        A block entry that is a string is a pattern -- `'kappa'` becomes `kappa0, kappa1,
+        ...` -- and what it produces is not a name anyone chose.  A list or tuple is taken
+        literally, so every entry of it is.  ``independent`` is a single name either way,
+        since there is one independent variable and nothing to index.
+
+        Returns:
+            set of sympy.Symbol
+        '''
+        explicit = set()
+        for key, value in self._naming_scheme.items():
+            if key == 'independent':
+                if value is not None:
+                    explicit.add(to_symbol(value))
+            elif not isinstance(value, str) and value is not None:
+                explicit.update(to_symbol(name) if isinstance(name, str) else name
+                                for name in value)
+        return explicit
+
+    def _refuse_name_clashes(self, system, reduced_system):
+        '''
+        Refuse a reduced system that reuses one of the original's names for something else.
+
+        The two systems are different namespaces, and :mod:`desr.numerics` maps between
+        them, so one spelling meaning two quantities is not a cosmetic problem: a
+        ``known_values`` entry would not say which was meant.  It happens whenever a
+        generated name lands on a symbol the original already had -- a model whose own
+        parameter is called ``kappa0``, or a naming scheme of ``'c_'`` meeting the ``c_0``
+        that an initial condition minted.
+
+        Only a name the reduction **generated** can clash by accident.  A name the caller
+        wrote out is their decision, and reusing the original letters is a real thing to
+        want: Hubert & Labahn write their reduced predator-prey system in the same `n` and
+        `p`, and ``naming_scheme={'dependents': ['n', 'p']}`` is how to reproduce that.  So
+        an explicit entry of the naming scheme is exempt, as is the independent variable,
+        whose entry is always a literal name rather than a pattern -- which is also what
+        lets the general and dependent-variable schemes keep the system's own clock.
+
+        Raises:
+            ValueError: naming the clashing symbols and the way out.
+        '''
+        shared = set(system.symbols) & set(reduced_system.symbols)
+        shared -= self._names_given_explicitly()
+        if reduced_system.independent_variable == system.independent_variable:
+            shared.discard(system.independent_variable)
+        if not shared:
+            return
+
+        named = ', '.join(map(str, sorted(shared, key=str)))
+        plural = '' if len(shared) == 1 else 's'
+        raise ValueError(
+            'The reduced system would also use the name{} {}, which this system already '
+            'has, so one spelling would mean two different quantities.  Pass a '
+            'naming_scheme that avoids {}, or rename the original symbol{}.'.format(
+                plural, named, named, plural))
+
+    def _refuse_zero_scales(self, system):
+        '''
+        Refuse to reduce when a symbol the reduction divides by is known to be zero.
+
+        Checked here, as the reduced system is built, because this is the first moment both
+        halves of the question are in one place: the translator does not hold the system,
+        so it has no access to its values, and :meth:`multiplier_add_columns` goes on
+        changing which columns -- and so which symbols -- the reduction depends on.  A
+        check at construction would be complaining about a choice the caller is about to
+        make differently.
+
+        Raises:
+            ValueError: naming the symbols and the way out.
+        '''
+        values = system.parameter_values
+        if not values:
+            return
+
+        zero_valued = [symbol for symbol in self.symbols_that_must_not_be_zero(system)
+                       if symbol in values and values[symbol] == 0]
+        if not zero_valued:
+            return
+
+        named = ', '.join(map(str, zero_valued))
+        raise ValueError(
+            'This reduction divides by {}, which {} known to be zero, so the reduced '
+            'system would be undefined.  The variable order decides what gets scaled by, '
+            'and the front of the order is that end: move {} towards the back with '
+            'reorder_parameters, and {} will appear in numerators instead, where a value '
+            'of zero is harmless.  symbols_that_must_not_be_zero() reports the whole '
+            'set.'.format(named, 'is' if len(zero_valued) == 1 else 'are', named,
+                          'it' if len(zero_valued) == 1 else 'they'))
 
     def invariant_monomials(self, variables=None):
         '''

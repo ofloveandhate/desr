@@ -113,6 +113,52 @@ class TestDelimitersAndFractions(TestCase):
         self.assertEqual(tex_to_sympy_one_line(r'V_{25}'), sympy.Symbol('V_25'))
 
 
+class TestLinesThatCollapse(TestCase):
+    '''
+    An equation whose two sides are already comparable is not an equation: sympy.Eq
+    evaluates it to a boolean.  Such a line states nothing about any system, and returning
+    the boolean loses it -- `from_tex` then asked the boolean for its `.lhs` and died with
+    `'BooleanTrue' object has no attribute 'lhs'`.
+
+    This is what `x(0) = 0` used to do, because the implicit-multiplication rule read it
+    as `x*0 = 0`.  That line is now recognised as an initial condition before that rule
+    runs, so it no longer reaches here; see `TestInitialConditionLines`.  The guard stays
+    for the lines that really do collapse.
+    '''
+
+    DYNAMIC = '\n'.join([r'\frac{d}{dt}x &= k_1 - k_2 x \\',
+                         r'\frac{d}{dt}y &= k_2 x - k_3 y'])
+
+    def test_a_tautology_is_refused(self):
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'k_1 &= k_1')
+        self.assertIn('nothing about the system', str(caught.exception))
+
+    def test_a_falsehood_says_so(self):
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'0 &= 1')
+        self.assertIn('no system satisfies it', str(caught.exception))
+
+    def test_from_tex_reports_it_instead_of_an_attribute_error(self):
+        with self.assertRaises(TexParseError):
+            ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'k_1 &= k_1')
+
+    def test_a_variable_applied_to_something_other_than_zero_still_multiplies(self):
+        # The rule that a name against a parenthesis is multiplication is unchanged for
+        # everything but the literal zero, so this collapses as it always did.
+        with self.assertRaises(TexParseError):
+            tex_to_sympy_one_line(r'x\left(0 + 0\right) &= 0')
+
+    def test_a_real_equation_is_untouched(self):
+        x = sympy.Symbol('x')
+        self.assertEqual(tex_to_sympy_one_line(r'k_4 &= k_1 + x'),
+                         sympy.Eq(sympy.Symbol('k_4'), sympy.Symbol('k_1') + x))
+
+    def test_a_line_that_is_not_an_equation_is_untouched(self):
+        self.assertEqual(tex_to_sympy_one_line(r'k_{-1} C'),
+                         sympy.Symbol('k_m1') * sympy.Symbol('C'))
+
+
 class TestDerivativeNotation(TestCase):
     ''' Both ways a paper writes a derivative. '''
 
@@ -287,3 +333,159 @@ class TestMultiLine(TestCase):
         self.assertEqual(len(parsed), 2)
         for equation in parsed:
             self.assertIsInstance(equation.lhs, sympy.Derivative)
+
+
+class TestInitialConditionLines(TestCase):
+    '''
+    `C(0) = C_0` is how a paper writes an initial condition, and how `to_tex` has always
+    written one.  It has to be recognised before implicit multiplication runs, which would
+    read `C(0)` as `C*0`.  It comes back as an applied undefined function, the way a
+    derivative line comes back as a sympy.Derivative, so the caller classifies the line by
+    what it is.
+    '''
+
+    DYNAMIC = '\n'.join([r'\frac{d}{dt}x &= k_1 - k_2 x \\',
+                         r'\frac{d}{dt}y &= k_2 x - k_3 y'])
+
+    def test_a_variable_at_zero_parses_as_a_function_at_zero(self):
+        parsed = tex_to_sympy_one_line(r'x\left(0\right) &= x_0')
+        self.assertEqual(parsed, sympy.Eq(sympy.Function('x')(0), sympy.Symbol('x_0')))
+
+    def test_the_bare_parenthesis_form_works_too(self):
+        self.assertEqual(tex_to_sympy_one_line(r'x(0) = x_0'),
+                         sympy.Eq(sympy.Function('x')(0), sympy.Symbol('x_0')))
+
+    def test_a_zero_initial_condition_parses(self):
+        self.assertEqual(tex_to_sympy_one_line(r'x\left(0\right) &= 0'),
+                         sympy.Eq(sympy.Function('x')(0), sympy.Integer(0)))
+
+    def test_the_number_may_come_first(self):
+        # A paper may write `x_0 = x(0)`.
+        self.assertEqual(tex_to_sympy_one_line(r'x_0 = x\left(0\right)'),
+                         sympy.Eq(sympy.Function('x')(0), sympy.Symbol('x_0')))
+
+    def test_both_sides_at_zero_is_refused(self):
+        with self.assertRaises(TexParseError) as caught:
+            tex_to_sympy_one_line(r'x\left(0\right) = y\left(0\right)')
+        self.assertIn('both sides', str(caught.exception))
+
+    def test_a_product_with_a_parenthesis_is_still_a_product(self):
+        x, y = sympy.symbols('x y')
+        self.assertEqual(tex_to_sympy_one_line(r'k_3 (x - y)'),
+                         sympy.Symbol('k_3') * (x - y))
+
+    def test_a_variable_at_t_is_not_an_initial_condition(self):
+        # Only the literal zero, so nothing else changes meaning.
+        parsed = tex_to_sympy_one_line(r'k_4 = x(t)')
+        self.assertEqual(parsed, sympy.Eq(sympy.Symbol('k_4'),
+                                          sympy.Symbol('x') * sympy.Symbol('t')))
+
+    def test_a_text_mode_species_name_works(self):
+        parsed = tex_to_sympy_one_line(r'\textrm{[ES]}\left(0\right) &= 0')
+        self.assertEqual(parsed, sympy.Eq(sympy.Function('ES')(0), sympy.Integer(0)))
+
+    def test_from_tex_records_it_as_an_initial_condition(self):
+        system = ODESystem.from_tex(
+            self.DYNAMIC + '\\\\\n' + r'x\left(0\right) &= x_0')
+        self.assertEqual(system.initial_conditions,
+                         {sympy.Symbol('x'): sympy.Symbol('x_0')})
+
+    def test_from_tex_takes_a_zero(self):
+        system = ODESystem.from_tex(
+            self.DYNAMIC + '\\\\\n' + r'x\left(0\right) &= 0')
+        self.assertEqual(system.initial_conditions,
+                         {sympy.Symbol('x'): sympy.Symbol('x_0')})
+        self.assertEqual(system.parameter_values[sympy.Symbol('x_0')], sympy.Integer(0))
+
+    def test_an_initial_condition_for_something_that_is_not_dependent_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'k_1\left(0\right) &= 1')
+        self.assertIn('not a dependent variable', str(caught.exception))
+
+
+class TestParameterValueLines(TestCase):
+    '''
+    A symbol given a number is a value, which is what a paper means by `k_1 = 2`.  A
+    constraint cannot hold one anyway: `add_constraint` refuses a side that is zero, so
+    `C_0 = 0` had nowhere to go at all.
+    '''
+
+    DYNAMIC = '\n'.join([r'\frac{d}{dt}x &= k_1 - k_2 x \\',
+                         r'\frac{d}{dt}y &= k_2 x - k_3 y'])
+
+    def test_a_number_is_a_value_not_a_constraint(self):
+        system = ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'k_1 &= 2')
+        self.assertEqual(system.parameter_values[sympy.Symbol('k_1')], sympy.Integer(2))
+        self.assertEqual(system.constraints, [])
+
+    def test_a_zero_value_is_taken(self):
+        system = ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'k_1 &= 0')
+        self.assertEqual(system.parameter_values[sympy.Symbol('k_1')], sympy.Integer(0))
+
+    def test_the_number_may_come_first(self):
+        system = ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'2 &= k_1')
+        self.assertEqual(system.parameter_values[sympy.Symbol('k_1')], sympy.Integer(2))
+
+    def test_a_relation_among_parameters_is_still_a_constraint(self):
+        system = ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'k_4 &= k_1 + k_2')
+        self.assertEqual(len(system.constraints), 1)
+        self.assertEqual(system.parameter_values, {})
+
+    def test_a_dependent_given_a_number_is_still_a_definition(self):
+        # It says something about the trajectory, not about a constant, so it keeps going
+        # down the definition path and its message.
+        with self.assertRaises(TexParseError) as caught:
+            ODESystem.from_tex(self.DYNAMIC + '\\\\\n' + r'x &= 2')
+        self.assertIn('sub_defns', str(caught.exception))
+
+    def test_values_are_checked_against_the_constraints_in_the_same_tex(self):
+        tex = self.DYNAMIC + '\\\\\n' + '\\\\\n'.join(
+            [r'k_4 &= k_1 + k_2', r'k_1 &= 1', r'k_2 &= 1', r'k_4 &= 3'])
+        with self.assertRaises(ValueError) as caught:
+            ODESystem.from_tex(tex)
+        self.assertIn('do not satisfy it', str(caught.exception))
+
+
+class TestTexRoundTrip(TestCase):
+    '''
+    `to_tex` and `from_tex` should be inverse.  Initial conditions were being written and
+    not read, and values were not being written at all.
+    '''
+
+    TEX = '\n'.join(['\\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\',
+                     '\\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\',
+                     '\\frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\',
+                     '\\frac{dP}{dt} &= k_2 C'])
+
+    def system(self):
+        system = ODESystem.from_tex(self.TEX)
+        system.update_initial_conditions({'S': 'S_0', 'E': 'E_0', 'C': 0, 'P': 0})
+        system.add_constraint('K_m = (k_m1 + k_2) / k_1')
+        return system
+
+    def test_the_equations_survive(self):
+        system = self.system()
+        self.assertEqual(ODESystem.from_tex(system.to_tex()).derivative_dict,
+                         system.derivative_dict)
+
+    def test_the_initial_conditions_survive(self):
+        system = self.system()
+        self.assertEqual(ODESystem.from_tex(system.to_tex()).initial_conditions,
+                         system.initial_conditions)
+
+    def test_the_constraints_survive(self):
+        system = self.system()
+        self.assertEqual(ODESystem.from_tex(system.to_tex()).constraints,
+                         system.constraints)
+
+    def test_the_values_survive(self):
+        system = self.system()
+        self.assertEqual(ODESystem.from_tex(system.to_tex()).parameter_values,
+                         system.parameter_values)
+
+    def test_to_tex_writes_the_values(self):
+        self.assertIn('C_{0} &= 0', self.system().to_tex())
+
+    def test_a_second_pass_changes_nothing(self):
+        once = self.system().to_tex()
+        self.assertEqual(ODESystem.from_tex(once).to_tex(), once)
