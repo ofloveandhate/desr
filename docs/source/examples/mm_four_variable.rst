@@ -92,17 +92,24 @@ Extending a choice of invariants
 We return to our original variable order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
 
 Suppose we wish to study the invariants :math:`\frac{k_1}{k_{2}}C` and :math:`\frac{k_1}{k_{-1}}P`.
-Then we must create a matrix representing these invariants:
+We say so by writing them down:
+
+    >>> invariant_choice = ['C*k_1/k_2', 'P*k_1/k_m1']
+
+Internally these become a matrix of exponents, one invariant per column, read against the
+variable order:
 
 .. math::
 
     P = \left[\begin{matrix}1 & 1\\-1 & 0\\0 & -1\\0 & 0\\1 & 0\\0 & 0\\0 & 1\\0 & 0\end{matrix}\right].
 
-We can easily check we have correct matrix:
+That matrix may be passed instead, but it is not the thing to type: its *rows* are
+positions in the variable order, so reordering the variables leaves the same matrix meaning
+different monomials, and nothing in it records which invariants were intended.  Writing the
+monomials says what is meant and survives a reordering.
 
-    >>> invariant_choice = sympy.Matrix([[1, -1, 0, 0, 1, 0, 0, 0],
-    ...                                  [1, 0, -1, 0, 0, 0, 1, 0]]).T
-    >>> scale_action(max_scal1.symbols_domain, invariant_choice)
+    >>> scale_action(max_scal1.symbols_domain, sympy.Matrix([[1, -1, 0, 0, 1, 0, 0, 0],
+    ...                                                      [1, 0, -1, 0, 0, 0, 1, 0]]).T)
     Matrix([[C*k_1/k_2, P*k_1/k_m1]])
 
 Finding a maximal scaling matrix that can be used to rewrite the system in terms of these invariants is also simple.

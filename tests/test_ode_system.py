@@ -231,23 +231,14 @@ class TestODESystemScaling(TestCase):
         self.assertTupleEqual(tuple(max_scal.invariant_monomials()),
                               (d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
 
-        def as_choice(monomials):
-            '''The exponent matrix of the given monomials, one per column.
-
-            extend_from_invariants takes exponents, which means knowing where each variable
-            sits.  Naming the monomials and converting here keeps the test independent of
-            that -- and is the shape the method itself ought to accept.
-            '''
-            variables = list(max_scal.symbols_domain)
-            return sympy.Matrix([monomial_to_powers(m, variables) for m in monomials]).T
-
-        # Choose a new invariant
-        max_scal2 = max_scal.extend_from_invariants(as_choice([r*t, h*p/d]))
+        # Choose a new invariant, by writing it down.  This used to need the exponent
+        # matrix, which meant knowing where each variable sat in the order.
+        max_scal2 = max_scal.extend_from_invariants([r*t, h*p/d])
         self.assertTupleEqual(tuple(max_scal2.invariant_monomials()),
                               (r*t, h*p/d, h*s/k, k*t/h, n/K, h*p/K))
 
         # This should work even if we move the time about
-        max_scal3 = max_scal.extend_from_invariants(as_choice([h*p/d]))
+        max_scal3 = max_scal.extend_from_invariants(h*p/d)
         self.assertTupleEqual(tuple(max_scal3.invariant_monomials()),
                               (h*p/d, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
 

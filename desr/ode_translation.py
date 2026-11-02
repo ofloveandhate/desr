@@ -5,7 +5,8 @@ import sympy
 
 from desr.matrix_normal_forms import normal_hnf_col, normal_hnf_row, is_hnf_col
 from desr.ode_system import ODESystem
-from desr.sympy_helper import sympify_expression, to_symbol
+from desr.sympy_helper import (is_monomial, monomial_to_powers, sympify_expression,
+                               to_symbol)
 from desr.tex_tools import matrix_to_tex
 
 
@@ -2868,18 +2869,27 @@ class ODETranslator(object):
         return scale_action(variables, vip) - scale_action(variables, vin)
 
     ## Choosing invariants
-    def extend_from_invariants(self, invariant_choice):
+    def extend_from_invariants(self, invariant_choice, variables=None):
         '''
-        Extend a given set of invariants, expressed as a matrix of exponents, to find a Hermite multiplier that will
-        rewrite the system in terms of invariant_choice.
+        Find a Hermite multiplier that rewrites the system in terms of the invariants you
+        asked for, extending them to a full set.
 
+        Say which invariants you want by **writing them down**.  The exponent matrix is
+        still accepted, but it is the wrong thing to type: its rows are positions in the
+        variable order, so `reorder_parameters` silently changes what the same matrix
+        means, and nothing in the matrix says which invariant it was meant to be.
 
         Parameters
         ----------
-        invariant_choice : sympy.Matrix
-            The :math:`n \\times k` matrix representing the invariants, where :math:`n` is the number of variables and :math:`k` is the
-            number of given invariants.
-
+        invariant_choice : iterable, str, sympy.Expr, sympy.Matrix
+            The invariants to keep.  Each is a monomial in the original symbols, written as
+            an expression or a string -- `'r*t'`, `h*p/d` -- and one on its own need not be
+            wrapped in a list.  Alternatively the :math:`n \\times k` matrix of exponents,
+            one invariant per column, in the variable order.
+        variables : iter of sympy.Symbol, optional
+            The variable order the monomials are read against.  Taken from
+            :attr:`symbols_domain` when left out, which is what
+            :meth:`from_ode_system` records.
 
         Returns
         -------
@@ -2890,25 +2900,52 @@ class ODETranslator(object):
         >>> variables = sympy.symbols(' '.join(['y{}'.format(i) for i in range(6)]))
         >>> ode_translator = ODETranslator(sympy.Matrix([[1, 0, 3, 0, 2, 2],
         ...                                                [0, 2, 0, 1, 0, 1],
-        ...                                                [2, 0, 0, 3, 0, 0]]))
-        >>> ode_translator.invariant_monomials(variables=variables)
+        ...                                                [2, 0, 0, 3, 0, 0]]),
+        ...                                symbols_domain=variables)
+        >>> ode_translator.invariant_monomials()
         Matrix([[y2*y3**2/(y0**3*y1), y4**3/y2**2, y4*y5**2/(y1*y2**2)]])
 
-        Now we can express two new invariants, which we think are more interesting, as a matrix.
-        We pick the product of the first two invariants, and the product of the last two invariants:
-        :code:`y0**3 * y1 * y2/(y3**2 * y4**3)` and :code:`y1 *  y2**2/(y4 * y5**2)`
+        Two new invariants we think are more interesting -- the product of the first two
+        above, and the product of the last two -- said by writing them:
+
+        >>> new_translator = ode_translator.extend_from_invariants(
+        ...     ['y0**3*y1*y2/(y3**2*y4**3)', 'y1*y2**2/(y4*y5**2)'])
+        >>> new_translator.invariant_monomials()
+        Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y4**3/y2**2]])
+
+        The exponent matrix says the same thing, and is what the monomials are turned into:
 
         >>> new_inv = sympy.Matrix([[3, 1, 1, -2, -3, 0],
         ...                         [0, 1, 2, 0, -1, -2]]).T
-
-        >>> new_translator = ode_translator.extend_from_invariants(new_inv)
-        >>> new_translator.invariant_monomials(variables=variables)
+        >>> ode_translator.extend_from_invariants(new_inv).invariant_monomials()
         Matrix([[y0**3*y1*y2/(y3**2*y4**3), y1*y2**2/(y4*y5**2), y4**3/y2**2]])
+
+        Something that is not invariant is refused, and named:
+
+        >>> ode_translator.extend_from_invariants('y0*y1')
+        Traceback (most recent call last):
+            ...
+        ValueError: y0*y1 is not an invariant of the scaling action, so the system cannot be rewritten in terms of it.
         '''
+        variables = self._validate_variables(variables, self.n, 'y', True)
+        invariant_choice = self._as_exponent_matrix(invariant_choice, variables)
+
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
         if not choice_actions.is_zero_matrix:
-            raise ValueError('The desired combinations {} are not invariants of the scaling action.'.format(invariant_choice))
+            # Named as monomials whichever way they arrived, because a column index is not
+            # something a caller can act on.
+            monomials = list(scale_action(variables, invariant_choice))
+            offenders = [monomials[column] for column in range(invariant_choice.shape[1])
+                         if not choice_actions[:, column].is_zero_matrix]
+            named = ', '.join(map(str, offenders))
+            raise ValueError(
+                '{} {} not {} of the scaling action, so the system cannot be rewritten in '
+                'terms of {}.'.format(
+                    named,
+                    'is' if len(offenders) == 1 else 'are',
+                    'an invariant' if len(offenders) == 1 else 'invariants',
+                    'it' if len(offenders) == 1 else 'them'))
 
         ## Step 2: Try and extend the choices by a basis of invariants
         ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
@@ -2921,6 +2958,93 @@ class ODETranslator(object):
                                   hermite_multiplier=hermite_multiplier)
 
         return max_scal
+
+    def _as_exponent_matrix(self, invariant_choice, variables):
+        '''
+        The exponent matrix of some chosen invariants, however they were written.
+
+        A :class:`sympy.Matrix` is already one and is returned as it came.  Otherwise each
+        entry is a monomial in `variables`, and one monomial on its own need not be wrapped
+        in a list.
+
+        Every symbol of a monomial must be one of `variables`.  `monomial_to_powers` looks
+        up only the variables it is given, so a symbol that is not among them contributes
+        nothing and is silently dropped -- which would turn a typo into a different
+        invariant rather than an error.
+
+        Returns:
+            sympy.Matrix: :math:`n \\times k`, one invariant per column.
+
+        Raises:
+            ValueError: If an entry is not a monomial, names a symbol the scaling action
+                does not act on, or needs a fractional power.
+        '''
+        if isinstance(invariant_choice, sympy.MatrixBase):
+            return invariant_choice
+
+        if isinstance(invariant_choice, (str, sympy.Expr)):
+            invariant_choice = [invariant_choice]
+
+        known = set(variables)
+        columns = []
+        for monomial in invariant_choice:
+            if isinstance(monomial, str):
+                monomial = sympify_expression(monomial)
+
+            if not is_monomial(monomial):
+                raise ValueError(
+                    '{} is not a monomial, so it is not something a scaling reduction can '
+                    'produce: every invariant is a product of integer powers of the '
+                    'symbols.  A sum of invariants is invariant, but it is written in '
+                    'terms of these rather than chosen among them.'.format(monomial))
+
+            # Every base must be one of the variables and every exponent a whole number,
+            # which is what makes the choice a Laurent monomial and so a column of
+            # exponents.  Checked on the powers dict rather than per variable, because a
+            # fractional power of a product keeps the product as one base -- `sqrt(h*p/d)`
+            # is `(h*p/d)**(1/2)` -- and `monomial_to_powers`, looking up only the
+            # variables it is given, would find none of them and return all zeros.
+            for base, exponent in monomial.as_powers_dict().items():
+                if base.is_number and not base.is_Rational:
+                    # A named constant: `E`, `I`, `pi`.  Almost always `sympy.sympify`
+                    # where `desr.sympify_expression` was meant -- the two print
+                    # identically, so the only tell is that the name is missing from
+                    # `free_symbols`.  Worth saying outright, because a modeller writing
+                    # `E` for an enzyme has no reason to suspect Euler's number.
+                    also_a_symbol = to_symbol(str(base))
+                    raise ValueError(
+                        "{} contains sympy's own {}, not a symbol named {!r}{}.  Build "
+                        'the expression with desr.sympify_expression, which reads every '
+                        'name as a symbol; sympy.sympify does not, and the two print the '
+                        'same.'.format(
+                            monomial, base, str(base),
+                            ', which this system does have' if also_a_symbol in known
+                            else ''))
+
+                if base.is_number:
+                    raise ValueError(
+                        'Write {} without its factor of {}: only the exponents of the '
+                        'symbols pick out an invariant, so the factor would be dropped '
+                        'rather than honoured.'.format(monomial, base))
+
+                if not exponent.is_Integer:
+                    raise ValueError(
+                        '{} needs the fractional power {} of {}, and the Hermite '
+                        'multipliers this works with are integer matrices, so an '
+                        'invariant has to be a product of whole-number powers.'.format(
+                            monomial, exponent, base))
+
+                if not base.is_Symbol or base not in known:
+                    raise ValueError(
+                        '{} names {}, which the scaling action does not act on.  It acts '
+                        'on {}.'.format(monomial, base, ', '.join(map(str, variables))))
+
+            columns.append(monomial_to_powers(monomial, variables))
+
+        if not columns:
+            raise ValueError('No invariants were given to extend from.')
+
+        return sympy.Matrix(columns).T
 
     ## Determine whether an expression is an invariant or not
     def is_invariant_expr(self, expr, variable_order=None):
