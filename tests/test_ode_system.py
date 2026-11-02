@@ -859,3 +859,164 @@ class TestParameterValuesSurviveTheSystem(TestCase):
         with self.assertRaises(ConflictingParameterValues) as caught:
             system.subs({'c_0': '7'})
         self.assertIn('c_0', str(caught.exception))
+
+
+class TestNumericInitialConditions(TestCase):
+    '''
+    A number is a value, and in a system that has not been reduced a value still has
+    units: a `0` for a concentration is a concentration, not the dimensionless `0` of a
+    reduced system.  So the number becomes the value of a symbol, and the symbol carries
+    the units.  Which is what lets a zero initial condition be stated at all.
+    '''
+
+    EQUATIONS = ['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def test_a_number_becomes_a_symbol_with_that_value(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 3})
+        self.assertEqual(system.initial_conditions,
+                         {sympy.Symbol('x'): sympy.Symbol('x_0')})
+        self.assertEqual(system.parameter_values,
+                         {sympy.Symbol('x_0'): sympy.Integer(3)})
+
+    def test_zero_is_allowed_and_is_the_whole_point(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 0})
+        self.assertEqual(system.parameter_values[sympy.Symbol('x_0')], sympy.Integer(0))
+
+    def test_the_minted_symbol_is_a_parameter(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 0})
+        self.assertIn(sympy.Symbol('x_0'), system.parameters)
+
+    def test_the_symbol_enters_the_scaling_as_a_units_statement(self):
+        # `x/x_0` is true about units whatever x_0's value turns out to be, so the
+        # symbolic side is identical to naming the symbol by hand.
+        by_number, by_name = self.system(), self.system()
+        by_number.update_initial_conditions({'x': 0})
+        by_name.update_initial_conditions({'x': 'x_0'})
+        self.assertEqual(by_number.maximal_scaling_matrix(),
+                         by_name.maximal_scaling_matrix())
+
+    def test_a_float_works_too(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 0.5})
+        self.assertAlmostEqual(
+            float(system.parameter_values[sympy.Symbol('x_0')]), 0.5)
+
+    def test_a_bare_symbol_still_carries_no_value(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 'x_0'})
+        self.assertEqual(system.parameter_values, {})
+
+    def test_an_existing_parameter_of_that_name_is_reused(self):
+        system = self.system()
+        system.update_initial_conditions({'x': 'x_0'})
+        system.update_initial_conditions({'x': 0})
+        self.assertEqual(system.initial_conditions,
+                         {sympy.Symbol('x'): sympy.Symbol('x_0')})
+        self.assertEqual(system.parameter_values[sympy.Symbol('x_0')],
+                         sympy.Integer(0))
+
+    def test_a_name_already_another_variables_initial_condition_is_refused(self):
+        system = self.system()
+        system.update_initial_conditions({'y': 'x_0'})
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions({'x': 0})
+        self.assertIn('already the initial condition of y', str(caught.exception))
+
+    def test_a_name_taken_by_a_variable_is_refused(self):
+        system = ODESystem.from_equations(['dx/dt = c_0*x*x_0',
+                                           'dx_0/dt = -c_0*x*x_0'])
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions({'x': 0})
+        self.assertIn('already a variable', str(caught.exception))
+
+    def test_an_expression_is_still_refused(self):
+        system = self.system()
+        with self.assertRaises(ValueError) as caught:
+            system.update_initial_conditions({'x': 'c_0 + c_1'})
+        self.assertIn('c_0, c_1', str(caught.exception))
+
+    def test_a_reduced_system_keeps_the_number_as_a_number(self):
+        # Its symbols are dimensionless, so there is nothing for a symbol to carry.  This
+        # is how `nu0(0) = 1` comes out of a reduction.
+        system = ODESystem.from_equations(self.EQUATIONS, is_reduced=True)
+        system.update_initial_conditions({'x': 1})
+        self.assertEqual(system.initial_conditions,
+                         {sympy.Symbol('x'): sympy.Integer(1)})
+        self.assertEqual(system.parameter_values, {})
+
+
+class TestZeroInitialConditionsThroughAReduction(TestCase):
+    '''
+    Michaelis-Menten with `C(0) = 0` and `P(0) = 0` stated rather than skipped, which is
+    what the narrative has always had to gloss over.
+    '''
+
+    TEX = '\n'.join(['\\frac{dS}{dt} &= - k_1 E S + k_{-1} C \\\\',
+                     '\\frac{dE}{dt} &= - k_1 E S + k_{-1} C + k_2 C \\\\',
+                     '\\frac{dC}{dt} &= k_1 E S - k_{-1} C - k_2 C \\\\',
+                     '\\frac{dP}{dt} &= k_2 C'])
+
+    def system(self):
+        system = ODESystem.from_tex(self.TEX)
+        system.update_initial_conditions({'S': 'S_0', 'E': 'E_0', 'C': 0, 'P': 0})
+        return system
+
+    def test_the_zeros_can_be_stated(self):
+        system = self.system()
+        self.assertEqual(system.parameter_values,
+                         {sympy.Symbol('C_0'): sympy.Integer(0),
+                          sympy.Symbol('P_0'): sympy.Integer(0)})
+
+    def test_the_default_order_does_not_scale_by_them(self):
+        # New parameters land at the back of the parameter block, and the back is the keep
+        # end, so a zero-valued initial condition is out of harm's way by default.
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        must_not_be_zero = translator.symbols_that_must_not_be_zero()
+        self.assertNotIn(sympy.Symbol('C_0'), must_not_be_zero)
+        self.assertNotIn(sympy.Symbol('P_0'), must_not_be_zero)
+
+    def test_the_reduction_goes_through(self):
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertTrue(reduced.is_reduced)
+
+    def test_the_zero_is_visible_in_the_reduced_system(self):
+        # Two reduced parameters are zero, each the invariant holding one of C_0, P_0 in
+        # its numerator.  Derived, not restated.
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        zero_valued = [parameter for parameter, value in reduced.parameter_values.items()
+                       if value == 0]
+        self.assertEqual(len(zero_valued), 2)
+
+    def test_each_zero_reduced_parameter_is_an_initial_condition(self):
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        zero_valued = {parameter for parameter, value in reduced.parameter_values.items()
+                       if value == 0}
+        self.assertTrue(zero_valued <= set(reduced.initial_conditions.values()))
+
+    def test_scaling_by_a_zero_is_refused_if_the_order_asks_for_it(self):
+        system = self.system()
+        system.reorder_parameters(['C_0', 'P_0', 'k_1', 'k_2', 'k_m1', 'S_0', 'E_0'])
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(system)
+        self.assertIn('C_0', str(caught.exception))
+
+    def test_naming_a_scale_that_already_exists_adds_no_symbol(self):
+        # The other way to give a zero-start variable a scale: Segel & Slemrod measure the
+        # complex in units of e_0, not of c(0).  No new symbol, so no extra reduced
+        # parameter -- which is the cost of minting one.
+        system = ODESystem.from_tex(self.TEX)
+        system.update_initial_conditions({'S': 'S_0', 'E': 'E_0'})
+        before = len(system.symbols)
+        system.require_same_unit({'C': 'E_0'})
+        self.assertEqual(len(system.symbols), before)

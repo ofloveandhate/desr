@@ -715,22 +715,41 @@ class ODESystem(object):
         >>> system.is_reduced
         False
 
-        >>> system.update_initial_conditions({'x': '1'})
-        Traceback (most recent call last):
-            ...
-        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
-        
-        >>> system.update_initial_conditions({'x': '0'})
-        Traceback (most recent call last):
-            ...
-        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have set()
+        A **number** is a value, and in a system that has not been reduced a value still
+        carries units: ``0`` there is a concentration, not the dimensionless ``0`` of a
+        reduced system.  So the number is recorded as the value of a symbol, which is the
+        thing that has the units, and the symbol's name is inferred from the variable's:
 
+        >>> system.update_initial_conditions({'y': 0})
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
         dy/dt = c_1*t*(1 - x)*(1 - y)
         x(0) = x_0
-        parameters: c_0, c_1, x_0
+        y(0) = y_0
+        parameters: c_0, c_1, x_0, y_0
+        parameter values: y_0 = 0
+
+        Which is what lets a zero initial condition be stated at all.  The symbolic side
+        is untouched by the value -- ``y/y_0`` is a true statement about units whatever
+        ``y_0`` turns out to be -- so the reduction stays entirely symbolic, and the one
+        thing that cannot happen is for the reduction to *divide* by ``y_0``.  That is
+        checked when a reduced system is built; see
+        :meth:`desr.ode_translation.ODETranslator.symbols_that_must_not_be_zero`.
+
+        >>> system.parameter_values
+        {y_0: 0}
+
+        A reduced system is the other case: its symbols are dimensionless, so a number
+        there has no units to carry and stays a number.  That is how ``nu0(0) = 1`` comes
+        out of a reduction.
+
+        An expression that is neither is still refused:
+
+        >>> system.update_initial_conditions({'x': 'c_0 + c_1'})
+        Traceback (most recent call last):
+            ...
+        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have c_0, c_1
         '''
         for variable, init_cond in initial_conditions.items():
 
@@ -740,6 +759,10 @@ class ODESystem(object):
 
             if isinstance(init_cond, str):
                 init_cond = sympify_expression(init_cond)
+            elif not isinstance(init_cond, sympy.Basic):
+                # A plain int or float.  Only strings were converted before, because only
+                # symbols could be initial conditions.
+                init_cond = sympy.sympify(init_cond)
 
             # We can only set initial conditions for dependent variables we already know about.
             if variable not in self.dependents:
@@ -748,25 +771,77 @@ class ODESystem(object):
 
 
 
-            ics_vars = expressions_to_variables([init_cond]) # convert. 
+            # A number in a system that has not been reduced still has units -- a `0` for a
+            # concentration is a concentration -- so it is recorded as the *value* of a
+            # symbol, and the symbol is what carries the units into `_expressions`.  That
+            # keeps the reduction entirely symbolic: `C/C_0` says the two have the same
+            # units whatever C_0's value turns out to be.
+            #
+            # A reduced system is the other case and keeps the number.  Its symbols are
+            # dimensionless, so there are no units to carry and no `1`s of different units
+            # to confuse, which is how `nu0(0) = 1` comes out of a reduction.
+            value = None
+            if init_cond.is_number and not self.is_reduced:
+                init_cond, value = self._initial_condition_symbol(variable), init_cond
 
+            ics_vars = expressions_to_variables([init_cond]) # convert.
 
-
-            # reduced systems are allowed to have 1's (and potentially 0's) as initial conditions
-            # but non-reduced systems are NOT.  Otherwise, there might be 1's with different units, and this is nonsense.
             if not self.is_reduced:
 
                 if len(ics_vars) != 1:
-                    raise ValueError(f'an initial condition for a non-reduced system should just be a single variable.  you have {ics_vars}')
+                    # Sorted, because a set's repr varies between runs and an error whose
+                    # text moves cannot be matched on.
+                    named = ', '.join(sorted(map(str, ics_vars))) or 'none'
+                    raise ValueError(f'an initial condition for a non-reduced system should just be a single variable.  you have {named}')
 
                 if init_cond.is_constant():
-                    raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.  If you want {variable}(0) to be a numeric constant like 1 or 0, accomplish this via substitution (after reduction)")
+                    raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.")
 
             # silviana: i think we should guard against having 1 be a variable...
             if (init_cond not in self.symbols) and not init_cond.is_constant(): # checking emptiness on ics_vars
                 self._add_parameters([init_cond])
 
             self._initial_conditions[variable] = init_cond
+
+            # After `_add_parameters`, which is what makes the symbol a parameter that can
+            # be given a value.
+            if value is not None:
+                self.update_parameter_values({init_cond: value})
+
+    def _initial_condition_symbol(self, variable):
+        '''
+        The symbol that carries a dependent variable's initial value.
+
+        Inferred from the variable's own name -- `C` gives `C_0` -- which is the convention
+        the library already writes by hand everywhere, so a caller who passes a number gets
+        the symbol they would have chosen.
+
+        An existing parameter of that name is reused, since that is what it is for.  A name
+        already taken by something else is refused rather than quietly repurposed; pass the
+        symbol you mean instead of a number.
+
+        Raises:
+            ValueError: If the inferred name is taken by a variable, or is already another
+                dependent variable's initial condition.
+        '''
+        symbol = to_symbol('{}_0'.format(variable))
+
+        if symbol in self.variables:
+            raise ValueError(
+                'The initial value of {} would be called {}, but {} is already a variable '
+                'of this system.  Pass the symbol you want it to be instead of a '
+                'number.'.format(variable, symbol, symbol))
+
+        taken_by = [other for other, init_cond in self._initial_conditions.items()
+                    if init_cond == symbol and other != variable]
+        if taken_by:
+            raise ValueError(
+                'The initial value of {} would be called {}, but {} is already the initial '
+                'condition of {}.  Pass the symbol you want it to be instead of a '
+                'number.'.format(variable, symbol, symbol,
+                                 ', '.join(map(str, sorted(taken_by, key=str)))))
+
+        return symbol
 
 
     @property
