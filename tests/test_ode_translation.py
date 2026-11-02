@@ -5,7 +5,7 @@ import sympy
 from desr.chemical_reaction_network import ChemicalReactionNetwork
 from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslator, ReductionScheme, scale_action
-from desr.sympy_helper import sympify_expression
+from desr.sympy_helper import monomial_to_powers, sympify_expression
 
 
 class TestODETranslatorTraps(TestCase):
@@ -950,3 +950,179 @@ class TestExplicitNamesAreTheCallersChoice(TestCase):
                                    'dependents': ['n', 'p']})
         reduced = translator.translate_parameter(system)
         self.assertEqual(str(reduced.independent_variable), 't')
+
+
+class TestExtendFromWrittenInvariants(TestCase):
+    '''
+    An invariant is said by writing it.  The exponent matrix still works, but its rows are
+    positions in the variable order, so the same matrix means different monomials after a
+    reorder -- and nothing in it records which invariants were intended.
+    '''
+
+    EQUATIONS = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
+
+    def translator(self, parameter_order=None):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        if parameter_order is not None:
+            system.reorder_parameters(parameter_order)
+        return system, ODETranslator.from_ode_system(system)
+
+    def test_a_list_of_expressions(self):
+        system, translator = self.translator()
+        h, p, d, r, t = sympy.symbols('h p d r t')
+        extended = translator.extend_from_invariants([r * t, h * p / d])
+        self.assertEqual(tuple(extended.invariant_monomials())[:2], (r * t, h * p / d))
+
+    def test_a_list_of_strings(self):
+        system, translator = self.translator()
+        extended = translator.extend_from_invariants(['r*t', 'h*p/d'])
+        self.assertEqual(tuple(extended.invariant_monomials())[:2],
+                         (sympy.sympify('r*t'), sympy.sympify('h*p/d')))
+
+    def test_one_expression_need_not_be_wrapped(self):
+        system, translator = self.translator()
+        extended = translator.extend_from_invariants(sympy.sympify('h*p/d'))
+        self.assertEqual(tuple(extended.invariant_monomials())[0],
+                         sympy.sympify('h*p/d'))
+
+    def test_one_string_need_not_be_wrapped(self):
+        system, translator = self.translator()
+        extended = translator.extend_from_invariants('h*p/d')
+        self.assertEqual(tuple(extended.invariant_monomials())[0],
+                         sympy.sympify('h*p/d'))
+
+    def test_the_exponent_matrix_still_works(self):
+        system, translator = self.translator()
+        matrix = sympy.Matrix([monomial_to_powers(sympy.sympify('h*p/d'),
+                                                  list(system.symbols))]).T
+        extended = translator.extend_from_invariants(matrix)
+        self.assertEqual(tuple(extended.invariant_monomials())[0],
+                         sympy.sympify('h*p/d'))
+
+    def test_the_two_forms_agree(self):
+        system, translator = self.translator()
+        matrix = sympy.Matrix([monomial_to_powers(sympy.sympify('h*p/d'),
+                                                  list(system.symbols))]).T
+        self.assertEqual(
+            tuple(translator.extend_from_invariants(matrix).invariant_monomials()),
+            tuple(translator.extend_from_invariants('h*p/d').invariant_monomials()))
+
+    def test_a_written_invariant_survives_a_reorder(self):
+        # The whole point.  The same thing written gives the same thing chosen.
+        for order in (['K', 'd', 'h', 'k', 'r', 's'], ['s', 'r', 'k', 'h', 'd', 'K']):
+            with self.subTest(order=''.join(order)):
+                system, translator = self.translator(order)
+                extended = translator.extend_from_invariants('h*p/d')
+                self.assertEqual(tuple(extended.invariant_monomials())[0],
+                                 sympy.sympify('h*p/d'))
+
+    def test_the_exponent_matrix_does_not_survive_a_reorder(self):
+        # Why the monomial form exists: built against one order, the identical matrix
+        # denotes `k*p/r` against another.
+        system, translator = self.translator(['K', 'd', 'h', 'k', 'r', 's'])
+        matrix = sympy.Matrix([monomial_to_powers(sympy.sympify('h*p/d'),
+                                                  list(system.symbols))]).T
+        reordered_system, reordered = self.translator(['s', 'r', 'k', 'h', 'd', 'K'])
+        self.assertEqual(
+            scale_action(reordered_system.symbols, matrix)[0],
+            sympy.sympify('k*p/r'))
+
+    def test_something_that_is_not_invariant_is_named(self):
+        system, translator = self.translator()
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants('h*p')
+        message = str(caught.exception)
+        self.assertIn('h*p', message)
+        self.assertIn('not an invariant', message)
+
+    def test_a_sum_is_refused_as_not_a_monomial(self):
+        system, translator = self.translator()
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants('h*p/d + r*t')
+        self.assertIn('not a monomial', str(caught.exception))
+
+    def test_an_unknown_symbol_is_refused_rather_than_ignored(self):
+        # monomial_to_powers looks up only the variables it is given, so a stranger
+        # contributes nothing and would silently denote a different invariant.
+        system, translator = self.translator()
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants('h*p/dd')
+        message = str(caught.exception)
+        self.assertIn('dd', message)
+        self.assertIn('does not act on', message)
+
+    def test_a_fractional_power_is_refused_with_a_reason(self):
+        system, translator = self.translator()
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants('sqrt(h*p/d)')
+        self.assertIn('fractional power', str(caught.exception))
+
+    def test_an_empty_choice_is_refused(self):
+        system, translator = self.translator()
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants([])
+        self.assertIn('No invariants', str(caught.exception))
+
+    def test_an_explicit_variable_order_may_be_given(self):
+        # For a translator built without a system, where symbols_domain is unset.
+        translator = ODETranslator(sympy.Matrix([[1, 0, 3, 0, 2, 2],
+                                                 [0, 2, 0, 1, 0, 1],
+                                                 [2, 0, 0, 3, 0, 0]]))
+        variables = sympy.symbols(' '.join('y{}'.format(i) for i in range(6)))
+        extended = translator.extend_from_invariants('y4**3/y2**2', variables=variables)
+        self.assertEqual(tuple(extended.invariant_monomials(variables=variables))[0],
+                         sympy.sympify('y4**3/y2**2'))
+
+
+class TestPassingAPrebuiltExpression(TestCase):
+    '''
+    Building the expression first and passing it in works.  The one way it quietly does
+    not is `sympy.sympify`, which reads `E`, `I`, `S` and friends as sympy's own objects --
+    and the result prints exactly like the right one.
+    '''
+
+    EQUATIONS = ['dS/dt = -k_1*E*S + k_m1*C',
+                 'dE/dt = -k_1*E*S + k_m1*C + k_2*C',
+                 'dC/dt = k_1*E*S - k_m1*C - k_2*C']
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(self.EQUATIONS)
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_an_expression_built_with_sympify_expression_works(self):
+        chosen = sympify_expression('E*k_1/k_2')
+        extended = self.translator.extend_from_invariants(chosen)
+        self.assertEqual(tuple(extended.invariant_monomials())[0], chosen)
+
+    def test_an_expression_built_from_symbols_works(self):
+        E, k_1, k_2 = sympy.symbols('E k_1 k_2')
+        extended = self.translator.extend_from_invariants(E * k_1 / k_2)
+        self.assertEqual(tuple(extended.invariant_monomials())[0], E * k_1 / k_2)
+
+    def test_sympys_own_sympify_is_caught_and_the_cause_named(self):
+        # `sympy.sympify('E*k_1/k_2')` has Euler's number where the enzyme should be, and
+        # prints identically.  The only tell is that `E` is absent from free_symbols.
+        wrong = sympy.sympify('E*k_1/k_2')
+        self.assertNotIn(sympy.Symbol('E'), wrong.free_symbols)
+        with self.assertRaises(ValueError) as caught:
+            self.translator.extend_from_invariants(wrong)
+        message = str(caught.exception)
+        self.assertIn('sympify_expression', message)
+        self.assertIn('print the same', message)
+
+    def test_the_two_sympifications_print_the_same(self):
+        # Which is why the error has to say what is wrong rather than show the expression.
+        self.assertEqual(str(sympy.sympify('E*k_1/k_2')),
+                         str(sympify_expression('E*k_1/k_2')))
+
+    def test_a_numeric_factor_is_refused_separately(self):
+        with self.assertRaises(ValueError) as caught:
+            self.translator.extend_from_invariants(sympify_expression('2*E*k_1/k_2'))
+        message = str(caught.exception)
+        self.assertIn('without its factor of 2', message)
+        self.assertNotIn('sympify_expression', message)
+
+    def test_a_rational_factor_in_a_denominator_is_refused_too(self):
+        with self.assertRaises(ValueError) as caught:
+            self.translator.extend_from_invariants(sympify_expression('E*k_1/(2*k_2)'))
+        self.assertIn('without its factor of', str(caught.exception))
