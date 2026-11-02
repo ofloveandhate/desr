@@ -1483,3 +1483,83 @@ class TestFourVariableImposedInvariants(TestCase):
         self.assertEqual(sympy.simplify(derivatives[C] - (-C - C / alpha + E * S)), 0)
         self.assertEqual(sympy.simplify(derivatives[P] - C), 0)
         self.assertEqual(sympy.simplify(derivatives[S] - (C / alpha - E * S)), 0)
+
+
+class TestMurraySixThirteenAsThePageDoesIt(TestCase):
+    '''
+    `docs/source/examples/mm_init_cond.rst` claimed Murray (6.13) including `v(0) = 0` in
+    its closing maths block, while never telling desr that `c(0) = 0` -- so the reduced
+    system it printed only ever had `u(0) = 1` and the zero was written in by hand.  Now
+    it is computed, and the page's two column operations are what get there.
+    '''
+
+    def setUp(self):
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
+        system.update_initial_conditions({'s': 's_0', 'c': 0})
+        system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0',
+                                  't', 's', 'c'])
+        self.system = system
+        self.translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'kappa', 'independent': 'tau',
+                                   'dependents': ['u', 'v']})
+        self.translator.multiplier_add_columns(
+            self.translator.column_of('k_1*s_0*t'),
+            self.translator.column_of('e_0/s_0'))
+        self.translator.multiplier_add_columns(
+            self.translator.column_of('c/s_0'),
+            self.translator.column_of('e_0/s_0'), power=-1)
+
+    def test_the_column_numbers_the_page_prints(self):
+        fresh = ODETranslator.from_ode_system(
+            self.system, naming_scheme={'parameters': 'kappa',
+                                        'independent': 'tau',
+                                        'dependents': ['u', 'v']})
+        self.assertEqual((fresh.column_of('k_1*s_0*t'),
+                          fresh.column_of('e_0/s_0'),
+                          fresh.column_of('c/s_0')), (7, 2, 9))
+
+    def test_the_zero_valued_symbol_is_not_divided_by(self):
+        fresh = ODETranslator.from_ode_system(self.system)
+        self.assertEqual(fresh.symbols_that_must_not_be_zero(),
+                         tuple(sympy.symbols('s_0 k_1')))
+
+    def test_murrays_groups(self):
+        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+                         self.translator.invariant_monomials()))
+        self.assertEqual(named['tau'], sympify_expression('e_0*k_1*t'))
+        self.assertEqual(named['u'], sympify_expression('s/s_0'))
+        self.assertEqual(named['v'], sympify_expression('c/e_0'))
+
+    def test_the_initial_complex_is_a_ratio_and_still_zero(self):
+        reduced = self.translator.translate(self.system)
+        self.assertEqual(reduced.initial_conditions[sympy.Symbol('v')],
+                         sympify_expression('kappa4/kappa0'))
+        self.assertEqual(reduced.initial_condition_values[sympy.Symbol('v')],
+                         sympy.Integer(0))
+
+    def test_substituting_the_known_zero_gives_murrays_three_groups(self):
+        reduced = self.translator.translate(self.system)
+        named = reduced.subs({'kappa0': 'epsilon', 'kappa1': 'L',
+                              'kappa2': 'K-L', 'kappa3': 'K', 'kappa4': 'gamma'},
+                             subs_constraints=True)
+        self.assertEqual(named.constraints, [])
+        final = named.subs({'gamma': 0})
+        self.assertEqual(set(map(str, final.parameters)), {'K', 'L', 'epsilon'})
+        self.assertEqual(final.initial_conditions[sympy.Symbol('v')],
+                         sympy.Integer(0))
+        self.assertEqual(final.initial_conditions[sympy.Symbol('u')],
+                         sympy.Integer(1))
+
+    def test_the_equations_are_murrays_six_thirteen(self):
+        reduced = self.translator.translate(self.system)
+        named = reduced.subs({'kappa0': 'epsilon', 'kappa1': 'L',
+                              'kappa2': 'K-L', 'kappa3': 'K', 'kappa4': 'gamma'},
+                             subs_constraints=True).subs({'gamma': 0})
+        u, v, K, L, epsilon = sympy.symbols('u v K L epsilon')
+        derivatives = named.derivative_dict
+        self.assertEqual(sympy.simplify(derivatives[u] - (-u + (u + K - L) * v)), 0)
+        self.assertEqual(
+            sympy.simplify(epsilon * derivatives[v] - (u - (u + K) * v)), 0)

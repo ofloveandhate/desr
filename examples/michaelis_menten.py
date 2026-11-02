@@ -48,10 +48,9 @@ def michaelis_menten_four_variables():
         return system
 
 
-    # There used to be a `put_at_front` helper here, moving one symbol at a time to the
-    # front of the whole symbol list.  `reorder_parameters` with the order written out says
-    # the same thing and says it once -- and it cannot put a parameter after the
-    # dependents, which is what silently costs the parameter reduction scheme.
+    # Variable orders below are written out and passed to `reorder_parameters`, which moves
+    # the parameter block and leaves the independent variable and the dependents where they
+    # are.  The parameter reduction scheme needs that layout.
 
 
 
@@ -59,22 +58,17 @@ def michaelis_menten_four_variables():
         print('\n\nFour-variable with ICs\n-----------------------------------')
 
         system = system_four_variable_michaelis_menten()
-        # The complex and the product both start at nothing.  Saying so is the point.
+        # Murray, Mathematical Biology I, (6.4): all the substrate and all the enzyme are
+        # there at the start, and none of the complex or the product.
         system.update_initial_conditions(['S(0) = S_0', 'E(0) = E_0',
                                           'C(0) = 0', 'P(0) = 0'])
         print('initial conditions:', system.initial_conditions)
         print('as values         :', system.initial_condition_values)
 
-        # Written out, rather than built by moving one symbol at a time: the front of the
-        # order is the end that gets scaled by, so S_0 and k_1 are what this normalises --
-        # the same clock the two-variable section uses, k_1 S_0 t.  The initial values of
-        # the complex and the product go at the back, which is the end that is kept, since
-        # a quantity known to be zero must not be scaled by.
-        #
-        # `reorder_parameters` rather than `reorder_variables`, so the parameter block is
-        # the only thing that moves.  Reordering the whole symbol list by hand is how a
-        # parameter ends up after the dependents, which silently costs the parameter
-        # reduction scheme.
+        # The front of the order is the end that gets scaled by, so S_0 and k_1 are the two
+        # this normalises, giving the clock k_1 S_0 t that the two-variable section uses.
+        # C_0 and P_0 go at the back, the end that is kept: a symbol known to be zero
+        # cannot be scaled by.
         system.reorder_parameters(['S_0', 'k_1', 'k_2', 'k_m1', 'E_0', 'C_0', 'P_0'])
         print('system\n',system)
 
@@ -85,8 +79,8 @@ def michaelis_menten_four_variables():
         print('variable order:', translator.symbols_domain)
         print('scheme:', translator.scheme(system))
 
-        # Asked, not assumed.  S_0 and k_1 are what the reduction divides by; C_0 and P_0
-        # are not, which is what makes a zero harmless for them.
+        # S_0 and k_1 are what this reduction divides by.  C_0 and P_0 are not, so their
+        # being zero leaves the reduction defined.
         print('must not be zero:', translator.symbols_that_must_not_be_zero())
 
         # Print scaling matrices
@@ -104,9 +98,8 @@ def michaelis_menten_four_variables():
         reduced_system = translator.translate(system)
         print(reduced_system)
 
-        # The zeros arrive here derived, not restated: each is the invariant holding
-        # C_0 or P_0 in its numerator, so the complex and the product start at nothing in
-        # the reduced system too.
+        # Each zero reaches the reduced system through the invariant holding C_0 or P_0 in
+        # its numerator, so the complex and the product start at nothing here too.
         print('initial conditions, as values:',
               reduced_system.initial_condition_values)
         assert (set(reduced_system.initial_condition_values.values())
@@ -120,8 +113,7 @@ def michaelis_menten_four_variables():
         Impose a choice of invariants, and rearrange into the parameter scheme by hand.
 
         The same reduction as `docs/source/examples/mm_four_variable.rst`, with the
-        extension step shown rather than taken on trust, because that step is what the
-        paper describes.
+        extension step written out, since that step is what the paper describes.
         """
         print('\n\nFour-variable, imposing a choice of invariants\n-----------------------------------')
 
@@ -137,12 +129,9 @@ def michaelis_menten_four_variables():
 
         print('\nImposing a choice of invariants')
         print('--------------------------------')
-        # Say which invariants, by writing them.  An exponent matrix would say the same
-        # thing, but its rows are *positions* in the variable order, so reordering the
-        # variables would leave the same matrix meaning different monomials -- and nothing
-        # in it records which invariants were meant.  This is how the section used to be
-        # written, and it had rotted into denoting `E*k_2/P, E*t/S`, which are not
-        # invariants at all.
+        # The invariants are written as monomials.  `extend_from_invariants` also takes an
+        # exponent matrix, whose rows are positions in the variable order; the monomials
+        # say which invariants are meant whatever that order is.
         invariant_choice = ['C*k_1/k_2', 'P*k_1/k_m1']
         print('Chosen invariants:', invariant_choice)
 
@@ -152,9 +141,9 @@ def michaelis_menten_four_variables():
 
         print('\nThe extension step, for the paper')
         print('--------------------------------')
-        # What `extend_from_invariants` does, spelled out.  The exponent matrix is needed
-        # here because this is the linear algebra; it is derived from the monomials above,
-        # so there is one statement of the choice rather than two that can disagree.
+        # What `extend_from_invariants` does, written out.  The linear algebra needs the
+        # exponent matrix, built here from the monomials above so that the choice is stated
+        # in one place.
         exponents = sympy.Matrix(
             [monomial_to_powers(sympify_expression(m), list(system.symbols))
              for m in invariant_choice]).T
@@ -179,9 +168,8 @@ def michaelis_menten_four_variables():
                 translator.herm_mult_i, translator.herm_mult_n * col_ops))
         print('invariants this way:', ', '.join(map(str, by_hand.invariant_monomials())))
 
-        # The same invariants, in a different column order.  Worth asserting rather than
-        # asserting in prose: the hand-rolled extension and the library's are the same
-        # reduction, and the column order is all that separates them.
+        # This extension and `extend_from_invariants` give the same invariants; only the
+        # column order differs.
         assert (sorted(map(str, by_hand.invariant_monomials()))
                 == sorted(map(str, chosen.invariant_monomials()))), (
             'the two extensions disagree on the invariants themselves')
@@ -199,9 +187,8 @@ def michaelis_menten_four_variables():
         print('invariants now:', ', '.join(map(str, chosen.invariant_monomials())))
 
         # The scheme wants the parameters first, then the independent variable, then the
-        # dependents.  Derived from what each column *is*, so the permutation cannot go
-        # stale when the variable order changes -- which is what a literal
-        # `[1, 2, 0, 3, 4, 5]` would do.
+        # dependents.  Which column is which is read off what each one is, so the
+        # permutation follows the variable order instead of being fixed to one.
         def column_kind(monomial):
             symbols = monomial.free_symbols
             if system.independent_variable in symbols:
@@ -266,10 +253,9 @@ def michaelis_menten_two_variable(verbose=True):
 
         print('\n\nAdding in the initial conditions')
         print('-------------------------------------')
-        # The complex starts at nothing.  Saying so used to be impossible, and the
-        # literature just glosses over it; `c(0) = 0` records the value against a symbol
-        # `c_0`, which is what carries the units -- a zero concentration is still a
-        # concentration, and the reduction stays entirely symbolic.
+        # The complex starts at nothing.  `c(0) = 0` records the value against a symbol
+        # `c_0`, and `c_0` carries the units: a zero concentration is a concentration, so
+        # the reduction stays symbolic.
         system.update_initial_conditions(['s(0) = s0', 'c(0) = 0'])
         print('initial conditions:', system.initial_conditions)
         print('as values         :', system.initial_condition_values)
@@ -286,11 +272,9 @@ def michaelis_menten_two_variable(verbose=True):
         # The dependents are in the order (c, s), so Murray's names go (v, u): his `u` is
         # the substrate and his `v` is the complex.
         #
-        # `kappa` rather than `c` for the parameters.  They are substituted to Murray's
-        # names below, so the letter is arbitrary -- but `c` is a dependent variable here,
-        # whose initial value is the minted `c_0`, and printing `c_0` beside `c0, c1, ...`
-        # asks a reader to tell apart two things that look the same.  They are different
-        # symbols, so nothing breaks; it just cannot be read.
+        # `kappa` for the parameters.  They are substituted to Murray's names below, so the
+        # letter is free; `c` is a dependent variable here and its initial value is `c_0`,
+        # which a parameter named `c0` would be hard to read beside.
         translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['v','u']})
         print('symbols this reduction divides by, so none of them may be zero:',
               translator.symbols_that_must_not_be_zero())
@@ -313,10 +297,8 @@ def michaelis_menten_two_variable(verbose=True):
         # of the substrate.  Both are a factor of epsilon = e_0/s0 away, so both are one
         # column operation.
         #
-        # The column numbers come from `column_of`, so they are derived from the invariant
-        # each one carries rather than counted off by hand.  They can still be printed and
-        # quoted -- and they move when the variable order moves, which is exactly why they
-        # should not be written as literals.
+        # `column_of` takes the invariant a column carries and gives back its index.  The
+        # indices are still numbers, printed below, and they follow the variable order.
         clock = translator.column_of('k_1*s0*t')
         epsilon = translator.column_of('e_0/s0')
         complexed = translator.column_of('c/s0')
@@ -351,8 +333,8 @@ def michaelis_menten_two_variable(verbose=True):
         print('the initial conditions, as values:',
               reduced_system.initial_condition_values)
 
-        # Read off the monomials rather than guessed at, because the order of the kappa_i
-        # follows the variable order and so is not something to remember:
+        # The names come from the monomials.  The order of the kappa_i follows the variable
+        # order:
         #
         #   kappa0 = e_0/s0        = epsilon
         #   kappa1 = k_2/(k_1 s0)  = lambda, which this script calls L
@@ -360,8 +342,7 @@ def michaelis_menten_two_variable(verbose=True):
         #   kappa3 = Km/s0         = K
         #   kappa4 = c_0/s0        = the initial complex, in substrate units
         #
-        # Murray has no name for the last one because he sets it to zero, which is exactly
-        # what we have recorded.  `gamma` until then.
+        # Murray has no name for the last one, because he sets it to zero.  `gamma` here.
         #
         # The check is the constraint.  `kappa3 == kappa1 + kappa2` has to become
         # `K == L + (K - L)`, a tautology, and so disappear.  If a constraint survives the
@@ -385,9 +366,9 @@ def michaelis_menten_two_variable(verbose=True):
               reduced_system.initial_condition_values)
 
         # Murray writes three groups, not four, because he sets the initial complex to
-        # zero.  Substituting the value the system already holds does that, and the group
-        # goes with it -- derived from the stated initial condition rather than asserted.
-        # Substituting anything else here is refused, since it would contradict `c(0) = 0`.
+        # zero.  Substituting the value the system holds for gamma does the same, and the
+        # group goes with it.  Any other value is refused, as it would contradict
+        # `c(0) = 0`.
         print('\nSubstituting the initial complex, which is known to be zero')
         print('-----------------------------------------------------------')
         reduced_system = reduced_system.subs({'gamma': 0})
