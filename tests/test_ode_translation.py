@@ -4,7 +4,7 @@ import sympy
 
 from desr.chemical_reaction_network import ChemicalReactionNetwork
 from desr.ode_system import ODESystem
-from desr.ode_translation import ODETranslator
+from desr.ode_translation import ODETranslator, ReductionScheme, scale_action
 from desr.sympy_helper import sympify_expression
 
 
@@ -556,3 +556,255 @@ class TestNamingScheme(TestCase):
     def test_setting_no_scheme_leaves_it_empty(self):
         translator = ODETranslator.from_ode_system(self.general_system)
         self.assertEqual({}, translator.naming_scheme)
+
+
+class TestSymbolsThatMustNotBeZero(TestCase):
+    '''
+    The scaling group acts where every coordinate is nonzero, so a reduction is only
+    defined where the symbols it divides by are.  Which ones those are is a sign condition
+    on one row of the multiplier, and it is a *report*: it follows from the columns that
+    were chosen, and a column operation changes it.
+    '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def system(self, parameter_order=None):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        if parameter_order is not None:
+            system.reorder_parameters(parameter_order)
+        return system
+
+    def test_the_symbols_scaled_by_are_the_ones_listed(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        # The auxiliaries are 1/(e_0*k_1) and e_0, so those two are what it divides by.
+        self.assertEqual(translator.symbols_that_must_not_be_zero(),
+                         tuple(sympy.symbols('e_0 k_1')))
+
+    def test_a_symbol_only_ever_in_a_numerator_is_not_listed(self):
+        # The good case: such an invariant is simply 0, which is a reduced parameter whose
+        # value is zero.  That is how a zero initial condition survives a reduction.
+        system = self.system(['k_2', 'k_m1', 'k_1', 'e_0'])
+        translator = ODETranslator.from_ode_system(system)
+        self.assertNotIn(sympy.Symbol('e_0'), translator.symbols_that_must_not_be_zero())
+
+    def test_every_listed_symbol_is_in_an_auxiliary_or_a_denominator(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        listed = translator.symbols_that_must_not_be_zero()
+        for row, symbol in enumerate(system.symbols):
+            in_auxiliary = any(e != 0 for e in translator.herm_mult_i[row, :])
+            in_denominator = any(e < 0 for e in translator.herm_mult_n[row, :])
+            with self.subTest(symbol=symbol):
+                self.assertEqual(symbol in listed, in_auxiliary or in_denominator)
+
+    def test_a_column_operation_changes_the_answer(self):
+        # Which is why it is a method and not a cached property, and why the guard cannot
+        # sit at construction time: the choice is still being made.
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        before = translator.symbols_that_must_not_be_zero()
+        # Column 2 is the first invariant column; an auxiliary column cannot be the source
+        # of the operation, since adding it would change the Hermite form.
+        translator.multiplier_add_columns(0, 2)
+        self.assertNotEqual(before, translator.symbols_that_must_not_be_zero())
+
+    def test_the_system_may_be_passed_instead_of_relying_on_the_domain(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.symbols_that_must_not_be_zero(system),
+                         translator.symbols_that_must_not_be_zero())
+
+    def test_the_order_is_the_systems_order(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        listed = translator.symbols_that_must_not_be_zero()
+        positions = [list(system.symbols).index(symbol) for symbol in listed]
+        self.assertEqual(positions, sorted(positions))
+
+
+class TestTranslatingWithAZeroValue(TestCase):
+    '''
+    A value of zero for a symbol the reduction divides by makes the reduced system
+    undefined, and the reduction is where that can first be known: the translator does not
+    hold the system, so it has no values, and column operations keep changing which
+    symbols are involved.
+    '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def system(self, parameter_order=None):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        if parameter_order is not None:
+            system.reorder_parameters(parameter_order)
+        return system
+
+    def test_a_zero_scale_is_refused_at_translate_time(self):
+        system = self.system()
+        system.update_parameter_values({'e_0': 0})
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(system)
+        message = str(caught.exception)
+        self.assertIn('e_0', message)
+        self.assertIn('divides by', message)
+        self.assertIn('reorder_parameters', message)
+
+    def test_building_the_translator_is_not_refused(self):
+        # Exploring orderings and column operations must stay free of the values; the
+        # complaint belongs at the point a *system* is asked for.
+        system = self.system()
+        system.update_parameter_values({'e_0': 0})
+        translator = ODETranslator.from_ode_system(system)
+        self.assertIn(sympy.Symbol('e_0'), translator.symbols_that_must_not_be_zero())
+
+    def test_a_zero_value_on_a_symbol_it_does_not_divide_by_is_fine(self):
+        system = self.system(['k_2', 'k_m1', 'k_1', 'e_0'])
+        system.update_parameter_values({'e_0': 0})
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+        self.assertTrue(reduced.is_reduced)
+
+    def test_the_zero_reaches_the_reduced_system_as_a_parameter_value(self):
+        # e_0 appears only in the numerator of one invariant, so that reduced parameter is
+        # zero.  The value is derived, not restated.
+        system = self.system(['k_2', 'k_m1', 'k_1', 'e_0'])
+        system.update_parameter_values({'e_0': 0})
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+        self.assertIn(sympy.Integer(0), set(reduced.parameter_values.values()))
+
+    def test_a_nonzero_value_is_never_refused(self):
+        system = self.system()
+        system.update_parameter_values({'e_0': 2})
+        translator = ODETranslator.from_ode_system(system)
+        self.assertTrue(translator.translate(system).is_reduced)
+
+    def test_a_system_with_no_values_behaves_exactly_as_before(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertTrue(translator.translate(system).is_reduced)
+
+
+class TestBothDirections(TestCase):
+    '''
+    The translator is where both sets of symbols are visible, so it is where both
+    directions can be asked about.  Forward, a reduced symbol is a monomial in the
+    originals, so only an original can be in a denominator; in reverse an original is a
+    monomial in the reduced ones, so only a reduced symbol can.  One symbol set per
+    direction, which is why neither method needs a `direction` argument.
+    '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(self.EQUATIONS)
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_the_two_directions_give_different_answers(self):
+        self.assertNotEqual(
+            set(self.translator.symbols_that_must_not_be_zero()),
+            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)))
+
+    def test_the_reverse_answer_is_over_the_reduced_symbols(self):
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        self.assertEqual(reverse, tuple(sympy.symbols('x1 kappa0 kappa1')))
+
+    def test_the_forward_answer_is_over_the_original_symbols(self):
+        forward = self.translator.symbols_that_must_not_be_zero()
+        self.assertTrue(set(forward) <= set(self.system.symbols))
+
+    def test_no_original_symbol_appears_in_the_reverse_answer(self):
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        self.assertEqual(set(reverse) & set(self.system.symbols), set())
+
+    def test_the_reverse_answer_is_exactly_the_denominators_of_the_recovery(self):
+        # Each original symbol is recovered as a monomial in the reduced ones; collect the
+        # reduced symbols that show up in a denominator and the two must agree.
+        names = self.translator.column_names(self.system)
+        recovered = scale_action(names, self.translator.inv_herm_mult.T)
+        in_a_denominator = set()
+        for expression in recovered:
+            for symbol, power in expression.as_powers_dict().items():
+                if power < 0:
+                    in_a_denominator.add(symbol)
+        self.assertEqual(
+            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)),
+            in_a_denominator)
+
+    def test_the_reverse_answer_reads_against_the_column_names(self):
+        names = list(self.translator.column_names(self.system))
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        positions = [names.index(name) for name in reverse]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_a_reduction_can_be_sound_forward_and_unrecoverable_backward(self):
+        # k_2 = 0 makes kappa0 zero.  The forward reduction never divides by k_2, so it
+        # goes through; but e_0 = tau/(kappa0*kappa1*x1) cannot then be recovered.
+        self.system.update_parameter_values({'k_2': 0})
+        reduced = self.translator.translate(self.system)
+        self.assertNotIn(sympy.Symbol('k_2'),
+                         self.translator.symbols_that_must_not_be_zero())
+        self.assertIn(sympy.Symbol('kappa0'),
+                      self.translator.reduced_symbols_that_must_not_be_zero(self.system))
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
+                         sympy.Integer(0))
+
+
+class TestParameterValuesThroughTranslation(TestCase):
+    ''' A reduced parameter is an invariant, so its value is derived, not restated. '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def system(self, parameter_order=None):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        if parameter_order is not None:
+            system.reorder_parameters(parameter_order)
+        return system
+
+    def test_a_fully_known_invariant_gets_its_value(self):
+        system = self.system()
+        # kappa0 = k_2/(e_0*k_1), so all three are needed before it is known.
+        system.update_parameter_values({'k_2': 6, 'e_0': 2, 'k_1': 3})
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
+                         sympy.Integer(1))
+
+    def test_a_partly_known_invariant_gets_none(self):
+        system = self.system()
+        system.update_parameter_values({'k_2': 6})
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertNotIn(sympy.Symbol('kappa0'), reduced.parameter_values)
+
+    def test_no_values_means_no_values(self):
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertEqual(reduced.parameter_values, {})
+
+    def test_only_parameters_of_the_reduced_system_are_given_values(self):
+        system = self.system()
+        system.update_parameter_values({'k_2': 6, 'e_0': 2, 'k_1': 3, 'k_m1': 3})
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertTrue(set(reduced.parameter_values) <= set(reduced.parameters))
+
+    def test_the_general_scheme_refuses_rather_than_dropping(self):
+        # Called directly, since `translate` would pick the parameter scheme here.  The
+        # point is that a value is never silently lost.
+        system = self.system()
+        system.update_parameter_values({'k_m1': 3})
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(NotImplementedError) as caught:
+            translator.translate_general(system)
+        self.assertIn('parameter values', str(caught.exception))
+
+    def test_the_dependent_variable_scheme_refuses_rather_than_dropping(self):
+        system = self.system()
+        system.update_parameter_values({'k_m1': 3})
+        translator = ODETranslator.from_ode_system(system)
+        with self.assertRaises(NotImplementedError) as caught:
+            translator.translate_dep_var(system)
+        self.assertIn('parameter values', str(caught.exception))
