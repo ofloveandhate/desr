@@ -103,6 +103,97 @@ class TestODETranslatorTraps(TestCase):
                          general.reverse_translate_general(exact))
 
 
+class TestTheSystemMustBeTheOneTheTranslatorWasBuiltFor(TestCase):
+    '''
+    The scaling matrix and the multiplier are indexed by position, so a system other than
+    the one the translator was built from makes every column mean something else.  The only
+    gate used to be a count of symbols, which any system of the right size passes.
+    '''
+
+    PREDATOR_PREY = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                     'dp/dt = s*p*(1 - h*p / n)']
+
+    # Nine symbols as well -- a, b, c, d, e, f, t, x, y -- and a different scaling
+    # structure, so the matrix built for the one says nothing about the other.
+    SAME_SIZE_BUT_DIFFERENT = ['dx/dt = -a*x + b*y + c*x**2',
+                               'dy/dt = d*x - e*y + f*y**2']
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(self.PREDATOR_PREY)
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_the_system_it_was_built_for_is_accepted(self):
+        self.assertTrue(self.translator.translate(self.system).is_reduced)
+
+    def test_a_different_system_of_the_same_size_is_refused(self):
+        other = ODESystem.from_equations(self.SAME_SIZE_BUT_DIFFERENT)
+        self.assertEqual(len(other.symbols), len(self.system.symbols))
+        with self.assertRaises(ValueError) as caught:
+            self.translator.translate(other)
+        self.assertIn('built for the symbols', str(caught.exception))
+
+    def test_the_refusal_names_what_differs(self):
+        other = ODESystem.from_equations(self.SAME_SIZE_BUT_DIFFERENT)
+        with self.assertRaises(ValueError) as caught:
+            self.translator.translate(other)
+        message = str(caught.exception)
+        # K is in the one and not the other; a is in the other and not the one.
+        self.assertIn('does not have', message)
+        self.assertIn('K', message)
+        self.assertIn('has a', message)
+
+    def test_reordering_the_system_afterwards_is_refused(self):
+        # The likely mistake, and the one a count can never catch: same symbols, same
+        # number of them, every column now meaning a different one.
+        self.system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        with self.assertRaises(ValueError) as caught:
+            self.translator.translate(self.system)
+        self.assertIn('variable order', str(caught.exception))
+
+    def test_a_reordering_is_not_reported_as_a_different_system(self):
+        # The remedies differ, so the two messages must not be interchangeable.
+        self.system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        with self.assertRaises(ValueError) as reordered:
+            self.translator.translate(self.system)
+        self.assertNotIn('built for the symbols', str(reordered.exception))
+
+    def test_scheme_refuses_too_rather_than_answering(self):
+        # `scheme` dispatches the whole reduction, and the naming and kind machinery route
+        # through it, so the refusal belongs there and not only in the translate methods.
+        other = ODESystem.from_equations(self.SAME_SIZE_BUT_DIFFERENT)
+        with self.assertRaises(ValueError):
+            self.translator.scheme(other)
+
+    def test_the_invariants_of_an_unfamiliar_system_were_not_invariant(self):
+        # What the silence used to cost.  The reduction came back looking plausible, with
+        # the right number of parameters, and none of the monomials it called invariants
+        # was invariant under the system's own scaling action.
+        other = ODESystem.from_equations(self.SAME_SIZE_BUT_DIFFERENT)
+        claimed = self.translator.invariant_monomials(variables=other.symbols)
+        real = ODETranslator.from_ode_system(other).scaling_matrix
+        order = list(other.symbols)
+        not_invariant = 0
+        for monomial in claimed:
+            exponents = sympy.Matrix(
+                [monomial_to_powers(monomial, order)]).T
+            if not (real * exponents).is_zero_matrix:
+                not_invariant += 1
+        self.assertEqual(not_invariant, len(list(claimed)))
+
+    def test_a_translator_built_from_a_bare_matrix_cannot_be_checked(self):
+        # The known gap, pinned rather than papered over: with no symbols_domain there is
+        # nothing to compare a system against, so such a translator keeps only the count
+        # check.  `from_ode_system` is what makes the question answerable.
+        translator = ODETranslator(
+            scaling_matrix=sympy.Matrix([[0, 1, -1]]),
+            hermite_multiplier=sympy.Matrix([[0, 1, 0], [1, 0, 1], [0, 0, 1]]))
+        self.assertIsNone(translator.symbols_domain)
+        unfamiliar = ODESystem.from_equations(['da/dt = a*(1 + a*b)',
+                                               'db/dt = b*(1/t - a*b)'])
+        self.assertEqual(len(unfamiliar.symbols), 3)
+        self.assertIsInstance(translator.scheme(unfamiliar), ReductionScheme)
+
+
 class TestColumnLookup(TestCase):
     '''
     The column numbers a reduction depends on, derived rather than hardcoded.

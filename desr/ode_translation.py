@@ -1122,8 +1122,12 @@ class ODETranslator(object):
             ReductionScheme
 
         Raises:
-            ValueError: if the system's variables do not match the scaling matrix at all,
-                in which case no scheme applies.
+            ValueError: if `system` is not the system this translator was built for, or if
+                its variables do not match the scaling matrix at all, in which case no
+                scheme applies.  The columns are indexed by position, so a system with the
+                same symbols in a different order is refused as well -- and a translator
+                built from a bare matrix cannot be checked this way at all, having no
+                :attr:`symbols_domain` to compare against.
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
@@ -1139,6 +1143,8 @@ class ODETranslator(object):
         >>> ODETranslator.from_ode_system(hl66).scheme(hl66)
         ReductionScheme.GENERAL
         '''
+        self._refuse_unfamiliar_system(system)
+
         if self._is_translate_parameter_compatible(system=system):
             return ReductionScheme.PARAMETER
 
@@ -1242,6 +1248,7 @@ class ODETranslator(object):
 
     def translate_parameter(self, system):
         ''' Translate according to parameter scheme '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
 
         # make the substitutions
@@ -1370,6 +1377,7 @@ class ODETranslator(object):
         dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
         '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
@@ -1488,6 +1496,7 @@ class ODETranslator(object):
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
         '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
@@ -2254,6 +2263,59 @@ class ODETranslator(object):
             'of zero is harmless.  symbols_that_must_not_be_zero() reports the whole '
             'set.'.format(named, 'is' if len(zero_valued) == 1 else 'are', named,
                           'it' if len(zero_valued) == 1 else 'they'))
+
+    def _refuse_unfamiliar_system(self, system):
+        '''
+        Refuse to work on a system that is not the one this translator was built for.
+
+        The scaling matrix and the multiplier are indexed by position: column `i` is the
+        `i`-th symbol of the system the translator was built from, in that system's
+        variable order.  A different system makes every column mean something else, and
+        there was nothing to notice it -- the only gate was a *count*, so any system with
+        the right number of symbols was accepted and reduced into a confidently wrong
+        answer.  Being off by a symbol is not the likely mistake, either: calling
+        :meth:`~desr.ode_system.ODESystem.reorder_variables` after building the translator
+        keeps the count and the symbols and invalidates every column.
+
+        **This cannot be checked for a translator built from a bare matrix**, where
+        :attr:`symbols_domain` is :const:`None` and there is nothing to compare a system
+        against.  Such a translator keeps only the count check, and the caller is on their
+        own about which system the columns belong to.  Building with
+        :meth:`from_ode_system` is what makes the question answerable.
+
+        Raises:
+            ValueError: naming what differs, and distinguishing a reordering from a
+                genuinely different system, since the remedy is not the same.
+        '''
+        if self.symbols_domain is None:
+            return
+
+        expected = tuple(self.symbols_domain)
+        given = tuple(system.symbols)
+        if given == expected:
+            return
+
+        if set(given) == set(expected):
+            raise ValueError(
+                'This translator was built for the variable order {}, and this system is '
+                'in the order {}.  The scaling matrix and the multiplier are indexed by '
+                'position, so every column would mean a different symbol.  Build a new '
+                'translator with from_ode_system now that the order has '
+                'changed.'.format(', '.join(map(str, expected)), ', '.join(map(str, given))))
+
+        missing = sorted(set(expected) - set(given), key=str)
+        unexpected = sorted(set(given) - set(expected), key=str)
+        differences = []
+        if missing:
+            differences.append('does not have {}'.format(', '.join(map(str, missing))))
+        if unexpected:
+            differences.append('has {} instead'.format(', '.join(map(str, unexpected))))
+        raise ValueError(
+            'This translator was built for the symbols {}, and this system {}.  The '
+            'scaling matrix describes the system it was built from and says nothing about '
+            'this one, so reducing it would give an answer that is wrong rather than '
+            'refused.  Build a translator for this system with '
+            'from_ode_system.'.format(', '.join(map(str, expected)), ' and '.join(differences)))
 
     def invariant_monomials(self, variables=None):
         '''
