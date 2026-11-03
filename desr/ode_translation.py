@@ -1122,8 +1122,12 @@ class ODETranslator(object):
             ReductionScheme
 
         Raises:
-            ValueError: if the system's variables do not match the scaling matrix at all,
-                in which case no scheme applies.
+            ValueError: if `system` is not the system this translator was built for, or if
+                its variables do not match the scaling matrix at all, in which case no
+                scheme applies.  The columns are indexed by position, so a system with the
+                same symbols in a different order is refused as well -- and a translator
+                built from a bare matrix cannot be checked this way at all, having no
+                :attr:`symbols_domain` to compare against.
 
         >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
         >>> system = ODESystem.from_equations(equations)
@@ -1139,6 +1143,8 @@ class ODETranslator(object):
         >>> ODETranslator.from_ode_system(hl66).scheme(hl66)
         ReductionScheme.GENERAL
         '''
+        self._refuse_unfamiliar_system(system)
+
         if self._is_translate_parameter_compatible(system=system):
             return ReductionScheme.PARAMETER
 
@@ -1242,6 +1248,7 @@ class ODETranslator(object):
 
     def translate_parameter(self, system):
         ''' Translate according to parameter scheme '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
 
         # make the substitutions
@@ -1370,6 +1377,7 @@ class ODETranslator(object):
         dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
         '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
@@ -1488,6 +1496,7 @@ class ODETranslator(object):
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
         '''
+        self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
@@ -2093,14 +2102,24 @@ class ODETranslator(object):
         and ``reverse``, and each has exactly one symbol set it can divide by -- going
         forward, a reduced symbol is a monomial in the originals, so only an original can
         sit in a denominator; coming back, an original is a monomial in the reduced ones,
-        read off a column of :math:`V^{-1}`, so only a reduced symbol can.  That is why
+        read off a **row** of :math:`V^{-1}`, so only a reduced symbol can.  That is why
         the two methods need no `direction` argument: naming the set names the direction.
 
-        The answers are genuinely different, and a reduction can be sound forward and
-        unrecoverable backward.  In Michaelis-Menten the forward reduction divides by
-        ``e_0`` and ``k_1``, while :math:`e_0 = \\tau / (\\kappa_0 \\kappa_1 x_1)` -- so a
-        zero ``k_2``, which makes :math:`\\kappa_0` zero, leaves ``e_0`` unrecoverable
-        though the reduction itself was fine.
+        **Which axis.**  :math:`V` is indexed ``[original, reduced]`` and :math:`V^{-1}`
+        the other way round, ``[reduced, original]``: inverting a matrix exchanges its row
+        and column index sets, and neither ordering changes.  So one reduced symbol is one
+        *row* here, where in the forward direction one original symbol was one row of
+        :math:`V`.  Both matrices put the direction's **source** index first, which is also
+        how :meth:`reverse_translate_parameter` reads it -- it is
+        ``scale_action(variables, inv_herm_mult)``, untransposed -- and how
+        :attr:`inv_herm_mult_u` slices the auxiliaries off the front as the first :math:`r`
+        rows.
+
+        Unlike the forward direction there is only one fatal case, not three.  Forward, a
+        symbol appearing in an auxiliary is fatal because the reduction *sets* auxiliaries
+        to 1 and a monomial containing a zero is never 1.  Nothing on the original side is
+        set to anything, so coming back only a denominator can hurt: a reduced symbol with
+        none but positive exponents merely makes the original it feeds equal to zero.
 
         Args:
             system (ODESystem, optional): The system being reduced, for its symbols.
@@ -2111,24 +2130,47 @@ class ODETranslator(object):
             tuple of sympy.Symbol: In column order, so the result reads against
             :meth:`column_names`.
 
+        The recovery expressions show the answer directly -- what is listed is exactly
+        what appears below a line:
+
         >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.reverse_translate_parameter(translator.column_names(system))
+        Matrix([[x1, 1/(x0*x1), kappa0/x0, kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
+        >>> translator.reduced_symbols_that_must_not_be_zero(system)
+        (x0, x1)
         >>> translator.symbols_that_must_not_be_zero()
         (e_0, k_1)
+
+        The two answers are over different symbol sets, and here the reverse one is both
+        auxiliaries -- which the parameter scheme sets to 1, so nothing is in danger.  It
+        is :mod:`desr.numerics` that solves for auxiliary values which need not be 1.
+
+        An *invariant* can sit in a denominator too, and then a reduction is sound forward
+        and unrecoverable backward.  Multiply one invariant by another and :math:`k_2` comes
+        back as :math:`\\kappa_0 / (\\kappa_1 x_0)`:
+
+        >>> translator.multiplier_add_columns(translator.column_of('k_2/(e_0*k_1)'),
+        ...                                   translator.column_of('k_m1/(e_0*k_1)'))
+        >>> translator.reverse_translate_parameter(translator.column_names(system))
+        Matrix([[x1, 1/(x0*x1), kappa0/(kappa1*x0), kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
         >>> translator.reduced_symbols_that_must_not_be_zero(system)
-        (x1, kappa0, kappa1)
+        (x0, x1, kappa1)
+
+        ``k_m1`` is not something the forward reduction divides by, so a zero ``k_m1``
+        reduces perfectly well -- it just makes :math:`\\kappa_1` zero, and then
+        :math:`k_2` cannot be recovered:
+
+        >>> translator.symbols_that_must_not_be_zero()
+        (e_0, k_1)
         '''
         names = self.column_names(system, scheme)
         inverse = self.inv_herm_mult
 
-        # `scale_action(names, inv_herm_mult.T)` is what recovers the originals, so in
-        # `inv_herm_mult` the exponent of reduced symbol `column` in original symbol `row`
-        # is `inverse[row, column]`.  One reduced symbol is therefore one *column*, where
-        # in the forward direction one original symbol was one row.
-        return tuple(name for column, name in enumerate(names)
-                     if any(entry < 0 for entry in inverse[:, column]))
+        return tuple(name for row, name in enumerate(names)
+                     if any(entry < 0 for entry in inverse[row, :]))
 
     def _names_given_explicitly(self):
         '''
@@ -2221,6 +2263,59 @@ class ODETranslator(object):
             'of zero is harmless.  symbols_that_must_not_be_zero() reports the whole '
             'set.'.format(named, 'is' if len(zero_valued) == 1 else 'are', named,
                           'it' if len(zero_valued) == 1 else 'they'))
+
+    def _refuse_unfamiliar_system(self, system):
+        '''
+        Refuse to work on a system that is not the one this translator was built for.
+
+        The scaling matrix and the multiplier are indexed by position: column `i` is the
+        `i`-th symbol of the system the translator was built from, in that system's
+        variable order.  A different system makes every column mean something else, and
+        there was nothing to notice it -- the only gate was a *count*, so any system with
+        the right number of symbols was accepted and reduced into a confidently wrong
+        answer.  Being off by a symbol is not the likely mistake, either: calling
+        :meth:`~desr.ode_system.ODESystem.reorder_variables` after building the translator
+        keeps the count and the symbols and invalidates every column.
+
+        **This cannot be checked for a translator built from a bare matrix**, where
+        :attr:`symbols_domain` is :const:`None` and there is nothing to compare a system
+        against.  Such a translator keeps only the count check, and the caller is on their
+        own about which system the columns belong to.  Building with
+        :meth:`from_ode_system` is what makes the question answerable.
+
+        Raises:
+            ValueError: naming what differs, and distinguishing a reordering from a
+                genuinely different system, since the remedy is not the same.
+        '''
+        if self.symbols_domain is None:
+            return
+
+        expected = tuple(self.symbols_domain)
+        given = tuple(system.symbols)
+        if given == expected:
+            return
+
+        if set(given) == set(expected):
+            raise ValueError(
+                'This translator was built for the variable order {}, and this system is '
+                'in the order {}.  The scaling matrix and the multiplier are indexed by '
+                'position, so every column would mean a different symbol.  Build a new '
+                'translator with from_ode_system now that the order has '
+                'changed.'.format(', '.join(map(str, expected)), ', '.join(map(str, given))))
+
+        missing = sorted(set(expected) - set(given), key=str)
+        unexpected = sorted(set(given) - set(expected), key=str)
+        differences = []
+        if missing:
+            differences.append('does not have {}'.format(', '.join(map(str, missing))))
+        if unexpected:
+            differences.append('has {} instead'.format(', '.join(map(str, unexpected))))
+        raise ValueError(
+            'This translator was built for the symbols {}, and this system {}.  The '
+            'scaling matrix describes the system it was built from and says nothing about '
+            'this one, so reducing it would give an answer that is wrong rather than '
+            'refused.  Build a translator for this system with '
+            'from_ode_system.'.format(', '.join(map(str, expected)), ' and '.join(differences)))
 
     def invariant_monomials(self, variables=None):
         '''
