@@ -2513,6 +2513,61 @@ class ODETranslator(object):
         return tuple(name for row, name in enumerate(names)
                      if any(entry < 0 for entry in inverse[row, :]))
 
+    def symbol_graph(self, system, direction='forward'):
+        '''
+        This reduction as a bipartite graph, original symbols to reduced ones.
+
+        The multiplier already **is** the weighted biadjacency matrix, so this names the
+        object rather than computing anything new.  See :mod:`desr.symbol_graph` for how to
+        read it, and :func:`desr.symbol_graph.draw_symbol_graph` for drawing it.
+
+        Read from the multiplier as it currently stands, so a :meth:`multiplier_add_columns`
+        changes the graph.  That is what makes it useful before translating: the graph is
+        what a column operation is chosen by looking at.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            direction (str): ``'forward'`` for the multiplier, original to reduced, or
+                ``'reverse'`` for its inverse.
+
+        Returns:
+            networkx.DiGraph: Nodes are ``(layer, symbol)`` pairs.
+
+        Needs :mod:`networkx`, which the rest of :mod:`desr` does not.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> graph = translator.symbol_graph(system)
+        >>> graph.nodes[('reduced', sympy.Symbol('kappa0'))]['monomial']
+        k_2/(e_0*k_1)
+        '''
+        from desr.symbol_graph import symbol_graph
+        return symbol_graph(self, system, direction=direction)
+
+    def draw_symbol_graph(self, system, direction='forward', **kwargs):
+        '''
+        Draw :meth:`symbol_graph`, for when the graph itself is not what is wanted.
+
+        A forwarder and nothing else, so that there is one place where the drawing's
+        defaults live.  Everything is documented on
+        :func:`desr.symbol_graph.draw_symbol_graph`, and `kwargs` goes straight to it.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            direction (str): As for :meth:`symbol_graph`.
+            **kwargs: Passed to :func:`desr.symbol_graph.draw_symbol_graph`.
+
+        Returns:
+            matplotlib.axes.Axes
+
+        Needs :mod:`networkx` and :mod:`matplotlib`, which the rest of :mod:`desr` does
+        not.
+        '''
+        from desr.symbol_graph import draw_symbol_graph
+        return draw_symbol_graph(self.symbol_graph(system, direction=direction), **kwargs)
+
     def _names_given_explicitly(self):
         '''
         The names the caller wrote out in the naming scheme, as opposed to patterns.

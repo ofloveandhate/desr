@@ -12,6 +12,7 @@ Contents
    :maxdepth: 2
 
    examples/example_index
+   symbol_kinds
    crn_doc
    ode_translation_doc
    ode_system_doc

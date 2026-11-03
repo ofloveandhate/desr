@@ -628,3 +628,114 @@ class TestTheDependentVariableSchemesNames(TestCase):
             with self.subTest(symbol=str(symbol)):
                 self.assertEqual(
                     sympy.simplify(actual - claimed.subs(replacement)), 0)
+
+
+class TestTheTwoAxesAreIndependent(TestCase):
+    '''
+    `docs/source/symbol_kinds.rst` says a symbol answers two questions that do not imply
+    each other -- whether it evolves, and whether the scaling moves it -- and lays the
+    reduced symbols out on both.  The page's doctests are a backstop; these are the
+    assertions behind it.
+
+    What makes the pair worth separating is that the occupancy decides the scheme: the
+    parameter scheme is exactly the case where nothing the scaling moves also evolves.
+    '''
+
+    MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                        'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+    ENZYME_CHAIN = 'x + e -> y + e\ny -> z\nz + f -> x + f'
+
+    @staticmethod
+    def moves_in_time(monomial, system):
+        '''Whether the monomial is anything but constant: does it contain a variable.'''
+        return bool(monomial.free_symbols & set(system.variables))
+
+    def test_under_the_parameter_scheme_nothing_moved_by_the_scaling_evolves(self):
+        # The two empty cells, which are what the scheme is.  Equivalently: every column
+        # of V_i sits on parameter rows, which is Hubert & Labahn's block condition.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+        for monomial in translator.auxiliary_monomials():
+            with self.subTest(auxiliary=str(monomial)):
+                self.assertFalse(self.moves_in_time(monomial, system))
+
+    def test_so_the_reduction_keeps_no_auxiliaries(self):
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.auxiliary_names(system), ())
+        self.assertEqual(translator.translate(system).auxiliary_names, ())
+
+    def test_the_general_scheme_can_occupy_the_cell_that_was_empty(self):
+        # One auxiliary that evolves is enough to make the difference, and the enzyme
+        # chain has exactly one among four.
+        system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.scheme(system), ReductionScheme.GENERAL)
+        moving = [monomial for monomial in translator.auxiliary_monomials()
+                  if self.moves_in_time(monomial, system)]
+        self.assertEqual(moving, [sympy.Symbol('x')])
+
+    def test_an_auxiliary_that_does_not_evolve_is_a_parameter_of_the_reduction(self):
+        # The axes being independent is not a claim about naming: the reduced system
+        # sorts its own auxiliaries into parameters and dependents on exactly this test.
+        system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+        for name, monomial in zip(reduced.auxiliary_names,
+                                  translator.auxiliary_monomials()):
+            with self.subTest(auxiliary=str(name)):
+                if self.moves_in_time(monomial, system):
+                    self.assertIn(name, reduced.dependents)
+                else:
+                    self.assertIn(name, reduced.parameters)
+
+    def test_being_an_auxiliary_cuts_across_the_partition(self):
+        # Both sides of the partition are occupied by auxiliaries at once, which is the
+        # whole claim that the two questions are independent.
+        system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        auxiliaries = set(reduced.auxiliary_names)
+        self.assertTrue(auxiliaries & set(reduced.parameters))
+        self.assertTrue(auxiliaries & set(reduced.dependents))
+
+    def test_a_symbol_the_scaling_leaves_alone_survives_as_itself(self):
+        # The other end of the second axis, on the original side: a zero column of the
+        # scaling matrix says the symbol is already dimensionless.  `q` is added to a pure
+        # number, so the equations give it no room to be rescaled, and the reduction
+        # cannot remove it.
+        system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/K)',
+                                           'dp/dt = p*(q - 1)'])
+        translator = ODETranslator.from_ode_system(system)
+        untouched = [symbol for index, symbol in enumerate(system.symbols)
+                     if translator.scaling_matrix[:, index].is_zero_matrix]
+        self.assertIn(sympy.Symbol('q'), untouched)
+        # Each one appears among the invariants on its own, not inside a combination.
+        invariants = set(translator.invariant_monomials())
+        for symbol in untouched:
+            with self.subTest(symbol=str(symbol)):
+                self.assertIn(symbol, invariants)
+
+    def test_most_systems_have_no_such_symbol(self):
+        # Stated on the page, so pinned: the usual case is that the scaling moves
+        # everything, and the cell above is empty.
+        for label, equations in (('michaelis-menten', self.MICHAELIS_MENTEN),
+                                 ('logistic', ['dn/dt = r*n*(1 - n/K)'])):
+            system = ODESystem.from_equations(equations)
+            translator = ODETranslator.from_ode_system(system)
+            with self.subTest(system=label):
+                self.assertEqual(
+                    [symbol for index, symbol in enumerate(system.symbols)
+                     if translator.scaling_matrix[:, index].is_zero_matrix],
+                    [])
+
+    def test_a_conserved_auxiliary_would_still_be_a_dependent(self):
+        # The same rule one level in: a zero equation is a dependent whose rate vanishes,
+        # not a parameter.  The enzyme chain's reduction has two such invariants.
+        system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertTrue(reduced.conserved_variables)
+        for symbol in reduced.conserved_variables:
+            with self.subTest(symbol=str(symbol)):
+                self.assertIn(symbol, reduced.dependents)
+                self.assertNotIn(symbol, reduced.parameters)
