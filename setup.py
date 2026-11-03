@@ -56,9 +56,16 @@ setup(
         # proves it on a bare install.
         'numerics': ['numpy', 'scipy'],
     },
+    # The DOI first because it is the citable identifier and does not depend on which
+    # forge hosts the code.  Then the repository where the work happens, and last the
+    # institutional copy, labelled as a mirror: it is downstream, and an issue or merge
+    # request opened there is not read.
     project_urls={
         "DOI": "https://doi.org/10.5281/zenodo.17671203",
-        "repo_MPI": "https://git.mpi-cbg.de/ASB/desr"
+        "Source": "https://github.com/ofloveandhate/desr",
+        "Issues": "https://github.com/ofloveandhate/desr/issues",
+        "Documentation": "https://desr.readthedocs.io",
+        "Institutional mirror": "https://git.mpi-cbg.de/ASB/desr",
     }
 )
 
