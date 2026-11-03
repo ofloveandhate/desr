@@ -2093,14 +2093,24 @@ class ODETranslator(object):
         and ``reverse``, and each has exactly one symbol set it can divide by -- going
         forward, a reduced symbol is a monomial in the originals, so only an original can
         sit in a denominator; coming back, an original is a monomial in the reduced ones,
-        read off a column of :math:`V^{-1}`, so only a reduced symbol can.  That is why
+        read off a **row** of :math:`V^{-1}`, so only a reduced symbol can.  That is why
         the two methods need no `direction` argument: naming the set names the direction.
 
-        The answers are genuinely different, and a reduction can be sound forward and
-        unrecoverable backward.  In Michaelis-Menten the forward reduction divides by
-        ``e_0`` and ``k_1``, while :math:`e_0 = \\tau / (\\kappa_0 \\kappa_1 x_1)` -- so a
-        zero ``k_2``, which makes :math:`\\kappa_0` zero, leaves ``e_0`` unrecoverable
-        though the reduction itself was fine.
+        **Which axis.**  :math:`V` is indexed ``[original, reduced]`` and :math:`V^{-1}`
+        the other way round, ``[reduced, original]``: inverting a matrix exchanges its row
+        and column index sets, and neither ordering changes.  So one reduced symbol is one
+        *row* here, where in the forward direction one original symbol was one row of
+        :math:`V`.  Both matrices put the direction's **source** index first, which is also
+        how :meth:`reverse_translate_parameter` reads it -- it is
+        ``scale_action(variables, inv_herm_mult)``, untransposed -- and how
+        :attr:`inv_herm_mult_u` slices the auxiliaries off the front as the first :math:`r`
+        rows.
+
+        Unlike the forward direction there is only one fatal case, not three.  Forward, a
+        symbol appearing in an auxiliary is fatal because the reduction *sets* auxiliaries
+        to 1 and a monomial containing a zero is never 1.  Nothing on the original side is
+        set to anything, so coming back only a denominator can hurt: a reduced symbol with
+        none but positive exponents merely makes the original it feeds equal to zero.
 
         Args:
             system (ODESystem, optional): The system being reduced, for its symbols.
@@ -2111,24 +2121,47 @@ class ODETranslator(object):
             tuple of sympy.Symbol: In column order, so the result reads against
             :meth:`column_names`.
 
+        The recovery expressions show the answer directly -- what is listed is exactly
+        what appears below a line:
+
         >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.reverse_translate_parameter(translator.column_names(system))
+        Matrix([[x1, 1/(x0*x1), kappa0/x0, kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
+        >>> translator.reduced_symbols_that_must_not_be_zero(system)
+        (x0, x1)
         >>> translator.symbols_that_must_not_be_zero()
         (e_0, k_1)
+
+        The two answers are over different symbol sets, and here the reverse one is both
+        auxiliaries -- which the parameter scheme sets to 1, so nothing is in danger.  It
+        is :mod:`desr.numerics` that solves for auxiliary values which need not be 1.
+
+        An *invariant* can sit in a denominator too, and then a reduction is sound forward
+        and unrecoverable backward.  Multiply one invariant by another and :math:`k_2` comes
+        back as :math:`\\kappa_0 / (\\kappa_1 x_0)`:
+
+        >>> translator.multiplier_add_columns(translator.column_of('k_2/(e_0*k_1)'),
+        ...                                   translator.column_of('k_m1/(e_0*k_1)'))
+        >>> translator.reverse_translate_parameter(translator.column_names(system))
+        Matrix([[x1, 1/(x0*x1), kappa0/(kappa1*x0), kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
         >>> translator.reduced_symbols_that_must_not_be_zero(system)
-        (x1, kappa0, kappa1)
+        (x0, x1, kappa1)
+
+        ``k_m1`` is not something the forward reduction divides by, so a zero ``k_m1``
+        reduces perfectly well -- it just makes :math:`\\kappa_1` zero, and then
+        :math:`k_2` cannot be recovered:
+
+        >>> translator.symbols_that_must_not_be_zero()
+        (e_0, k_1)
         '''
         names = self.column_names(system, scheme)
         inverse = self.inv_herm_mult
 
-        # `scale_action(names, inv_herm_mult.T)` is what recovers the originals, so in
-        # `inv_herm_mult` the exponent of reduced symbol `column` in original symbol `row`
-        # is `inverse[row, column]`.  One reduced symbol is therefore one *column*, where
-        # in the forward direction one original symbol was one row.
-        return tuple(name for column, name in enumerate(names)
-                     if any(entry < 0 for entry in inverse[:, column]))
+        return tuple(name for row, name in enumerate(names)
+                     if any(entry < 0 for entry in inverse[row, :]))
 
     def _names_given_explicitly(self):
         '''

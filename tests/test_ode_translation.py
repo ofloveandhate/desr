@@ -712,7 +712,22 @@ class TestBothDirections(TestCase):
 
     def test_the_reverse_answer_is_over_the_reduced_symbols(self):
         reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
-        self.assertEqual(reverse, tuple(sympy.symbols('x1 kappa0 kappa1')))
+        self.assertEqual(reverse, tuple(sympy.symbols('x0 x1')))
+
+    def test_the_round_trip_recovers_every_original_symbol(self):
+        # The orientation oracle, and the check this class was missing.  Going out and
+        # coming back is the identity, so substituting the forward monomials into the
+        # reverse expressions must give each original symbol back untouched.  Reading
+        # either direction off the wrong axis of its matrix breaks this, which no
+        # statement about denominators can do on its own.
+        forward = list(self.translator.auxiliary_monomials()) \
+            + list(self.translator.invariant_monomials())
+        names = list(self.translator.column_names(self.system))
+        recovered = self.translator.reverse_translate_parameter(names)
+
+        substitution = dict(zip(names, forward))
+        for original, expression in zip(self.translator.symbols_domain, recovered):
+            self.assertEqual(sympy.simplify(expression.subs(substitution) - original), 0)
 
     def test_the_forward_answer_is_over_the_original_symbols(self):
         forward = self.translator.symbols_that_must_not_be_zero()
@@ -724,14 +739,16 @@ class TestBothDirections(TestCase):
 
     def test_the_reverse_answer_is_exactly_the_denominators_of_the_recovery(self):
         # Each original symbol is recovered as a monomial in the reduced ones; collect the
-        # reduced symbols that show up in a denominator and the two must agree.
+        # reduced symbols that show up in a denominator and the two must agree.  Taken
+        # from `reverse_translate_parameter` and `sympy.fraction` rather than by indexing
+        # the inverse multiplier here, so that the oracle cannot reproduce whatever the
+        # method under test believes about which axis is which.
         names = self.translator.column_names(self.system)
-        recovered = scale_action(names, self.translator.inv_herm_mult.T)
+        recovered = self.translator.reverse_translate_parameter(names)
         in_a_denominator = set()
         for expression in recovered:
-            for symbol, power in expression.as_powers_dict().items():
-                if power < 0:
-                    in_a_denominator.add(symbol)
+            _, denominator = sympy.fraction(sympy.together(expression))
+            in_a_denominator |= denominator.free_symbols
         self.assertEqual(
             set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)),
             in_a_denominator)
@@ -742,15 +759,45 @@ class TestBothDirections(TestCase):
         positions = [names.index(name) for name in reverse]
         self.assertEqual(positions, sorted(positions))
 
+    def test_the_plain_reduction_divides_only_by_auxiliaries_coming_back(self):
+        # Worth pinning because it is why this reduction is safe in both directions: the
+        # parameter scheme sets the auxiliaries to 1, so none of them can be zero.  The
+        # first r column names are the auxiliary columns, which exist whether or not the
+        # scheme keeps them -- `auxiliary_names` is empty here for that reason.
+        names = list(self.translator.column_names(self.system))
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        self.assertEqual(set(reverse), set(names[:self.translator.r]))
+
     def test_a_reduction_can_be_sound_forward_and_unrecoverable_backward(self):
-        # k_2 = 0 makes kappa0 zero.  The forward reduction never divides by k_2, so it
-        # goes through; but e_0 = tau/(kappa0*kappa1*x1) cannot then be recovered.
+        # Multiplying one invariant by another puts kappa1 into a denominator: k_2 comes
+        # back as kappa0/(kappa1*x0).  k_m1 is not something the forward reduction divides
+        # by, so a zero k_m1 reduces perfectly well -- and then kappa1 is zero and k_2
+        # cannot be recovered.  Sound forward, unrecoverable backward.
+        self.translator.multiplier_add_columns(
+            self.translator.column_of('k_2/(e_0*k_1)'),
+            self.translator.column_of('k_m1/(e_0*k_1)'))
+
+        self.assertNotIn(sympy.Symbol('k_m1'),
+                         self.translator.symbols_that_must_not_be_zero())
+        self.assertIn(sympy.Symbol('kappa1'),
+                      self.translator.reduced_symbols_that_must_not_be_zero(self.system))
+
+        # And the recovery of k_2 is where it sits.
+        names = list(self.translator.column_names(self.system))
+        recovered = self.translator.reverse_translate_parameter(names)
+        k_2 = recovered[list(self.translator.symbols_domain).index(sympy.Symbol('k_2'))]
+        _, denominator = sympy.fraction(sympy.together(k_2))
+        self.assertIn(sympy.Symbol('kappa1'), denominator.free_symbols)
+
+    def test_a_zero_reduced_parameter_is_fine_when_nothing_divides_by_it(self):
+        # The companion case: k_2 = 0 makes kappa0 zero, and kappa0 is in no denominator,
+        # so the reduction goes through and carries the zero as a value.
         self.system.update_parameter_values({'k_2': 0})
         reduced = self.translator.translate(self.system)
         self.assertNotIn(sympy.Symbol('k_2'),
                          self.translator.symbols_that_must_not_be_zero())
-        self.assertIn(sympy.Symbol('kappa0'),
-                      self.translator.reduced_symbols_that_must_not_be_zero(self.system))
+        self.assertNotIn(sympy.Symbol('kappa0'),
+                         self.translator.reduced_symbols_that_must_not_be_zero(self.system))
         self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
                          sympy.Integer(0))
 
