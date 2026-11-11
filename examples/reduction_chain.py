@@ -139,21 +139,58 @@ def normalise_pairs(translator, system, reduced, normalised):
             for symbol in reduced.symbols if symbol not in survivors]
 
 
-def identify_pairs(translator, system, normalised, final):
+def identify_pairs(translator, system, reduced, normalised, final):
     """
-    The second: an invariant that has *become* the independent variable is identified
+    The second of the two middle maps: an invariant that *is* the clock is identified
     with it.
 
-    This is a consequence of the first and not a separate rule.  The monomial over the
-    arrow is a rescaled clock -- :math:`k_{23} t` -- and the rescaling has just been set
-    to 1, so the invariant is now :math:`t` itself, which the system already carries.  Its
-    equation reads :math:`dt/dt = 1`, which the system already has.
+    **Nothing is ever asserted about a rate constant.**  It is tempting to say the
+    invariant :math:`k_{23} t` becomes :math:`t` "because :math:`k_{23} = 1`", and that
+    is false -- :math:`k_{23}` is whatever the model says it is.  What is true is this:
+
+    .. math::  y_c = t / x_0
+
+    where :math:`x_0` is an auxiliary with the dimensions of time, the system's
+    **characteristic time**.  That relation holds from the start; it is what the
+    invariant *is*, not something normalisation does to it.  The invariant is the clock
+    measured in units of the characteristic time, and a quantity measured in units of
+    itself is 1, so choosing :math:`x_0` as the unit makes the two numbers agree.
+
+    Checked across five systems, ``t`` divided by the clock invariant is always a
+    monomial in the auxiliaries alone -- never one that touches an invariant -- which is
+    why the identification can be read off the units and never needs the parameters.
+
+    Returns:
+        list: ``(symbol, image, what it equals, 'identify')``, where "what it equals" is
+        written in the reduced symbols, because that is the coordinate system the
+        normalisation acts in.
     """
+    import sympy
+
     clock = final.independent_variable
     monomials = normalised.named_symbols
     survivors = set(final.symbols)
-    return [(symbol, clock, monomials.get(symbol), 'identify')
-            for symbol in normalised.symbols if symbol not in survivors]
+    units = {monomial: name
+             for name, monomial in (reduced.named_symbols or {}).items()
+             if name in reduced.auxiliary_names}
+
+    pairs = []
+    for symbol in normalised.symbols:
+        if symbol in survivors:
+            continue
+        monomial = monomials.get(symbol)
+        characteristic = (sympy.simplify(clock / monomial)
+                          if monomial is not None else None)
+        # Say it in the units, where it is a statement about measurement.  Only a
+        # characteristic time that is not one of the auxiliaries falls back to the
+        # monomial in the caller's own symbols.
+        if characteristic in units:
+            reads_as = clock / units[characteristic]
+        else:
+            reads_as = monomial
+        pairs.append((symbol, clock, reads_as, 'identify'))
+    return pairs
+
 
 
 NORMALISE_COLOUR, IDENTIFY_COLOUR = '#8a4500', '#1f5c86'
@@ -205,7 +242,7 @@ def draw_substitution(ax, pairs, font, heights):
                 weight='bold' if step else 'normal')
 
     words = {'normalise': 'a choice of units',
-             'identify': 'already the clock, once those 1s are made'}
+             'identify': 'the clock, measured in the unit just set to 1'}
     step = pairs[0][3]
     # In the panel's own coordinates: in axes coordinates this sat underneath the axes
     # and collided with the system boxes.
@@ -279,7 +316,7 @@ def chain_figure(system, title, size=(13.3, 7.5), font=6.5):
 
     maps = [('forward', None), ('normalise', normalise_pairs(
                 translator, system, reduced, normalised)),
-            ('identify', identify_pairs(translator, system, normalised, final)),
+            ('identify', identify_pairs(translator, system, reduced, normalised, final)),
             ('reverse', None)]
 
     # Centred between the two boxes it maps between, so each reads as the arrow from one
