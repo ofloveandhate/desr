@@ -16,7 +16,7 @@ back.  The reduction hides :math:`r` scaling symmetries in :math:`r` *auxiliary*
 - Under the general and dependent-variable schemes the auxiliaries are variables of the
   reduced system, so a solution of it already carries them and nothing else is needed.
 - Under the parameter scheme they are not, and neither they are when the general scheme is
-  used with ``include_aux_vars=False``.  Then :meth:`NumericTranslation.reverse` needs
+  used with ``include_aux_vars=False``.  Then :meth:`NumericTranslator.reverse` needs
   ``known_values``: :math:`r` values of the original system that you already know.  Without
   them the original system is not determined, since an entire :math:`r`-parameter family of
   them share the same reduction.
@@ -32,17 +32,17 @@ except ImportError:  # pragma: no cover
 # ReductionScheme lives in ode_translation, next to the reductions it names, so that asking
 # a translator which scheme applies does not drag numpy in.  Re-exported here because this
 # is where it was first introduced and where it is most often wanted.
-from .ode_translation import ODETranslator, ReductionScheme, scale_action
+from .ode_translation import ODETranslator, ReductionScheme, _int_inv
 from .ode_system import ODESystem
-from .sympy_helper import to_symbol
+from .sympy_helper import to_symbol, monomial_to_powers
 
-__all__ = ['NumericTranslation', 'InsufficientKnownValues', 'ConflictingKnownValues',
+__all__ = ['NumericTranslator', 'InsufficientKnownValues', 'ConflictingKnownValues',
            'CONSISTENCY_TOLERANCE', 'ReductionScheme']
 
 
 class InsufficientKnownValues(ValueError):
     '''
-    Raised when the values supplied to :meth:`NumericTranslation.reverse` do not pin down a
+    Raised when the values supplied to :meth:`NumericTranslator.reverse` do not pin down a
     unique original system.  The message says which values would.
     '''
     pass
@@ -50,7 +50,7 @@ class InsufficientKnownValues(ValueError):
 
 class ConflictingKnownValues(ValueError):
     '''
-    Raised when the values supplied to :meth:`NumericTranslation.reverse` cannot all hold at
+    Raised when the values supplied to :meth:`NumericTranslator.reverse` cannot all hold at
     once given the reduced values: they determine the same scale, and disagree about it.
     '''
     pass
@@ -89,50 +89,38 @@ def _eval_monomial(values, exponents, column):
     return result
 
 
-def _dep_var_translator(system, translator):
-    '''
-    Rebuild the reduction that :meth:`~desr.ode_translation.ODETranslator.translate_dep_var`
-    works with internally: the same scaling action, with the independent variable removed.
-    '''
-    index = system.independent_variable_index
-    scaling_matrix = translator.scaling_matrix.copy()
-    hermite_multiplier = translator.dep_var_herm_mult(indep_var_index=index)
-    if translator.n == len(system.symbols):
-        scaling_matrix.col_del(index)
-    else:
-        hermite_multiplier.col_del(index)
-        hermite_multiplier.row_del(index)
-    return ODETranslator(scaling_matrix=scaling_matrix,
-                          hermite_multiplier=hermite_multiplier)
-
-
-class NumericTranslation(object):
+class NumericTranslator(object):
     '''
     Carry numbers back and forth across a reduction.
 
     Args:
-        system (ODESystem): The original system.
-        translator (ODETranslator): The reduction of that system.
-        reduced (ODESystem, optional): The reduced system.  Computed with
-            :meth:`~desr.ode_translation.ODETranslator.translate` if not given.  Pass it
-            explicitly when it was produced with non-default options, such as
-            ``include_aux_vars=False``.
+        reduced (ODESystem): A reduced system, as
+            :meth:`~desr.ode_translation.ODETranslator.translate` returns one.  It carries
+            the system it came from and the whole change of variables, so nothing else has
+            to be supplied -- and nothing else *can* be, which is the point.  Handing over
+            a system, a translator and a reduced system separately meant three things that
+            had to agree with nothing making them agree, and a translator adjusted by a
+            column operation after it made the reduced system no longer describes it.
+
+    :meth:`~desr.ode_system.ODESystem.numeric_translator` is the shorter way to say
+    ``NumericTranslator(reduced)``, and needs no import.
 
     Dictionaries handed in and out are keyed by the actual symbols of each system.  Values
     may be scalars or :class:`numpy.ndarray`, so a whole time series translates in one call.
 
     Attributes:
-        scheme (str): Which reduction scheme applies.
+        scheme (str): Which reduction scheme produced the reduced system.
         reduced (ODESystem): The reduced system.
+        system (ODESystem): The system it was reduced from.
 
     Take the prey-predator system, which reduces by the parameter scheme.
 
     >>> import numpy
-    >>> from desr.numerics import NumericTranslation
+    >>> from desr.numerics import NumericTranslator
     >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
     >>> system = ODESystem.from_equations(equations)
     >>> translator = ODETranslator.from_ode_system(system)
-    >>> numeric = NumericTranslation(system, translator)
+    >>> numeric = NumericTranslator(translator.translate())
     >>> numeric.scheme
     ReductionScheme.PARAMETER
 
@@ -161,174 +149,53 @@ class NumericTranslation(object):
     [5.0, 1.3, 1.1]
     '''
 
-    def __init__(self, system, translator, reduced=None):
-        self.system = system
-        self.translator = translator
-        self.reduced = translator.translate(system) if reduced is None else reduced
-
-        self._refuse_unfamiliar_reduction()
-
-        # `translate` prefers the parameter scheme, but a caller may have asked for another
-        # one explicitly.  A reduced system *records* which reduction produced it, so take
-        # its word; only a system that carries no record has to be matched by trying the
-        # schemes in turn.  Guessing is not safe here -- a general reduction that
-        # normalises and identifies has the same number of symbols as the parameter
-        # reduction of the same system, so the counts collide and the guess is wrong.
-        candidates = ([self.reduced.scheme] if self.reduced.scheme is not None
-                      else self._applicable_schemes())
-        layout = None
-        for candidate in candidates:
-            layout = self._layout_for(candidate)
-            if layout is not None:
-                self.scheme = candidate
-                break
-        if layout is None:
-            raise ValueError(self._mismatch_message())
-
-        (self._acted, source, self._auxiliaries, self._invariants,
-         self._shares_indep_var) = layout
-        self._herm_mult_i = source.herm_mult_i
-        self._herm_mult_n = source.herm_mult_n
-        self._inv_herm_mult = source.inv_herm_mult
-        self._growth_rates = None
-
-    def _refuse_unfamiliar_reduction(self):
-        '''
-        Refuse a reduced system that was not made from `system`.
-
-        A reduced system records the system it came from, so this is answerable rather than
-        assumed.  Without the check the symbols still line up by count often enough to go
-        on and produce numbers, and they would be numbers for a different model.
-        '''
-        origin = self.reduced.original_system
-        if origin is None or origin is self.system:
-            return
-        if tuple(origin.symbols) == tuple(self.system.symbols):
-            return
-        raise ValueError(
-            'This reduced system was made from the system with symbols {}, and the system '
-            'given here has {}.  The multiplier is indexed by position, so translating '
-            'between them would pair each column with a different symbol.  Pass the system '
-            'this reduction was made from -- it is on the reduced system as '
-            '`original_system`.'.format(', '.join(map(str, origin.symbols)),
-                                        ', '.join(map(str, self.system.symbols))))
-
-    def _mismatch_message(self):
-        '''
-        Say *why* no layout fitted, distinguishing the two causes.
-
-        They want different remedies, and the one that is easy to miss is the second: a
-        translator is a machine, and :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns`
-        and its siblings change which invariants it produces.  A translator adjusted after
-        it made this reduced system no longer describes it, and blaming the caller for
-        passing the wrong `reduced` sends them looking in the wrong place.
-        '''
-        general = ('Reduced system {} does not match any reduction of {} by this '
-                   'translator.'.format(tuple(self.reduced.symbols),
-                                        tuple(self.system.symbols)))
-        if self.reduced.named_symbols is None:
-            return (general + '  Check that `reduced` came from this system and '
-                    'translator.')
-        return (general + '  Its symbols stand for monomials this translator does not '
-                'produce, so either `reduced` came from a different translator, or this '
-                'translator has been adjusted since it made `reduced` -- a column '
-                'operation changes which invariants it produces, and the reduced system '
-                'it made earlier does not change with it.  Translate again to get a '
-                'reduced system for the multiplier as it stands now.')
-
-    def _applicable_schemes(self):
-        '''The schemes this system admits, in the order `translate` prefers them.'''
-        schemes = []
-        if self.translator._is_translate_parameter_compatible(self.system):
-            schemes.append(ReductionScheme.PARAMETER)
-        columns = self.translator.scaling_matrix.shape[1]
-        if ((len(self.system.symbols) == columns + 1)
-                or self.translator.scaling_matrix[
-                    :, self.system.independent_variable_index].is_zero_matrix):
-            schemes.append(ReductionScheme.DEP_VAR)
-        if len(self.system.symbols) == columns:
-            schemes.append(ReductionScheme.GENERAL)
-        if not schemes:
+    def __init__(self, reduced):
+        if reduced.column_monomials is None or reduced.original_system is None:
             raise ValueError(
-                "System doesn't have the right number of variables for translation")
-        return schemes
+                'This reduced system carries no record of how it was made, so there is '
+                'nothing to translate against.  A system that `translate` produced carries '
+                'the system it came from and what each of its columns denotes; one '
+                'assembled by hand does not, and nothing can work out what its symbols '
+                'mean.  Reduce the original system with an ODETranslator instead.')
 
-    def _layout_for(self, scheme):
-        '''
-        Work out how the reduced system's variables correspond to the reduction's matrices
-        under one scheme, or return None if they cannot.
-        '''
-        if scheme == ReductionScheme.PARAMETER:
-            # This scheme carries no auxiliaries: it normalises all of them, and its
-            # variables are the columns of V_n -- the new independent variable among them,
-            # since it is itself an invariant.
-            source = self.translator
-            acted = list(self.system.symbols)
-            has_auxiliaries = False
+        self.reduced = reduced
+        self.system = reduced.original_system
+        self.scheme = reduced.scheme
+
+        # The dependent-variable scheme's multiplier is indexed by the symbols other than
+        # the independent variable, because that is the system it reduces.
+        if self.scheme == ReductionScheme.DEP_VAR:
+            self._acted = [v for v in self.system.symbols
+                           if v != self.system.independent_variable]
         else:
-            has_auxiliaries = True
-            if scheme == ReductionScheme.DEP_VAR:
-                source = self.translator._dep_var_translator(self.system)
-                acted = [v for v in self.system.symbols
-                         if v != self.system.independent_variable]
-            else:
-                source = self.translator
-                acted = list(self.system.symbols)
+            self._acted = list(self.system.symbols)
 
-        recorded = self.reduced.named_symbols
-        if recorded is not None and not has_auxiliaries:
-            by_monomial = {monomial: name for name, monomial in recorded.items()}
-            invariants = [by_monomial.get(monomial)
-                          for monomial in scale_action(acted, source.herm_mult_n)]
-            if any(name is None for name in invariants):
-                return None
-            return (acted, source, [], invariants, False)
+        monomials = list(reduced.column_monomials)
+        # Each monomial's exponent vector over the original symbols *is* its column of the
+        # multiplier, so the record reconstructs the matrices exactly -- with no translator
+        # that could have moved on in the meantime.
+        multiplier = sympy.Matrix(
+            [monomial_to_powers(monomial, self._acted) for monomial in monomials]).T
+        r = reduced.num_scaling_symmetries
+        self._herm_mult_i = multiplier[:, :r]
+        self._herm_mult_n = multiplier[:, r:]
+        self._inv_herm_mult = _int_inv(multiplier)
 
-        if recorded is not None:
-            # The reduced system says what each of its symbols denotes, so match each
-            # multiplier column to the symbol standing for that column's monomial.  This
-            # is the only way that stays right once a reduction keeps some of its
-            # auxiliaries and normalises others: counting cannot tell six kept symbols
-            # spread over nine columns from six invariants, and a wrong guess there is
-            # silently wrong *numbers* rather than an error.
-            by_monomial = {monomial: name for name, monomial in recorded.items()}
-            # A column with no symbol in the reduced system is one the reduction did not
-            # keep -- normalised away, or dropped with include_aux_vars=False.  Either way
-            # it is **unknown** here, and :const:`None` says so.
-            #
-            # A normalised auxiliary is 1 *in the units the reduction chose*, and taking
-            # that as its value in the caller's units would hand back a rescaled system
-            # wearing the original's symbols: right-looking numbers for the wrong system,
-            # with nothing to show it had happened.  The value has to be asked for.
-            auxiliaries = [by_monomial.get(monomial)
-                           for monomial in scale_action(acted, source.herm_mult_i)]
-            invariants = [by_monomial.get(monomial)
-                          for monomial in scale_action(acted, source.herm_mult_n)]
-            if any(name is None for name in invariants):
-                return None
-            # The reduced system's own clock is the original one only when nothing was
-            # identified with it; where a clock invariant was, the reduced clock denotes
-            # that rescaled clock and taking the two as equal is a category error.
-            shares = (recorded.get(self.reduced.independent_variable)
-                      == self.system.independent_variable)
-            return (acted, source, auxiliaries, invariants, shares)
+        by_monomial = {monomial: name
+                       for name, monomial in reduced.named_symbols.items()}
+        # A column with no symbol in the reduced system is one it did not keep -- normalised
+        # away, or dropped.  Either way its value is unknown here and None says so; see
+        # `reverse`, which asks for it rather than assuming the 1 the reduction chose.
+        self._auxiliaries = [by_monomial.get(monomial) for monomial in monomials[:r]]
+        self._invariants = [by_monomial.get(monomial) for monomial in monomials[r:]]
 
-        # No record: a reduced system built by hand, or by a version that did not keep
-        # one.  Fall back to position, which is unambiguous while every auxiliary is
-        # either kept or dropped together.
-        if not has_auxiliaries:
-            if len(self.reduced.symbols) != source.herm_mult_n.cols:
-                return None
-            return (acted, source, [], list(self.reduced.symbols), False)
-
-        rest = [v for v in self.reduced.symbols if v != self.reduced.independent_variable]
-        if len(rest) == source.herm_mult_i.cols + source.herm_mult_n.cols:
-            return (acted, source, rest[:source.herm_mult_i.cols],
-                    rest[source.herm_mult_i.cols:], True)
-        if len(rest) == source.herm_mult_n.cols:
-            # Reduced with include_aux_vars=False; the auxiliaries were dropped.
-            return (acted, source, [], rest, True)
-        return None
+        # The reduced system's own clock is the original one only when it denotes it.  Where
+        # a clock invariant was identified with it, it denotes that rescaled clock instead,
+        # exactly as the parameter scheme's tau does, and the two must not be equated.
+        self._shares_indep_var = (
+            reduced.named_symbols.get(reduced.independent_variable)
+            == self.system.independent_variable)
+        self._growth_rates = None
 
     @property
     def r(self):
@@ -714,13 +581,12 @@ class NumericTranslation(object):
         monomials in the parameters alone, which are exactly the ones that cannot move, so
         the ones it keeps are always the moving ones.
 
-        >>> from desr.numerics import NumericTranslation
+        >>> from desr.numerics import NumericTranslator
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> autonomous = NumericTranslation(
-        ...     system, translator,
-        ...     translator.translate_general(system, normalise_parameters=False))
+        >>> autonomous = translator.translate_general(
+        ...     normalise_parameters=False).numeric_translator()
         >>> autonomous.scheme
         ReductionScheme.GENERAL
         >>> autonomous.auxiliary_growth_rates()
@@ -735,9 +601,8 @@ class NumericTranslation(object):
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> moving = NumericTranslation(
-        ...     system, translator,
-        ...     translator.translate_general(system, include_aux_vars=False))
+        >>> moving = translator.translate_general(
+        ...     include_aux_vars=False).numeric_translator()
         >>> moving.carries_auxiliaries
         False
         >>> moving.auxiliaries_are_constant
@@ -751,29 +616,67 @@ class NumericTranslation(object):
                 # move, and the reduced system does not carry them to ask.
                 self._growth_rates = [sympy.Integer(0)] * self.r
             else:
-                if self.carries_auxiliaries:
-                    carrier, auxiliaries = self.reduced, self._auxiliaries
-                elif self.scheme == ReductionScheme.GENERAL:
-                    carrier = self.translator.translate_general(self.system,
-                                                                 include_aux_vars=True)
-                    auxiliaries = carrier.auxiliary_names
-                else:
-                    carrier = self.translator.translate_dep_var(self.system)
-                    auxiliaries = carrier.auxiliary_names
-                # An auxiliary that is a monomial in the original parameters alone is a
-                # parameter of the reduced system: no equation, and so not in
-                # derivative_dict.  Its growth rate is zero, which is the honest answer and
-                # is what makes `auxiliaries_are_constant` true for such a reduction.
-                rates = [sympy.Integer(0) if x in carrier.parameters
-                         else sympy.simplify(carrier.derivative_dict[x] / x)
-                         for x in auxiliaries]
-                for rate, x in zip(rates, auxiliaries):
-                    if rate.has(*auxiliaries):
+                moving = set(self.system.dependents) | {self.system.independent_variable}
+                monomials = list(self.reduced.column_monomials)[:self.r]
+                carrier, named = None, []
+                rates = []
+                for column, name in enumerate(self._auxiliaries):
+                    if not (monomials[column].free_symbols & moving):
+                        # A monomial in the original parameters alone cannot move,
+                        # whatever the reduction did with it.  Reading this off the
+                        # monomial rather than off an equation is what lets a normalised
+                        # auxiliary answer at all: it has no symbol left to ask.
+                        rates.append(sympy.Integer(0))
+                        continue
+                    if name is not None:
+                        rates.append(
+                            sympy.simplify(self.reduced.derivative_dict[name] / name))
+                        named.append(name)
+                        continue
+                    # Dropped by `include_aux_vars=False`, and it moves, so its equation
+                    # is the one thing the record cannot supply.  Reduce the same system
+                    # by the same multiplier, keeping the auxiliaries, to recover it.
+                    if carrier is None:
+                        carrier = self._auxiliary_carrier()
+                    kept = carrier.auxiliary_names[column]
+                    rates.append(sympy.simplify(carrier.derivative_dict[kept] / kept))
+                    named.append(kept)
+
+                for rate, name in zip(rates, self._auxiliaries):
+                    if named and rate.has(*named):
                         raise ValueError(
                             'The equation for {} depends on an auxiliary variable, so the '
-                            'auxiliaries are not a quadrature.'.format(x))
+                            'auxiliaries are not a quadrature.'.format(name))
                 self._growth_rates = rates
         return list(self._growth_rates)
+
+    def _auxiliary_carrier(self):
+        '''
+        The same system reduced by the same multiplier, keeping every auxiliary.
+
+        Needed only for an auxiliary that both moves and was dropped, whose equation is the
+        one thing :attr:`~desr.ode_system.ODESystem.column_monomials` cannot supply: a
+        monomial says what a symbol *is*, not how it changes, and for everything else that
+        is enough because a monomial in the parameters alone provably does not change.
+
+        The multiplier is the one this reduction recorded, so the reduction this produces
+        is the same one -- it is not a second guess at which invariants were wanted.
+        '''
+        from .ode_translation import ODETranslator
+
+        multiplier = sympy.Matrix.hstack(self._herm_mult_i, self._herm_mult_n)
+        translator = ODETranslator(
+            scaling_matrix=self.system.maximal_scaling_matrix(),
+            symbols_domain=tuple(self.system.symbols),
+            hermite_multiplier=multiplier,
+            system=self.system)
+        if translator.r != self.r:
+            raise ValueError(
+                'This reduction has {} scaling symmetries and the system has {}, so the '
+                'auxiliaries it dropped cannot be recovered.'.format(self.r, translator.r))
+        return translator.translate_general(include_aux_vars=True,
+                                            normalise_parameters=False,
+                                            identify_indep_var=False)
 
     def recover_auxiliaries(self, values, known_values=None, auxiliaries=None,
                             invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,

@@ -3,7 +3,7 @@
 Companion figure to ``docs/source/examples/mm_numeric_round_trip.rst``.
 
 The reduced system is solved numerically, its solution is translated back into the
-original variables with :class:`desr.numerics.NumericTranslation`, and the result is
+original variables with :class:`desr.numerics.NumericTranslator`, and the result is
 compared against solving the original system directly.  The two agree to the tolerance
 of the integrator, which is the point: the translation itself is exact.
 
@@ -17,7 +17,7 @@ import numpy as np
 import sympy
 from scipy.integrate import solve_ivp
 
-from desr import NumericTranslation, ODESystem, ODETranslator
+from desr import ODESystem, ODETranslator
 
 # Categorical slots 1 and 2 of the reference palette; identity is carried by hue and
 # repeated as a direct label, never by colour alone.
@@ -38,7 +38,7 @@ system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
 translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
 reduced_system = translator.translate(system)
-numeric = NumericTranslation(system, translator, reduced_system)
+numeric = reduced_system.numeric_translator()
 
 s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
 c0, c1, c2, tau, u, v = reduced_system.symbols

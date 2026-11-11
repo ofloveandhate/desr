@@ -60,7 +60,6 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
-    >>> from desr import NumericTranslation
 
     >>> eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
     >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
@@ -101,13 +100,13 @@ Asking for the invariants alone drops it, leaving one fewer equation to integrat
     dy1/dt = y1*(y1 + 1)/t
 
 
-Construct a `NumericTranslation`
+Construct a `NumericTranslator`
 ----------------------------------
 
-:class:`~desr.numerics.NumericTranslation` is happy to work with a reduction with its auxiliaries
+:class:`~desr.numerics.NumericTranslator` is happy to work with a reduction with its auxiliaries
 dropped.  We do need to pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
 
-    >>> numeric_translation = NumericTranslation(system, translator, reduced_system)
+    >>> numeric_translation = reduced_system.numeric_translator()
     >>> numeric_translation.scheme
     ReductionScheme.GENERAL
     >>> numeric_translation.carries_auxiliaries
@@ -228,7 +227,7 @@ solution started.
 
 A point value of a dependent variable is not something a series can be told directly.  The
 series already says how :math:`z_1` varies, so a single number for it mixes two different
-kinds of statement, and :meth:`~desr.numerics.NumericTranslation.reverse` says so.
+kinds of statement, and :meth:`~desr.numerics.NumericTranslator.reverse` says so.
 
     >>> reduced_values = {reduced_system.indep_var: solution.t,
     ...                   y0: solution.y[0], y1: solution.y[1]}
@@ -247,7 +246,7 @@ scalars in ``initial_conditions`` -- determine the auxiliary:
     [0.25]
 
 That value is :math:`t z_1^2` at :math:`t = 1`, as it should be.  Hand it to
-:meth:`~desr.numerics.NumericTranslation.reverse`, which integrates it
+:meth:`~desr.numerics.NumericTranslator.reverse`, which integrates it
 along the solution.  (Passing the solver's dense output lets that integration evaluate the
 invariants wherever it likes.)
 
@@ -286,7 +285,7 @@ Plotting the numerical results:
 
 The left depicts the numerical solution of the nondimensionalized system, sans auxiliary variables.  
 The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what
-:meth:`~desr.numerics.NumericTranslation.recover_auxiliaries` produces by integrating their
+:meth:`~desr.numerics.NumericTranslator.recover_auxiliaries` produces by integrating their
 equations along the invariants.  The circles are this example's exact values.  
 
 The right-hand panel is each original variable, obtained from reverse translation.

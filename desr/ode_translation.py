@@ -1481,6 +1481,8 @@ class ODETranslator(object):
 
         # The parameter scheme normalises its auxiliaries to 1 and discards them, so there
         # are none to record.
+        column_monomials = (list(scale_action(system.symbols, self.herm_mult_i))
+                            + list(scale_action(system.symbols, self.herm_mult_n)))
         reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
                                    is_reduced=True,
                                    scheme=ReductionScheme.PARAMETER,
@@ -1489,7 +1491,8 @@ class ODETranslator(object):
                                        system, ReductionScheme.PARAMETER),
                                    symbol_kinds=self._symbol_kinds_for(
                                        system, ReductionScheme.PARAMETER),
-                                   original_system=system.copy())
+                                   original_system=system.copy(),
+                                   column_monomials=column_monomials)
         reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
@@ -1680,7 +1683,8 @@ class ODETranslator(object):
                                 system, ReductionScheme.DEP_VAR,
                                 normalise_parameters=normalise_parameters,
                                 identify_indep_var=identify_indep_var),
-                            original_system=system.copy())
+                            original_system=system.copy(),
+                            column_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
@@ -1892,7 +1896,8 @@ class ODETranslator(object):
                             symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.GENERAL, include_aux_vars,
                                 normalise_parameters, identify_indep_var),
-                            original_system=system.copy())
+                            original_system=system.copy(),
+                            column_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,

@@ -233,11 +233,11 @@ class TestAdversarialNames(TestCase):
         # Both `from_equations` and desr.numerics go through sympy_helper, so 'S' is the
         # same symbol in each.  It used to be sympy's singleton registry in numerics, so
         # naming a variable by its own string did not find it.
-        from desr.numerics import NumericTranslation
+        from desr.numerics import NumericTranslator
         system = ODESystem.from_equations(['dS/dt = -k*S'])
         system.reorder_variables(['t', 'S', 'k'])
         self.assertIn(sympy.Symbol('S'), system.symbols)
-        numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
+        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate())
 
         by_symbol = numeric.forward({sympy.Symbol('t'): 1.0, sympy.Symbol('S'): 2.0,
                                      sympy.Symbol('k'): 0.5})

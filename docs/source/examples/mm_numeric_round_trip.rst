@@ -30,7 +30,6 @@ The variable order matters: the reduction algorithm tends to reduce away the var
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
-    >>> from desr import NumericTranslation
 
     >>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
@@ -85,12 +84,12 @@ Translate parameter values
 ---------------------------
 
 Let's translate the values of our original parameters, into the dimensionless parameters.  To this end,  
-:class:`~desr.numerics.NumericTranslation` translates numeric values for parameters and variables across the same reduction that
+:class:`~desr.numerics.NumericTranslator` translates numeric values for parameters and variables across the same reduction that
 :class:`~desr.ode_translation.ODETranslator` applies to symbols.
 
-    >>> numeric_translation = NumericTranslation(system, translator, reduced_system)
+    >>> numeric_translation = reduced_system.numeric_translator()
 
-The :meth:`~desr.numerics.NumericTranslation.forward`  function takes values of the original variables and
+The :meth:`~desr.numerics.NumericTranslator.forward`  function takes values of the original variables and
 returns values of the reduced ones.  Here it converts the starting state and the parameters.
 
     >>> translated_values = numeric_translation.forward({t: 0.0, s: 2.0, c: 0.0, **parameters})
@@ -140,7 +139,7 @@ Going right-then-down is what we just did: reduce, then solve.  Going down-then-
 other route: solve the original system, then translate its solution.  We have the original
 solution already, in ``reference_soln``.  Since the invariants are :math:`\tau = k_1 s_0 t`,
 :math:`u = s / s_0` and :math:`v = c / s_0`, translating it is exactly what
-:meth:`~desr.numerics.NumericTranslation.forward` does.  It takes the whole trajectory
+:meth:`~desr.numerics.NumericTranslator.forward` does.  It takes the whole trajectory
 in a single call.
 
     >>> translated_solution = numeric_translation.forward({
@@ -168,8 +167,8 @@ Reverse translation
 
 The reduced system cannot tell us which original system it came from.  Remember, :math:`r = 2`, so the reduced system's parameters and solutions are shared by an
 entire two-parameter family, all of which fit equally well.  So
-:meth:`~desr.numerics.NumericTranslation.reverse` asks for
-:attr:`~desr.numerics.NumericTranslation.r` values that you already know.  We'll use the rate :math:`k_1` and the initial substrate :math:`s_0`, both of which an experimenter would probably have.
+:meth:`~desr.numerics.NumericTranslator.reverse` asks for
+:attr:`~desr.numerics.NumericTranslator.r` values that you already know.  We'll use the rate :math:`k_1` and the initial substrate :math:`s_0`, both of which an experimenter would probably have.
 
 Values may be arrays, so the whole time series converts in one call.
 

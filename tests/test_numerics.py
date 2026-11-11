@@ -8,10 +8,11 @@ from desr.ode_translation import ODETranslator
 # numpy is optional for using desr, but not for testing it: a test suite that quietly skips
 # a module when its dependency is missing reports success it has not earned.
 import numpy
-from desr.numerics import NumericTranslation, InsufficientKnownValues, ConflictingKnownValues
+from desr.chemical_reaction_network import ChemicalReactionNetwork
+from desr.numerics import NumericTranslator, InsufficientKnownValues, ConflictingKnownValues
 
 
-class TestNumericTranslation(TestCase):
+class TestNumericTranslator(TestCase):
     '''
     Carrying numbers across the Michaelis-Menten reduction, and the ways of getting it wrong.
 
@@ -31,7 +32,7 @@ class TestNumericTranslation(TestCase):
         self.system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
         self.translator = ODETranslator.from_ode_system(
             self.system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
-        self.numeric = NumericTranslation(self.system, self.translator)
+        self.numeric = NumericTranslator(self.translator.translate())
 
         # Fetched by name rather than unpacked positionally, so that a change of variable
         # order is not a change to every test in this class.
@@ -247,7 +248,7 @@ class TestNumericTranslation(TestCase):
         # update_initial_conditions appends z0 at the end, which leaves the system out of
         # canonical order now that the parameters come first, so put it back.
         system.reorder_variables(['a', 'b', 'z0', 't', 'z'])
-        numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
+        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate())
         a, b, z0, t, z = system.symbols
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
         with self.assertRaises(NotImplementedError) as caught:
@@ -262,7 +263,7 @@ class TestNumericTranslation(TestCase):
         system = ODESystem.from_equations(equations)
         system.reorder_variables(['t', 'z1', 'z2'])
         translator = ODETranslator.from_ode_system(system)
-        numeric = NumericTranslation(system, translator)
+        numeric = NumericTranslator(translator.translate())
         self.assertTrue(numeric.carries_auxiliaries)
         t, z1, z2 = system.symbols
         point = numeric.forward({t: 1.0, z1: 0.4, z2: 0.3})
@@ -271,3 +272,98 @@ class TestNumericTranslation(TestCase):
         self.assertIn('already determined', str(caught.exception))
         recovered = numeric.reverse(point)
         numpy.testing.assert_allclose(float(recovered[z1]), 0.4, rtol=1e-12)
+
+
+class TestTheNumericTranslatorNeedsOnlyTheReduction(TestCase):
+    '''
+    It used to take a system, a translator and a reduced system: three things that had to
+    agree, with nothing making them agree.  A reduced system now carries the system it came
+    from and the whole change of variables, so one argument says all of it.
+    '''
+
+    EQUATIONS = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
+
+    def reduction(self):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        return ODETranslator.from_ode_system(system).translate()
+
+    def test_the_reduced_system_makes_one(self):
+        reduced = self.reduction()
+        numeric = reduced.numeric_translator()
+        self.assertIs(reduced, numeric.reduced)
+        self.assertEqual(tuple(reduced.original_system.symbols),
+                         tuple(numeric.system.symbols))
+        self.assertEqual(reduced.scheme, numeric.scheme)
+
+    def test_it_is_the_same_as_the_constructor(self):
+        reduced = self.reduction()
+        values = {sympy.Symbol(name): value for name, value in
+                  (('K', 5.0), ('d', 0.7), ('h', 1.3), ('k', 0.9), ('r', 1.1),
+                   ('s', 0.4), ('t', 2.0), ('n', 1.0), ('p', 0.5))}
+        self.assertEqual(NumericTranslator(reduced).forward(values),
+                         reduced.numeric_translator().forward(values))
+
+    def test_the_matrices_come_from_the_record(self):
+        '''
+        The exponent vectors of the recorded monomials are the multiplier, so what is
+        rebuilt here is the reduction that was performed, not a fresh guess at it.
+        '''
+        system = ODESystem.from_equations(self.EQUATIONS)
+        translator = ODETranslator.from_ode_system(system)
+        numeric = translator.translate().numeric_translator()
+        self.assertEqual(translator.herm_mult_i, numeric._herm_mult_i)
+        self.assertEqual(translator.herm_mult_n, numeric._herm_mult_n)
+        self.assertEqual(translator.inv_herm_mult, numeric._inv_herm_mult)
+
+    def test_a_translator_adjusted_afterwards_cannot_reach_it(self):
+        '''
+        The hazard this shape removes.  A column operation changes which invariants a
+        translator produces; the reduced system it made earlier does not change with it.
+        There is no longer anywhere to hand the moved-on translator in.
+        '''
+        system = ODESystem.from_equations(self.EQUATIONS)
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate()
+        before = reduced.numeric_translator()._herm_mult_n
+
+        translator.multiplier_add_columns(translator.r + 0, translator.r + 3, 1)
+        self.assertNotEqual(translator.herm_mult_n, before)
+        # the reduction in hand is unmoved, and still describes itself
+        self.assertEqual(before, reduced.numeric_translator()._herm_mult_n)
+
+    def test_a_system_with_no_record_is_refused(self):
+        '''
+        A reduced system assembled by hand has no record of what its symbols mean, so
+        nothing can work out what to translate.  Refused, rather than guessed at by
+        matching column counts -- which is how `forward` once reported one column's value
+        against another column's symbol.
+        '''
+        by_hand = ODESystem.from_equations(['dy0/dt = y0'], is_reduced=True)
+        self.assertIsNone(by_hand.named_symbols)
+        with self.assertRaises(ValueError) as caught:
+            by_hand.numeric_translator()
+        self.assertIn('no record', str(caught.exception))
+
+    def test_a_partially_normalised_reduction_round_trips(self):
+        '''
+        The case the old count-matching got silently wrong: six kept symbols over nine
+        columns.  Given back the parameters it normalised, it recovers the original
+        exactly.
+        '''
+        enzyme = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        reduced = ODETranslator.from_ode_system(enzyme).translate()
+        numeric = reduced.numeric_translator()
+
+        values = {sympy.Symbol(name): value for name, value in
+                  (('k_0_1', 2.0), ('k_2_3', 3.0), ('k_4_5', 5.0), ('t', 1.5),
+                   ('e', 0.7), ('f', 1.1), ('x', 0.9), ('y', 0.4), ('z', 0.2))}
+        forward = numeric.forward(values)
+        self.assertAlmostEqual(0.9, float(forward[sympy.Symbol('x3')]))
+
+        recovered = numeric.reverse(forward, known_values={
+            sympy.Symbol('k_0_1'): 2.0, sympy.Symbol('k_2_3'): 3.0,
+            sympy.Symbol('k_4_5'): 5.0})
+        for symbol, value in values.items():
+            with self.subTest(symbol=str(symbol)):
+                self.assertAlmostEqual(value, float(recovered[symbol]))

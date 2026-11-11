@@ -34,10 +34,10 @@ class TestPublicNames(TestCase):
 
     def test_the_numeric_names_resolve_through_the_package(self):
         from desr import (ConflictingKnownValues, InsufficientKnownValues,
-                          NumericTranslation)
+                          NumericTranslator)
         self.assertTrue(issubclass(InsufficientKnownValues, ValueError))
         self.assertTrue(issubclass(ConflictingKnownValues, ValueError))
-        self.assertTrue(callable(NumericTranslation))
+        self.assertTrue(callable(NumericTranslator))
 
     def test_the_version_is_written_in_exactly_one_place(self):
         '''
@@ -128,7 +128,7 @@ class TestOptionalDependencies(TestCase):
 
     def test_reaching_for_the_numeric_part_imports_numpy(self):
         # The lazy attribute must actually deliver the module, not merely stay quiet.
-        self.assertEqual(self.modules_after('from desr import NumericTranslation'),
+        self.assertEqual(self.modules_after('from desr import NumericTranslator'),
                          'numpy')
 
     def test_scipy_stays_unimported_until_a_solver_is_needed(self):

@@ -232,6 +232,14 @@ class ODESystem(object):
             symbols, so without it the record names symbols belonging to nobody, and two
             different originals using the same letters are indistinguishable.  It is also
             what tells a reduction this library produced from one assembled by hand.
+        column_monomials (iter of sympy.Expr, optional): For a reduced system, what every
+            column of the Hermite multiplier stands for, as a monomial in the original
+            symbols, in column order -- the `r` auxiliaries and then the invariants.
+            This is `named_symbols` completed: that one is keyed by the symbols the
+            reduction kept, so a column it normalised away or identified with the clock
+            has no entry there, and the change of variables is one column short of
+            square.  With this it is square, and a reduced system is enough on its own
+            to carry numbers across the reduction in either direction.
         symbol_kinds (dict, optional): For a reduced system, what kind of thing each of
             its symbols is.  Recorded for the same reason as `named_symbols`, and keyed
             alike so the two join.
@@ -252,7 +260,8 @@ class ODESystem(object):
             :meth:`~desr.ode_translation.ODETranslator.normalisations`.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None,
+                 column_monomials=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -272,6 +281,8 @@ class ODESystem(object):
         self._normalisations = dict(normalisations or {})
         self._named_symbols = None if named_symbols is None else dict(named_symbols)
         self._symbol_kinds = None if symbol_kinds is None else dict(symbol_kinds)
+        self._column_monomials = (None if column_monomials is None
+                                  else tuple(column_monomials))
         self._original_system = original_system
 
         # sanity checks
@@ -350,7 +361,8 @@ class ODESystem(object):
                            normalisations=self._normalisations,
                            named_symbols=self._named_symbols,
                            symbol_kinds=self._symbol_kinds,
-                           original_system=self._original_system)
+                           original_system=self._original_system,
+                           column_monomials=self._column_monomials)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
@@ -687,6 +699,55 @@ class ODESystem(object):
             ODESystem or None
         '''
         return self._original_system
+
+    def numeric_translator(self):
+        '''
+        A :class:`~desr.numerics.NumericTranslator` for this reduction.
+
+        The short way to say ``NumericTranslator(reduced)``, and the one that cannot be
+        pointed at the wrong reduction: it is built from this system rather than from a
+        translator that might since have been adjusted, or that might produce a different
+        reduction than the one in hand if it were asked again.
+
+        :mod:`desr.numerics` is imported here rather than at the top of this module,
+        because it needs :mod:`numpy` and ``import desr`` must not.
+
+        Returns:
+            desr.numerics.NumericTranslator
+
+        Raises:
+            ValueError: if this system is not a reduction a translation produced, and so
+                carries no record of what its symbols mean.
+        '''
+        from .numerics import NumericTranslator
+        return NumericTranslator(self)
+
+    @property
+    def column_monomials(self):
+        '''
+        What every column of the reduction's Hermite multiplier stands for, as a
+        monomial in the **original** system's symbols, in column order: the :math:`r`
+        auxiliaries first, then the invariants.
+
+        :const:`None` when this is not a reduction, for the reason
+        :attr:`named_symbols` gives.
+
+        This is :attr:`named_symbols` completed.  That one is keyed by the symbols the
+        reduction *kept*, so a column normalised away, identified with the clock, or
+        dropped has no entry in it -- and the change of variables comes out short of
+        square, which is exactly the case a recovery needs.  Here every column is
+        present whatever became of it, so the exponent vectors of these monomials are
+        the multiplier itself, and a reduced system can carry numbers in either
+        direction without the translator that made it.
+
+        Under the dependent-variable scheme the monomials are written in the symbols
+        other than the independent variable, because that is what its multiplier is
+        indexed by; :attr:`scheme` says which case applies.
+
+        Returns:
+            tuple or None
+        '''
+        return self._column_monomials
 
     @property
     def symbol_kinds(self):
@@ -1197,7 +1258,7 @@ class ODESystem(object):
         >>> system.update_parameter_values({'x': 2})
         Traceback (most recent call last):
             ...
-        ValueError: x is a dependent variable, so it has no one value to record; parameter_values holds constants of the model.  For its value at a point on a solution, pass known_values= to desr.numerics.NumericTranslation.reverse.
+        ValueError: x is a dependent variable, so it has no one value to record; parameter_values holds constants of the model.  For its value at a point on a solution, pass known_values= to desr.numerics.NumericTranslator.reverse.
 
         A value is a number.  A relation among parameters is a constraint:
 
@@ -1248,7 +1309,7 @@ class ODESystem(object):
                     '{} is {}, so it has no one value to record; parameter_values holds '
                     'constants of the model.  For its value at a point on a solution, '
                     'pass known_values= to '
-                    'desr.numerics.NumericTranslation.reverse.'.format(parameter, role))
+                    'desr.numerics.NumericTranslator.reverse.'.format(parameter, role))
 
             if parameter not in self.parameters:
                 raise ValueError(
@@ -1698,7 +1759,10 @@ class ODESystem(object):
                                     to_sub.get(name, name): kind
                                     for name, kind in self._symbol_kinds.items()
                                     if to_sub.get(name, name) in new_vars},
-                                original_system=self._original_system)
+                                original_system=self._original_system,
+                                # In the *original* system's symbols, so a
+                                # substitution on this one leaves them alone.
+                                column_monomials=self._column_monomials)
 
         subs_system._variable_sanity_check()
         return subs_system
