@@ -248,10 +248,15 @@ class TestWhatTheNodesCarry(TestCase):
         self.assertEqual(y_0['monomial'], sympy.sympify('k_2_3*t'))
         self.assertEqual(y_0['kind'], 'dependent')
 
-        # And the reduced system agrees: `t` is its independent variable, y0 is not.
+        # And the reduced system agrees that there is one clock.  It agrees more strongly
+        # than it used to: `y0` is not a second dependent any more, because the reduction
+        # identifies it *with* `t` -- so the reduced system's own clock is what `y0`
+        # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.
         reduced = translator.translate(system)
         self.assertEqual(reduced.independent_variable, sympy.Symbol('t'))
-        self.assertIn(sympy.Symbol('y0'), reduced.dependents)
+        self.assertNotIn(sympy.Symbol('y0'), reduced.symbols)
+        self.assertEqual(sympy.sympify('k_2_3*t'),
+                         reduced.named_symbols[reduced.independent_variable])
 
     def test_exactly_one_vertex_per_layer_is_the_independent_variable(self):
         # The invariant the previous test protects: a layer with two independent variables
@@ -371,15 +376,27 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         self.assertTrue(s_0['normalised'])
         self.assertEqual(_node_label(s_0, latex=False), 's_0 |-> 1')
 
-    def test_nothing_is_normalised_under_the_general_scheme(self):
-        # There is no substitution table to read: the auxiliaries are kept as variables,
-        # so no original symbol is spent.
+    def test_the_general_scheme_normalises_the_auxiliaries_it_can(self):
+        # Not all or nothing.  An auxiliary is normalised exactly when it is a monomial in
+        # the original parameters alone, because only then is it constant -- so the enzyme
+        # chain normalises three of its four and keeps `x3 = x`, which moves.
         system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
         translator = ODETranslator.from_ode_system(system)
         graph = symbol_graph(translator, system)
-        self.assertEqual([data['symbol'] for (layer, _), data in graph.nodes(data=True)
-                          if layer == ORIGINAL and data['normalised']], [])
+
+        normalised = sorted(str(data['symbol']) for _, data in graph.nodes(data=True)
+                            if data['auxiliary'] and data['normalised'])
+        self.assertEqual(['x0', 'x1', 'x2'], normalised)
+        kept = sorted(str(data['symbol']) for _, data in graph.nodes(data=True)
+                      if data['auxiliary'] and not data['normalised'])
+        self.assertEqual(['x3'], kept)
+
+        # and on the original layer, the symbols that pays for
+        self.assertEqual(
+            ['k_0_1', 'k_2_3', 'k_4_5'],
+            sorted(str(data['symbol']) for (layer, _), data in graph.nodes(data=True)
+                   if layer == ORIGINAL and data['normalised']))
 
     def test_a_normalised_auxiliary_is_never_given_the_value_one(self):
         # The reduction reaches that 1 by choosing a group element, which rescales the
@@ -535,20 +552,21 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
         self.assertNotIn('kappa0', after)
         self.assertIn('y0', after)
 
-    def test_the_auxiliaries_stop_being_normalised_with_the_scheme(self):
-        # The same move, read through the annotation that depends on the scheme: under the
-        # parameter scheme the auxiliaries are set to 1, under the general one they are
-        # kept, and the graph has to follow rather than remember.
-        graph = symbol_graph(self.translator, self.system)
-        self.assertTrue(all(data['normalised'] for _, data in graph.nodes(data=True)
+    def test_normalisation_follows_the_column_and_not_the_scheme(self):
+        # It used to be read off the scheme -- all of them under the parameter scheme,
+        # none otherwise.  It is per column now: an auxiliary is normalised when its
+        # monomial is built from the original parameters alone.  Moving the clock
+        # invariant changes the scheme here, and leaves that answer alone, because it does
+        # not change what the auxiliary columns are made of.
+        before = symbol_graph(self.translator, self.system)
+        self.assertTrue(all(data['normalised'] for _, data in before.nodes(data=True)
                             if data['auxiliary']))
 
         self.move_the_clock_invariant()
-        graph = symbol_graph(self.translator, self.system)
-        auxiliaries = [data for _, data in graph.nodes(data=True)
-                       if data['auxiliary']]
+        after = symbol_graph(self.translator, self.system)
+        auxiliaries = [data for _, data in after.nodes(data=True) if data['auxiliary']]
         self.assertTrue(auxiliaries)
-        self.assertFalse(any(data['normalised'] for data in auxiliaries))
+        self.assertTrue(all(data['normalised'] for data in auxiliaries))
 
 
 class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
@@ -597,7 +615,10 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
                                    'dp/dt = s*p*(1 - h*p / n)']))):
             translator = ODETranslator.from_ode_system(system)
             graph = symbol_graph(translator, system)
-            reduced = translator.translate_general(system)
+            # The figure shows every column, including the ones a reduction normalises
+            # away, so the reduction that keeps them all is the oracle that can speak
+            # about every node.  A default reduction has nothing to say about `x0`.
+            reduced = translator.translate_general(system, normalise_parameters=False)
             for _, data in graph.nodes(data=True):
                 if not data['auxiliary']:
                     continue

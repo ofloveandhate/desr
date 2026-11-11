@@ -681,7 +681,10 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # sorts its own auxiliaries into parameters and dependents on exactly this test.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
         translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate(system)
+        # Normalisation off, so that every auxiliary is still a symbol to sort.  With it
+        # on, the ones that do not evolve are exactly the ones normalised away, and the
+        # claim being made here would have nothing left to be made about.
+        reduced = translator.translate_general(system, normalise_parameters=False)
         for name, monomial in zip(reduced.auxiliary_names,
                                   translator.auxiliary_monomials()):
             with self.subTest(auxiliary=str(name)):
@@ -694,7 +697,9 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # Both sides of the partition are occupied by auxiliaries at once, which is the
         # whole claim that the two questions are independent.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        # Normalisation off, for the reason the previous test gives.
+        reduced = ODETranslator.from_ode_system(system).translate_general(
+            system, normalise_parameters=False)
         auxiliaries = set(reduced.auxiliary_names)
         self.assertTrue(auxiliaries & set(reduced.parameters))
         self.assertTrue(auxiliaries & set(reduced.dependents))

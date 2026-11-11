@@ -160,10 +160,10 @@ So the table has an occupant where Michaelis-Menten had a hole:
      - *empty*
      - *empty*
 
-and the reduced system sorts its own auxiliaries the same way, three into the parameters
-and one into the dependents:
+and a reduction told to keep every auxiliary sorts them the same way, three into the
+parameters and one into the dependents:
 
-    >>> reduced = transl.translate(enzyme)
+    >>> reduced = transl.translate_general(enzyme, normalise_parameters=False)
     >>> reduced.auxiliary_names
     (x0, x1, x2, x3)
     >>> reduced.parameters
@@ -178,6 +178,36 @@ and one into the dependents:
 
 The independent variable's row is empty on both sides here because this scheme keeps the
 system's own :math:`t` rather than making a new one.
+
+
+Which row an auxiliary is in decides what becomes of it
+----------------------------------------------------------
+
+The table is not only bookkeeping.  The three auxiliaries in the **parameter** row are
+constant, so a reduction can set each to 1 and be done with it; :math:`x_3` is in the
+dependent row, moves, and cannot be.  That is what a reduction does by default, so the one
+above had to be asked not to:
+
+    >>> reduced = transl.translate(enzyme)
+    >>> reduced.auxiliary_names
+    (x3,)
+    >>> reduced.normalisations
+    {k_0_1: 1, k_2_3: 1, k_4_5: 1}
+
+**So an auxiliary a reduced system still carries is always one that moves**, and the
+parameter row of the table is always empty in a default reduction -- not because such
+auxiliaries do not arise, but because they are exactly the ones that are normalised away.
+Both kinds exist; only one is kept.  To see the other, ask as above.
+
+What that buys is a reduced system whose parameters its equations use.  Compare
+:math:`x_3`'s equation with the one above: every :math:`1/t` has gone, because normalising
+:math:`k_{23}` makes the invariant :math:`y_0 = k_{23} t` into :math:`t` itself, which the
+reduced system already carries.
+
+    >>> reduced.derivative_dict[sympy.Symbol('x3')]
+    -x3*y1 + x3*y2*y4
+    >>> reduced.parameters
+    ()
 
 
 Constants or quadratures

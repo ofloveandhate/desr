@@ -798,11 +798,16 @@ class ODETranslator(object):
         A name for every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult`,
         in the same order as :meth:`column_monomials`.
 
-        The auxiliary columns are named from the naming scheme's ``auxiliaries`` pattern
-        even under the parameter scheme, which keeps none of them: the *columns* exist in
-        the multiplier whether or not the reduction retains them, and naming them is what
-        lets a column operation refer to one.  :meth:`auxiliary_names` is the other
-        question -- what the *reduced system* calls them -- and is empty there.
+        **Every** column is named, whatever the reduction does with it.  The auxiliary
+        columns are named from the naming scheme's ``auxiliaries`` pattern even under the
+        parameter scheme, which keeps none of them, and an invariant that a reduction
+        identifies with the independent variable is named here all the same: the *columns*
+        exist in the multiplier whether or not the reduction retains them, and naming them
+        is what lets a column operation refer to one.
+
+        :meth:`auxiliary_names` and :meth:`invariant_names` are the other question -- what
+        the *reduced system* calls them -- and are shorter wherever a reduction keeps
+        fewer symbols than the multiplier has columns.
 
         Args:
             system (ODESystem): The system being reduced.
@@ -824,7 +829,47 @@ class ODETranslator(object):
             else GENERAL_SCHEME_NAMES)
         auxiliaries = _new_symbols(naming['auxiliaries'], self.herm_mult_i.shape[1],
                                    self._new_indices_start_at)
-        return tuple(auxiliaries) + self.invariant_names(system, scheme)
+        return tuple(auxiliaries) + self._invariant_names_for(
+            system, scheme, normalise_parameters=False, identify_indep_var=False)
+
+    def column_kinds(self, system=None, scheme=None):
+        '''
+        What kind of thing every column is, in the same order as :meth:`column_monomials`.
+
+        The third of the ``column_*`` family, and like the others it covers **every**
+        column whatever the reduction does with it -- a normalised auxiliary and an
+        invariant identified with the independent variable are both still columns.
+        :meth:`symbol_kinds` is the other question, keyed by the symbols a reduction kept,
+        and is shorter wherever it kept fewer.
+
+        An auxiliary column is reported as ``'auxiliary'``, as :meth:`symbol_kinds` does,
+        and for the same reason: which block of the multiplier a column came from is a fact
+        about the scaling.  Whether that auxiliary is a parameter or a dependent is the
+        orthogonal question, answered by whether its monomial moves.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`named_symbols`.
+
+        Returns:
+            tuple of str
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.column_names(system)
+        (x0, x1, kappa0, kappa1, tau, nu0, nu1)
+        >>> translator.column_kinds(system)
+        ('auxiliary', 'auxiliary', 'parameter', 'parameter', 'independent', 'dependent', 'dependent')
+        '''
+        names = self.column_names(system, scheme)
+        roles = self._symbol_kinds_for(system, scheme, include_aux_vars=True,
+                                       normalise_parameters=False,
+                                       identify_indep_var=False)
+        return tuple('auxiliary' if column < self.r else roles[name]
+                     for column, name in enumerate(names))
 
     def column_of(self, monomial_or_name, system=None, scheme=None):
         '''

@@ -135,10 +135,10 @@ def _reduced_kinds(translator, system, monomials):
     so itself, listing the enzyme chain's ``x0``, ``x1`` and ``x2`` among its parameters --
     so the two are carried separately here and :func:`_auxiliary_kind` decides the second.
     '''
-    roles = translator.symbol_kinds(system)
+    roles = translator.column_kinds(system)
     return [_auxiliary_kind(monomials[column], system) if column < translator.r
-            else roles[name]
-            for column, name in enumerate(translator.column_names(system))]
+            else role
+            for column, role in enumerate(roles)]
 
 
 def _propagated_values(monomials, names, values):
@@ -324,25 +324,21 @@ def symbol_graph(translator, system, direction=FORWARD):
     original_values = dict(system.parameter_values)
     reduced_values = _propagated_values(monomials, names, original_values)
 
-    # Whether the reduction sets its auxiliaries to 1 and discards them, which is the
-    # parameter scheme, or keeps them as variables, which is the other two.  Derived rather
-    # than assumed: the auxiliary *columns* exist in the multiplier either way, and only
-    # the scheme says what becomes of them.
-    normalises_auxiliaries = translator.scheme(system) == ReductionScheme.PARAMETER
+    # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
+    # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is
+    # a monomial in the original parameters alone, because only then is it constant, and a
+    # reduction can have some such auxiliaries and some that move.  The parameter scheme is
+    # the case where every one of them is, which is why asking per column covers it too
+    # without a special case.
+    normalised_monomials = set(translator.parameter_auxiliaries(system))
 
-    # Which of the caller's own symbols the normalisation spends.  Asked of
-    # `translate_parameter_substitutions`, which is what actually rewrites the system, so
-    # the figure cannot disagree with the reduction about where the 1s land.
+    # Which of the caller's own symbols that spends.  Asked of `normalisations`, which is
+    # what the reduction records as having done, so the figure cannot disagree with it
+    # about where the 1s land.
     #
-    # They are `r` of them, and they are the symbols a reverse translation recovers from
-    # the auxiliaries alone: setting the auxiliaries to 1 leaves those as empty products.
-    # Equivalently, the reduction adopts them as its units -- `s_0 |-> 1` is "measure
+    # The reduction adopts those symbols as its units -- `s_0 |-> 1` is "measure
     # concentration in units of s_0", which is why `u = s/s_0` has no `s_0` left in it.
-    sent_to_one = set()
-    if normalises_auxiliaries:
-        sent_to_one = {symbol for symbol, replacement
-                       in translator.translate_parameter_substitutions(system).items()
-                       if replacement == sympy.Integer(1)}
+    sent_to_one = set(translator.normalisations(system))
 
     # Note that this, `column_names` and `reduced_symbols_that_must_not_be_zero` are all
     # asked afresh, and none of them is told a scheme.  See the class docstring's note on
@@ -376,7 +372,7 @@ def symbol_graph(translator, system, direction=FORWARD):
 
     for index, symbol in enumerate(names):
         auxiliary = index < translator.r
-        normalised = normalises_auxiliaries and auxiliary
+        normalised = auxiliary and monomials[index] in normalised_monomials
         attributes = {
             'layer': REDUCED,
             'bipartite': 1,
