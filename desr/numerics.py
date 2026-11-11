@@ -166,6 +166,8 @@ class NumericTranslation(object):
         self.translator = translator
         self.reduced = translator.translate(system) if reduced is None else reduced
 
+        self._refuse_unfamiliar_reduction()
+
         # `translate` prefers the parameter scheme, but a caller may have asked for another
         # one explicitly.  A reduced system *records* which reduction produced it, so take
         # its word; only a system that carries no record has to be matched by trying the
@@ -181,10 +183,7 @@ class NumericTranslation(object):
                 self.scheme = candidate
                 break
         if layout is None:
-            raise ValueError(
-                'Reduced system {} does not match any reduction of {} by this translator.  '
-                'Check that `reduced` came from this system and translator.'.format(
-                    tuple(self.reduced.symbols), tuple(system.symbols)))
+            raise ValueError(self._mismatch_message())
 
         (self._acted, source, self._auxiliaries, self._invariants,
          self._shares_indep_var) = layout
@@ -192,6 +191,50 @@ class NumericTranslation(object):
         self._herm_mult_n = source.herm_mult_n
         self._inv_herm_mult = source.inv_herm_mult
         self._growth_rates = None
+
+    def _refuse_unfamiliar_reduction(self):
+        '''
+        Refuse a reduced system that was not made from `system`.
+
+        A reduced system records the system it came from, so this is answerable rather than
+        assumed.  Without the check the symbols still line up by count often enough to go
+        on and produce numbers, and they would be numbers for a different model.
+        '''
+        origin = self.reduced.original_system
+        if origin is None or origin is self.system:
+            return
+        if tuple(origin.symbols) == tuple(self.system.symbols):
+            return
+        raise ValueError(
+            'This reduced system was made from the system with symbols {}, and the system '
+            'given here has {}.  The multiplier is indexed by position, so translating '
+            'between them would pair each column with a different symbol.  Pass the system '
+            'this reduction was made from -- it is on the reduced system as '
+            '`original_system`.'.format(', '.join(map(str, origin.symbols)),
+                                        ', '.join(map(str, self.system.symbols))))
+
+    def _mismatch_message(self):
+        '''
+        Say *why* no layout fitted, distinguishing the two causes.
+
+        They want different remedies, and the one that is easy to miss is the second: a
+        translator is a machine, and :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns`
+        and its siblings change which invariants it produces.  A translator adjusted after
+        it made this reduced system no longer describes it, and blaming the caller for
+        passing the wrong `reduced` sends them looking in the wrong place.
+        '''
+        general = ('Reduced system {} does not match any reduction of {} by this '
+                   'translator.'.format(tuple(self.reduced.symbols),
+                                        tuple(self.system.symbols)))
+        if self.reduced.named_symbols is None:
+            return (general + '  Check that `reduced` came from this system and '
+                    'translator.')
+        return (general + '  Its symbols stand for monomials this translator does not '
+                'produce, so either `reduced` came from a different translator, or this '
+                'translator has been adjusted since it made `reduced` -- a column '
+                'operation changes which invariants it produces, and the reduced system '
+                'it made earlier does not change with it.  Translate again to get a '
+                'reduced system for the multiplier as it stands now.')
 
     def _applicable_schemes(self):
         '''The schemes this system admits, in the order `translate` prefers them.'''

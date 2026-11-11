@@ -403,11 +403,16 @@ class ODETranslator(object):
         ...
     ValueError: The Hermite multiplier has determinant -2, so it is not unimodular.  Some invariants are then not products of integer powers of its invariant columns, and reversing the reduction would need roots of degree 2.  Choose invariants from which every invariant can be built with integer powers; see extend_from_invariants.
     '''
-    def __init__(self, scaling_matrix, symbols_domain=None, hermite_multiplier=None, naming_scheme=None, new_indices_start_at=0):
+    def __init__(self, scaling_matrix, symbols_domain=None, hermite_multiplier=None, naming_scheme=None, new_indices_start_at=0, system=None):
         scaling_matrix = scaling_matrix.copy()
 
         self._scaling_matrix = scaling_matrix
         self._symbols_domain = symbols_domain
+        # A copy, because the scaling matrix and the multiplier describe the system as it
+        # was at this moment.  Editing a system after building its translator and expecting
+        # the translator to follow is a way to get a confidently wrong answer -- reordering
+        # alone re-points every column.  Build the translator last, or build a new one.
+        self._system = None if system is None else system.copy()
         self._new_indices_start_at = new_indices_start_at
         self.set_naming_scheme(naming_scheme)
 
@@ -714,6 +719,36 @@ class ODETranslator(object):
         return normalised, identified
 
     @property
+    def system(self):
+        '''
+        The system this translator was built for, or :const:`None` for one built from a
+        bare matrix.
+
+        Every method that reduces or reports on a system takes it as an optional
+        argument and falls back to this, so a translator made with
+        :meth:`from_ode_system` does not have to be handed its own system again.
+
+        :rtype: ODESystem or None
+        '''
+        return self._system
+
+    def _system_or(self, system):
+        '''
+        `system`, or the one this translator was built for when it is left out.
+
+        A translator built from a bare matrix has none to fall back to, and says so
+        rather than failing later on a shape mismatch.
+        '''
+        if system is not None:
+            return system
+        if self._system is None:
+            raise ValueError(
+                'This translator was built from a scaling matrix rather than from a '
+                'system, so it has no system of its own to use.  Pass the system to '
+                'reduce, or build the translator with from_ode_system.')
+        return self._system
+
+    @property
     def symbols_domain(self):
         '''
         Returns:
@@ -731,7 +766,9 @@ class ODETranslator(object):
 
         :rtype: ODETranslator
         '''
-        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(), symbols_domain=ode_system.symbols, naming_scheme=naming_scheme, new_indices_start_at = new_indices_start_at)
+        return cls(scaling_matrix=ode_system.maximal_scaling_matrix(),
+                   symbols_domain=ode_system.symbols, naming_scheme=naming_scheme,
+                   new_indices_start_at=new_indices_start_at, system=ode_system)
 
     def column_monomials(self):
         '''
@@ -1190,7 +1227,7 @@ class ODETranslator(object):
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
 
-    def translate(self, system, include_aux_vars=True,
+    def translate(self, system=None, include_aux_vars=True,
                   normalise_parameters=True, identify_indep_var=True):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
@@ -1216,6 +1253,7 @@ class ODETranslator(object):
 
         :rtype: ODESystem
         '''
+        system = self._system_or(system)
         scheme = self.scheme(system)
 
         if scheme == ReductionScheme.PARAMETER:
@@ -1231,7 +1269,7 @@ class ODETranslator(object):
                                       normalise_parameters=normalise_parameters,
                                       identify_indep_var=identify_indep_var)
 
-    def scheme(self, system):
+    def scheme(self, system=None):
         '''
         Which reduction :meth:`translate` would use for `system`.
 
@@ -1265,9 +1303,10 @@ class ODETranslator(object):
 
         >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        >>> ODETranslator.from_ode_system(hl66).scheme(hl66)
+        >>> ODETranslator.from_ode_system(hl66).scheme()
         ReductionScheme.GENERAL
         '''
+        system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
 
         if self._is_translate_parameter_compatible(system=system):
@@ -1405,8 +1444,9 @@ class ODETranslator(object):
 
 
 
-    def translate_parameter(self, system):
+    def translate_parameter(self, system=None):
         ''' Translate according to parameter scheme '''
+        system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
 
@@ -1449,7 +1489,7 @@ class ODETranslator(object):
                                        system, ReductionScheme.PARAMETER),
                                    symbol_kinds=self._symbol_kinds_for(
                                        system, ReductionScheme.PARAMETER),
-                                   original_system=system)
+                                   original_system=system.copy())
         reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
@@ -1530,7 +1570,7 @@ class ODETranslator(object):
 
 
 
-    def translate_dep_var(self, system, normalise_parameters=True,
+    def translate_dep_var(self, system=None, normalise_parameters=True,
                           identify_indep_var=True):
         '''
         Given a system of ODEs, translate the system into a simplified version. Assume we are only working on
@@ -1550,11 +1590,12 @@ class ODETranslator(object):
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.translate_dep_var(system=system)
+        >>> translator.translate_dep_var()
         dt/dt = 1
         dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
         '''
+        system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
@@ -1639,7 +1680,7 @@ class ODETranslator(object):
                                 system, ReductionScheme.DEP_VAR,
                                 normalise_parameters=normalise_parameters,
                                 identify_indep_var=identify_indep_var),
-                            original_system=system)
+                            original_system=system.copy())
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
@@ -1647,7 +1688,7 @@ class ODETranslator(object):
         self._refuse_name_clashes(system, reduced)
         return reduced
 
-    def translate_general(self, system, include_aux_vars=True,
+    def translate_general(self, system=None, include_aux_vars=True,
                           normalise_parameters=True, identify_indep_var=True):
         '''
         The most general reduction scheme.
@@ -1739,6 +1780,7 @@ class ODETranslator(object):
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
         '''
+        system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
@@ -1850,7 +1892,7 @@ class ODETranslator(object):
                             symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.GENERAL, include_aux_vars,
                                 normalise_parameters, identify_indep_var),
-                            original_system=system)
+                            original_system=system.copy())
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,

@@ -1798,3 +1798,71 @@ class TestMurraySixThirteenAsThePageDoesIt(TestCase):
         self.assertEqual(sympy.simplify(derivatives[u] - (-u + (u + K - L) * v)), 0)
         self.assertEqual(
             sympy.simplify(epsilon * derivatives[v] - (u - (u + K) * v)), 0)
+
+
+class TestTheTranslatorRemembersItsSystem(TestCase):
+    '''
+    A translator built from a system holds that system, so reducing it does not mean
+    handing the same system back.  The key is turned once.
+    '''
+
+    EQUATIONS = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
+
+    def system(self):
+        return ODESystem.from_equations(self.EQUATIONS)
+
+    def test_translating_needs_no_argument(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.translate(system), translator.translate())
+
+    def test_every_entry_point_takes_the_remembered_system(self):
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(translator.scheme(system), translator.scheme())
+        self.assertEqual(translator.translate_parameter(system),
+                         translator.translate_parameter())
+        self.assertEqual(translator.translate_general(system),
+                         translator.translate_general())
+
+    def test_the_remembered_system_is_a_copy(self):
+        '''
+        The scaling matrix and the multiplier describe the system as it was when the
+        translator was built, so a later edit is not one the translator could honour.
+        Holding a copy makes that plain instead of letting half an edit through.
+        '''
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertIsNot(system, translator.system)
+        self.assertEqual(tuple(system.symbols), tuple(translator.system.symbols))
+
+        system.update_parameter_values({'K': 4})
+        self.assertEqual({}, translator.system.parameter_values)
+
+    def test_a_translator_with_no_system_says_so(self):
+        '''
+        Built from a bare matrix there is nothing to fall back to, and the message names
+        the two ways out rather than failing later on a shape mismatch.
+        '''
+        translator = ODETranslator(sympy.Matrix([[1, 0, -1]]))
+        with self.assertRaises(ValueError) as caught:
+            translator.translate()
+        self.assertIn('from_ode_system', str(caught.exception))
+
+    def test_a_different_system_is_still_refused(self):
+        ''' Remembering one system does not mean accepting another. '''
+        translator = ODETranslator.from_ode_system(self.system())
+        other = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
+                                          'dz2/dt = z2*(1/t - z1*z2)'])
+        with self.assertRaises(ValueError):
+            translator.translate(other)
+
+    def test_a_reduction_carries_the_system_it_reduced(self):
+        system = self.system()
+        reduced = ODETranslator.from_ode_system(system).translate()
+        self.assertIsNot(system, reduced.original_system)
+        self.assertEqual(tuple(system.symbols),
+                         tuple(reduced.original_system.symbols))
+        # and the monomials it records are written in those symbols
+        named = set().union(*(m.free_symbols for m in reduced.named_symbols.values()))
+        self.assertTrue(named <= set(reduced.original_system.symbols))

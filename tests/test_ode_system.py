@@ -805,6 +805,81 @@ class TestParameterValuesAgainstConstraints(TestCase):
         self.assertIs(numerics.CONSISTENCY_TOLERANCE, CONSISTENCY_TOLERANCE)
 
 
+class TestCopyCarriesEverything(TestCase):
+    '''
+    `copy` is on the critical path of every reduction: a translator stores a copy of the
+    system it was built for, and a reduced system stores a copy of the system it came
+    from.  A field `copy` forgets is a field that silently empties, everywhere.
+
+    So these compare the whole of `__dict__` rather than a list of fields anyone has to
+    remember to extend.  A field added to `ODESystem` later and left out of `copy` fails
+    here without being named.
+    '''
+
+    def fully_populated(self):
+        '''An original system with every optional piece of state set.'''
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y',
+                                           'dy/dt = c_1*(1-x)*(1-y)'])
+        system.update_initial_conditions({'x': 'x_0'})
+        system.add_constraint('c_0', 'c_1*2')
+        system.update_parameter_values({'c_1': 3})
+        system.require_same_unit({sympy.Symbol('x'): sympy.Symbol('y')})
+        return system
+
+    def a_reduction(self):
+        '''A reduced system, which carries the provenance an original one does not.'''
+        system = ODESystem.from_equations(
+            ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
+        return ODETranslator.from_ode_system(system).translate_general(
+            system, normalise_parameters=False)
+
+    def assert_copy_is_complete(self, system):
+        duplicate = system.copy()
+        self.assertEqual(sorted(vars(system)), sorted(vars(duplicate)),
+                         'copy produced an object with different state')
+        for field in sorted(vars(system)):
+            with self.subTest(field=field):
+                self.assertEqual(vars(system)[field], vars(duplicate)[field])
+
+    def test_an_original_system_copies_completely(self):
+        self.assert_copy_is_complete(self.fully_populated())
+
+    def test_a_reduced_system_copies_completely(self):
+        self.assert_copy_is_complete(self.a_reduction())
+
+    def test_the_provenance_a_reduction_carries_is_not_empty(self):
+        '''
+        Guards the test above: comparing two empty records passes while saying nothing, and
+        prey-predator's general reduction keeps no auxiliaries once they are normalised,
+        which is how a check like that goes quietly hollow.
+        '''
+        reduced = self.a_reduction()
+        self.assertTrue(reduced.named_symbols)
+        self.assertTrue(reduced.symbol_kinds)
+        self.assertTrue(reduced.auxiliary_names)
+        self.assertIsNotNone(reduced.original_system)
+        self.assertIsNotNone(reduced.scheme)
+
+    def test_a_copy_does_not_share_mutable_state(self):
+        ''' A copy that shares a dict is not a copy; editing one would edit the other. '''
+        system = self.fully_populated()
+        duplicate = system.copy()
+        duplicate.update_parameter_values({'c_0': 6})
+        self.assertNotIn(sympy.Symbol('c_0'), system.parameter_values)
+
+    def test_editing_the_original_does_not_reach_a_translator(self):
+        '''
+        A translator stores a copy for this reason: the scaling matrix and multiplier
+        describe the system as it was, so a later edit is not one the translator could
+        honour even if it saw it.
+        '''
+        system = ODESystem.from_equations(['dx/dt = c_0*x'])
+        translator = ODETranslator.from_ode_system(system)
+        system.update_parameter_values({'c_0': 5})
+        self.assertEqual({}, translator.system.parameter_values)
+        self.assertEqual(sympy.Integer(5), system.parameter_values[sympy.Symbol('c_0')])
+
+
 class TestParameterValuesSurviveTheSystem(TestCase):
     ''' Values are part of the system, so they travel with it. '''
 
