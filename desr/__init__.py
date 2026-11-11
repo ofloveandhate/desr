@@ -21,7 +21,7 @@ integer matrix algorithms, :mod:`desr.sympy_helper` for the parsing convention,
 #: the package, and `docs/source/conf.py` reads it too, so a bump happens once and cannot
 #: leave the three of them disagreeing -- which is what had happened: `setup.py` said
 #: 1.1.0 while the docs said version 1, release 0.
-__version__ = '2.0.3'
+__version__ = '3.0.0'
 
 from . import ode_system
 from . import matrix_normal_forms
