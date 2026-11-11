@@ -248,8 +248,8 @@ class TestMonomialsVersusNames(TestCase):
         # this system's auxiliaries are monomials in the parameters alone, and a
         # reduction that normalises them keeps none.
         monomials = list(self.translator.auxiliary_monomials())
-        names = self.translator.auxiliary_names(self.system, scheme='general',
-                                                normalise_parameters=False)
+        names = self.translator.translate_general(
+            self.system, normalise_parameters=False).auxiliary_names
         self.assertEqual(len(monomials), len(names))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, names)))
 

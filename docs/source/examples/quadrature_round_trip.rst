@@ -123,7 +123,17 @@ and it mentions :math:`y_0`, :math:`y_1` and :math:`t` -- but no :math:`x`.
     >>> numeric_translation.auxiliaries_are_constant
     False
 
-Because such auxiliaries are not constant, they will have to be integrated.  (If they were all constant, then the parameter reduction method would have been used.)
+Because such auxiliaries are not constant, they will have to be integrated.
+
+An auxiliary that *is* constant -- a monomial in the original parameters alone -- never
+reaches this stage.  A reduction normalises those to 1, which is a choice of units rather
+than an assumption, so **every auxiliary a reduced system still carries is one that moves**
+and so one that has to be integrated.  A reduction whose auxiliaries are *all* constant
+therefore carries none at all, which is the parameter reduction scheme; this system is the
+other extreme, with one auxiliary and nothing to normalise.  In between, a reduction can
+normalise some and integrate the rest -- see
+:meth:`~desr.ode_translation.ODETranslator.parameter_auxiliaries` and
+:attr:`~desr.ode_system.ODESystem.normalisations`.
 
 
 Exact solution

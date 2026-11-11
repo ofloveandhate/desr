@@ -232,6 +232,9 @@ class ODESystem(object):
             symbols, so without it the record names symbols belonging to nobody, and two
             different originals using the same letters are indistinguishable.  It is also
             what tells a reduction this library produced from one assembled by hand.
+        symbol_kinds (dict, optional): For a reduced system, what kind of thing each of
+            its symbols is.  Recorded for the same reason as `named_symbols`, and keyed
+            alike so the two join.
         named_symbols (dict, optional): For a reduced system, what each of its symbols
             stands for: a map to the Laurent monomial in the *original* system's symbols
             that it denotes.  Stored rather than asked of a translator afterwards, because
@@ -249,7 +252,7 @@ class ODESystem(object):
             :meth:`~desr.ode_translation.ODETranslator.normalisations`.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, original_system=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -268,6 +271,7 @@ class ODESystem(object):
         self._auxiliary_names = tuple(auxiliary_names or ())
         self._normalisations = dict(normalisations or {})
         self._named_symbols = None if named_symbols is None else dict(named_symbols)
+        self._symbol_kinds = None if symbol_kinds is None else dict(symbol_kinds)
         self._original_system = original_system
 
         # sanity checks
@@ -345,6 +349,7 @@ class ODESystem(object):
                            auxiliary_names=self._auxiliary_names,
                            normalisations=self._normalisations,
                            named_symbols=self._named_symbols,
+                           symbol_kinds=self._symbol_kinds,
                            original_system=self._original_system)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
@@ -399,8 +404,16 @@ class ODESystem(object):
         # The record is keyed by this system's own symbols, so renaming one of them
         # renames a key.  Left alone, `named_symbols` would go on describing a symbol the
         # system no longer has, and say nothing about the one it does.
-        if self._named_symbols is not None and self._indep_var in self._named_symbols:
-            self._named_symbols[new_indep] = self._named_symbols.pop(self._indep_var)
+        # Rebuilt rather than popped and re-inserted, which would move the independent
+        # variable to the end of the mapping and silently reorder a record whose order is
+        # the multiplier's column order.
+        old_indep = self._indep_var
+        if self._named_symbols is not None:
+            self._named_symbols = {(new_indep if name == old_indep else name): monomial
+                                   for name, monomial in self._named_symbols.items()}
+        if self._symbol_kinds is not None:
+            self._symbol_kinds = {(new_indep if name == old_indep else name): kind
+                                  for name, kind in self._symbol_kinds.items()}
 
         self._indep_var = new_indep
 
@@ -627,11 +640,16 @@ class ODESystem(object):
         normalises its auxiliaries to 1 and discards them.
 
         **Orthogonal to the classification, not a fourth kind.**  An auxiliary is a
-        parameter or a dependent like any other symbol -- in prey-predator's general
-        reduction the auxiliaries ``h/k``, ``K`` and ``K/h`` are monomials in the original
-        parameters and so are parameters, while Hubert & Labahn 6.6's auxiliary
-        :math:`t z_1^2` involves a dependent and evolves.  Auxiliary-ness says you may
-        choose the value; the kind says whether it varies.
+        parameter or a dependent like any other symbol.  Auxiliary-ness says you may choose
+        the value; the kind says whether it varies.
+
+        **A surviving auxiliary is one that moves.**  An auxiliary that is a monomial in
+        the original parameters alone cannot vary, so a reduction normalises it to 1 and it
+        is not among these -- :attr:`normalisations` records it instead.  Prey-predator's
+        general reduction keeps none of its three for exactly that reason, while Hubert &
+        Labahn 6.6's auxiliary :math:`t z_1^2` involves a dependent, evolves, and is kept.
+        So both kinds of auxiliary exist, but only one kind is ever listed here, unless the
+        reduction was asked not to normalise.
 
         Returns:
             tuple: The auxiliaries, in symbol order.
@@ -669,6 +687,27 @@ class ODESystem(object):
             ODESystem or None
         '''
         return self._original_system
+
+    @property
+    def symbol_kinds(self):
+        '''
+        What kind of thing each symbol of this reduced system is.
+
+        A dict over every symbol, mapping it to ``'independent'``, ``'dependent'``,
+        ``'parameter'`` or ``'auxiliary'``, keyed the same way as :attr:`named_symbols` so
+        that the two join: one says what a symbol *means*, the other what it *is*.
+        :const:`None` when this is not a reduction, for the reason :attr:`named_symbols`
+        gives.
+
+        Recorded by the translation, not asked of a translator afterwards, and not
+        recomputed from options a caller has to restate.  Two reports of one reduction that
+        are derived separately can disagree, and when they disagree about which symbol goes
+        with which column the result is a plausible wrong answer rather than an error.
+
+        Returns:
+            dict or None: ``{symbol: kind}``, in this system's variable order.
+        '''
+        return None if self._symbol_kinds is None else dict(self._symbol_kinds)
 
     @property
     def named_symbols(self):
@@ -1654,6 +1693,10 @@ class ODESystem(object):
                                 named_symbols=None if self._named_symbols is None else {
                                     to_sub.get(name, name): monomial
                                     for name, monomial in self._named_symbols.items()
+                                    if to_sub.get(name, name) in new_vars},
+                                symbol_kinds=None if self._symbol_kinds is None else {
+                                    to_sub.get(name, name): kind
+                                    for name, kind in self._symbol_kinds.items()
                                     if to_sub.get(name, name) in new_vars},
                                 original_system=self._original_system)
 

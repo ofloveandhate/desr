@@ -1444,7 +1444,9 @@ class ODETranslator(object):
                                    is_reduced=True,
                                    scheme=ReductionScheme.PARAMETER,
                                    num_scaling_symmetries=self.r,
-                                   named_symbols=self.named_symbols(
+                                   named_symbols=self._named_symbols_for(
+                                       system, ReductionScheme.PARAMETER),
+                                   symbol_kinds=self._symbol_kinds_for(
                                        system, ReductionScheme.PARAMETER),
                                    original_system=system)
         reduced_system.default_order_variables()
@@ -1513,7 +1515,7 @@ class ODETranslator(object):
         # paired `x1` with a monomial from a different reduction and then could not find it.
         recorded = reduced_system.named_symbols
         if recorded is None:
-            recorded = self.named_symbols(system, scheme, include_aux_vars)
+            recorded = self._named_symbols_for(system, scheme, include_aux_vars)
 
         parameters = set(reduced_system.parameters)
         propagated = {}
@@ -1628,7 +1630,11 @@ class ODETranslator(object):
                             num_scaling_symmetries=self.r,
                             auxiliary_names=kept_auxiliaries,
                             normalisations=applied,
-                            named_symbols=self.named_symbols(
+                            named_symbols=self._named_symbols_for(
+                                system, ReductionScheme.DEP_VAR,
+                                normalise_parameters=normalise_parameters,
+                                identify_indep_var=identify_indep_var),
+                            symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.DEP_VAR,
                                 normalise_parameters=normalise_parameters,
                                 identify_indep_var=identify_indep_var),
@@ -1837,7 +1843,10 @@ class ODETranslator(object):
                             num_scaling_symmetries=self.r,
                             auxiliary_names=kept_auxiliaries,
                             normalisations=applied,
-                            named_symbols=self.named_symbols(
+                            named_symbols=self._named_symbols_for(
+                                system, ReductionScheme.GENERAL, include_aux_vars,
+                                normalise_parameters, identify_indep_var),
+                            symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.GENERAL, include_aux_vars,
                                 normalise_parameters, identify_indep_var),
                             original_system=system)
@@ -2637,8 +2646,25 @@ class ODETranslator(object):
         variables = self._validate_variables(variables, self.n, 'y', True)
         return scale_action(variables, self.herm_mult_n)
 
-    def invariant_names(self, system=None, scheme=None, normalise_parameters=True,
-                        identify_indep_var=True, include_aux_vars=True):
+    def invariant_names(self, system=None, scheme=None):
+        '''
+        The names the reduction gives the invariants it keeps.
+
+        Describes the reduction :meth:`translate` performs; see :meth:`auxiliary_names` on
+        why it takes no options.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.invariant_names(system)
+        (kappa0, kappa1, kappa2, tau, nu0, nu1)
+        >>> translator.invariant_names(system, scheme='general')
+        (y0, y1, y2, y4, y5)
+        '''
+        return self._invariant_names_for(system, scheme)
+
+    def _invariant_names_for(self, system=None, scheme=None, normalise_parameters=True,
+                             identify_indep_var=True, include_aux_vars=True):
         '''
         The names the reduction gives the invariants **it keeps**, in the column order of
         :meth:`invariant_monomials`.
@@ -2665,7 +2691,7 @@ class ODETranslator(object):
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.invariant_names(system)
+        >>> translator._invariant_names_for(system)
         (kappa0, kappa1, kappa2, tau, nu0, nu1)
         >>> translator.invariant_monomials()
         Matrix([[d/K, h*r/k, h*s/k, k*t/h, n/K, h*p/K]])
@@ -2673,9 +2699,10 @@ class ODETranslator(object):
         Under the general scheme `k*t/h` becomes `t`, so the fourth column is not given a
         name of its own:
 
-        >>> translator.invariant_names(system, scheme='general')
+        >>> translator._invariant_names_for(system, scheme='general')
         (y0, y1, y2, y4, y5)
-        >>> translator.invariant_names(system, scheme='general', identify_indep_var=False)
+        >>> translator._invariant_names_for(system, scheme='general',
+        ...                                 identify_indep_var=False)
         (y0, y1, y2, y3, y4, y5)
         '''
         if scheme is None:
@@ -2720,8 +2747,12 @@ class ODETranslator(object):
 
         Monomials for the same reason as :meth:`invariant_monomials`: each column of
         :math:`V_i` is an exponent vector.  These are the :math:`r` normalised directions --
-        the reduction is free to set each to any value, and the parameter scheme sets them
-        all to 1 and discards them.
+        the reduction is free to set each to any value.
+
+        All :math:`r` of them, whatever a reduction does with them: they are a property of
+        the multiplier rather than of a reduction that was run.  Which ones a reduction can
+        set to 1 is :meth:`parameter_auxiliaries`, and the parameter scheme is the case
+        where that is all of them.
 
         The companion is :meth:`auxiliary_names`.
 
@@ -2743,7 +2774,30 @@ class ODETranslator(object):
         variables = self._validate_variables(variables, self.n, 'x', True)
         return scale_action(variables, self.herm_mult_i)
 
-    def auxiliary_names(self, system=None, scheme=None, normalise_parameters=True):
+    def auxiliary_names(self, system=None, scheme=None):
+        '''
+        The names the reduction gives the auxiliaries it keeps.
+
+        Describes the reduction :meth:`translate` performs.  To describe one run with
+        other options, run it and ask the result -- see
+        :attr:`~desr.ode_system.ODESystem.auxiliary_names`.  Options belong to a reduction,
+        and a report that takes them is a second place for them to be stated and so a
+        second place for them to be stated differently.
+
+        Args: as :meth:`_auxiliary_names_for`, without the options.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.auxiliary_names(system, scheme='general')
+        ()
+        >>> translator.translate_general(
+        ...     system, normalise_parameters=False).auxiliary_names
+        (x0, x1, x2)
+        '''
+        return self._auxiliary_names_for(system, scheme)
+
+    def _auxiliary_names_for(self, system=None, scheme=None, normalise_parameters=True):
         '''
         The names the reduction gives the auxiliaries **it keeps**, in the column order of
         :meth:`auxiliary_monomials`.
@@ -2771,11 +2825,12 @@ class ODETranslator(object):
         All three of prey-predator's auxiliaries are monomials in the parameters, so a
         general reduction of it keeps none:
 
-        >>> translator.auxiliary_names(system, scheme='general')
+        >>> translator._auxiliary_names_for(system, scheme='general')
         ()
-        >>> translator.auxiliary_names(system, scheme='general', normalise_parameters=False)
+        >>> translator._auxiliary_names_for(system, scheme='general',
+        ...                                 normalise_parameters=False)
         (x0, x1, x2)
-        >>> translator.auxiliary_names(system, scheme='parameter')
+        >>> translator._auxiliary_names_for(system, scheme='parameter')
         ()
 
         The enzyme chain keeps the one that moves, and the name says which column it was:
@@ -2783,7 +2838,7 @@ class ODETranslator(object):
         >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
         >>> enzyme = ChemicalReactionNetwork.from_diagram(
         ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
-        >>> ODETranslator.from_ode_system(enzyme).auxiliary_names(enzyme)
+        >>> ODETranslator.from_ode_system(enzyme)._auxiliary_names_for(enzyme)
         (x3,)
         '''
         if scheme is None:
@@ -2951,8 +3006,27 @@ class ODETranslator(object):
         symbols = self._validate_variables(tuple(system.symbols), self.n, 'y', True)
         return _pinned_by(self.inv_herm_mult, symbols, normalised)
 
-    def symbol_kinds(self, system, scheme=None, include_aux_vars=True,
-                     normalise_parameters=True, identify_indep_var=True):
+    def symbol_kinds(self, system, scheme=None, include_aux_vars=True):
+        '''
+        What kind of symbol each variable of the reduction :meth:`translate` performs is.
+
+        Takes no normalisation options, for the reason :meth:`named_symbols` gives.  A
+        reduction run with other options is asked directly:
+        :attr:`~desr.ode_system.ODESystem.symbol_kinds`.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.symbol_kinds(system, scheme='general')
+        {t: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
+        >>> translator.translate_general(
+        ...     system, normalise_parameters=False).symbol_kinds
+        {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
+        '''
+        return self._symbol_kinds_for(system, scheme, include_aux_vars)
+
+    def _symbol_kinds_for(self, system, scheme=None, include_aux_vars=True,
+                          normalise_parameters=True, identify_indep_var=True):
         '''
         What kind of symbol each variable of the reduced system is.
 
@@ -2995,20 +3069,21 @@ class ODETranslator(object):
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.symbol_kinds(system)
+        >>> translator._symbol_kinds_for(system)
         {kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', tau: 'independent', nu0: 'dependent', nu1: 'dependent'}
 
         Under the general scheme `t` is kept as the clock.  Told to normalise nothing, the
         auxiliaries appear too:
 
-        >>> translator.symbol_kinds(system, scheme='general',
-        ...                         normalise_parameters=False, identify_indep_var=False)
+        >>> translator._symbol_kinds_for(system, scheme='general',
+        ...                              normalise_parameters=False,
+        ...                              identify_indep_var=False)
         {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
 
         By default all three are normalised, and `y3` -- the rescaled clock -- is
         identified with `t`, so neither is a symbol of the reduced system any more:
 
-        >>> translator.symbol_kinds(system, scheme='general')
+        >>> translator._symbol_kinds_for(system, scheme='general')
         {t: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
 
         Which is what the reduced system turns out to have:
@@ -3027,8 +3102,8 @@ class ODETranslator(object):
         >>> hl.indep_var_invariants(hl66)
         ()
         '''
-        names = list(self.named_symbols(system, scheme, include_aux_vars,
-                                        normalise_parameters, identify_indep_var))
+        names = list(self._named_symbols_for(system, scheme, include_aux_vars,
+                                             normalise_parameters, identify_indep_var))
         return dict(zip(names, self._kind_by_variable(
             system, scheme, include_aux_vars, normalise_parameters, identify_indep_var)))
 
@@ -3285,8 +3360,28 @@ class ODETranslator(object):
         return (list(scale_action(symbols, deflated[:, :self.r])),
                 list(scale_action(symbols, deflated[:, self.r:])))
 
-    def named_symbols(self, system, scheme=None, include_aux_vars=True,
-                      normalise_parameters=True, identify_indep_var=True):
+    def named_symbols(self, system, scheme=None, include_aux_vars=True):
+        '''
+        What each variable of the reduction :meth:`translate` performs stands for.
+
+        Takes no normalisation options: those belong to a reduction, and a report that
+        restates them is a second place for them to be said and so a second place for
+        them to be said differently.  To ask about a reduction run with other options,
+        run it and ask the result --
+        :attr:`~desr.ode_system.ODESystem.named_symbols`.
+
+        >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.named_symbols(system)
+        {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
+        >>> translator.translate(system).named_symbols
+        {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
+        '''
+        return self._named_symbols_for(system, scheme, include_aux_vars)
+
+    def _named_symbols_for(self, system, scheme=None, include_aux_vars=True,
+                           normalise_parameters=True, identify_indep_var=True):
         '''
         What each variable of the reduced system stands for.
 
@@ -3314,7 +3409,7 @@ class ODETranslator(object):
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.named_symbols(system)
+        >>> translator._named_symbols_for(system)
         {kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, tau: k*t/h, nu0: n/K, nu1: h*p/K}
 
         So reading a reduced system needs no reconstruction of monomials:
@@ -3322,14 +3417,15 @@ class ODETranslator(object):
         >>> reduced = translator.translate(system)
         >>> reduced.parameters
         (kappa0, kappa1, kappa2)
-        >>> translator.named_symbols(system)[reduced.parameters[0]]
+        >>> translator._named_symbols_for(system)[reduced.parameters[0]]
         d/K
 
         Under the general scheme, told to normalise nothing, the auxiliaries are included
         and `t` maps to itself:
 
-        >>> translator.named_symbols(system, scheme='general',
-        ...                          normalise_parameters=False, identify_indep_var=False)
+        >>> translator._named_symbols_for(system, scheme='general',
+        ...                               normalise_parameters=False,
+        ...                               identify_indep_var=False)
         {t: t, x0: h/k, x1: K, x2: K/h, y0: d/K, y1: h*r/k, y2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
 
         By default `t` does **not** map to itself.  The clock invariant `k*t/h` has been
@@ -3337,7 +3433,7 @@ class ODETranslator(object):
         as the parameter scheme's `tau` is -- and saying `t: t` here would make the one
         symbol whose meaning changed the one this map got wrong:
 
-        >>> translator.named_symbols(system, scheme='general')
+        >>> translator._named_symbols_for(system, scheme='general')
         {t: k*t/h, y0: d/K, y1: h*r/k, y2: h*s/k, y4: n/K, y5: h*p/K}
         '''
         if scheme is None:
@@ -3351,7 +3447,7 @@ class ODETranslator(object):
         # Built from the per-block accessors rather than repeating their naming logic, so
         # that the pairing here cannot disagree with what invariant_names and
         # auxiliary_names say on their own.
-        invariant_names = list(self.invariant_names(
+        invariant_names = list(self._invariant_names_for(
             system, scheme, normalise_parameters, identify_indep_var, include_aux_vars))
         if scheme == ReductionScheme.DEP_VAR:
             # Written in the symbols other than the independent variable, and one shorter.
@@ -3369,7 +3465,7 @@ class ODETranslator(object):
             # These two schemes keep the original independent variable, then the
             # auxiliaries, then the invariants.
             if include_aux_vars:
-                auxiliary_names = list(self.auxiliary_names(
+                auxiliary_names = list(self._auxiliary_names_for(
                     system, scheme, normalise_parameters))
                 all_auxiliary_monomials = (dep_var_auxiliaries
                                            if dep_var_auxiliaries is not None

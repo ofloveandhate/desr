@@ -486,17 +486,20 @@ class TestInvariantClassification(TestCase):
         clock, = translator.indep_var_invariants(self.prey_predator)
         self.assertEqual(sympify_expression('k*t/h'), clock)
 
-        for scheme, options, expected in (
-                ('parameter', {}, 'independent'),
-                ('general', {'identify_indep_var': False}, 'dependent'),
-                ('general', {}, 'independent')):
-            with self.subTest(scheme=scheme, **options):
-                meanings = translator.named_symbols(self.prey_predator, scheme=scheme,
-                                                    **options)
-                kinds = translator.symbol_kinds(self.prey_predator, scheme=scheme,
-                                                **options)
-                name = next(n for n, monomial in meanings.items() if monomial == clock)
-                self.assertEqual(expected, kinds[name])
+        reductions = (
+            ('parameter', {}, 'independent'),
+            ('general, not identified', {'identify_indep_var': False}, 'dependent'),
+            ('general', {}, 'independent'))
+        for label, options, expected in reductions:
+            with self.subTest(reduction=label):
+                if label == 'parameter':
+                    reduced = translator.translate_parameter(self.prey_predator)
+                else:
+                    reduced = translator.translate_general(self.prey_predator,
+                                                           **options)
+                name = next(n for n, monomial in reduced.named_symbols.items()
+                            if monomial == clock)
+                self.assertEqual(expected, reduced.symbol_kinds[name])
 
     def test_the_general_schemes_extra_variable_is_the_retained_clock(self):
         '''
@@ -518,7 +521,7 @@ class TestInvariantClassification(TestCase):
             with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
                 n, r = len(system.symbols), translator.r
-                kinds = translator.symbol_kinds(system, scheme='general', **faithful)
+                kinds = translator.translate_general(system, **faithful).symbol_kinds
                 tally = {kind: list(kinds.values()).count(kind)
                          for kind in set(kinds.values())}
                 self.assertEqual(1, tally['independent'])
@@ -552,8 +555,8 @@ class TestInvariantClassification(TestCase):
 
     def test_auxiliaries_are_their_own_kind(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        kinds = translator.symbol_kinds(self.prey_predator, scheme='general',
-                                        normalise_parameters=False)
+        kinds = translator.translate_general(
+            self.prey_predator, normalise_parameters=False).symbol_kinds
         auxiliaries = [name for name, kind in kinds.items() if kind == 'auxiliary']
         self.assertEqual(translator.r, len(auxiliaries))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, auxiliaries)))
@@ -572,7 +575,7 @@ class TestInvariantClassification(TestCase):
         for system, surviving in ((self.prey_predator, ()), (self.hl66, ('x0',))):
             with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
-                kinds = translator.symbol_kinds(system, scheme='general')
+                kinds = translator.translate_general(system).symbol_kinds
                 auxiliaries = [name for name, kind in kinds.items()
                                if kind == 'auxiliary']
                 self.assertEqual(surviving, tuple(map(str, auxiliaries)))
@@ -608,9 +611,9 @@ class TestInvariantClassification(TestCase):
                          tuple(str(n) for n in inferred))
         self.assertEqual(('t', 'y0', 'y1', 'y2', 'y4', 'y5'),
                          tuple(str(n) for n in general))
-        faithful = translator.named_symbols(self.prey_predator, scheme='general',
-                                            normalise_parameters=False,
-                                            identify_indep_var=False)
+        faithful = translator.translate_general(
+            self.prey_predator, normalise_parameters=False,
+            identify_indep_var=False).named_symbols
         self.assertEqual(('t', 'x0', 'x1', 'x2', 'y0', 'y1', 'y2', 'y3', 'y4', 'y5'),
                          tuple(str(n) for n in faithful))
 
