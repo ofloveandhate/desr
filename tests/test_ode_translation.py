@@ -343,9 +343,7 @@ class TestInvariantClassification(TestCase):
                 translator = ODETranslator.from_ode_system(system)
                 groups = [translator.parameter_invariants(system),
                           translator.dependent_invariants(system)]
-                clock = translator.indep_var_invariant(system)
-                if clock is not None:
-                    groups.append((clock,))
+                groups.append(translator.indep_var_invariants(system))
                 found = [invariant for group in groups for invariant in group]
                 self.assertEqual(len(translator.invariant_monomials()), len(found))
                 self.assertEqual(set(translator.invariant_monomials()), set(found))
@@ -354,19 +352,32 @@ class TestInvariantClassification(TestCase):
         translator = ODETranslator.from_ode_system(self.hl66)
         self.assertEqual((), translator.parameter_invariants(self.hl66))
 
-    def test_an_entangled_clock_is_reported_as_none(self):
+    def test_an_entangled_clock_is_reported_as_empty(self):
         '''
         HL 6.6's invariants are t*z1**3 and z1**2*z2/t.  Both move, so there is no
-        invariant that is a function of t and the parameters alone, and saying None is
+        invariant that is a function of t and the parameters alone, and saying so is
         better than handing back one that also moves.
         '''
         translator = ODETranslator.from_ode_system(self.hl66)
-        self.assertIsNone(translator.indep_var_invariant(self.hl66))
+        self.assertEqual((), translator.indep_var_invariants(self.hl66))
 
     def test_the_clock_is_found_when_there_is_one(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        self.assertEqual(sympy.sympify('k*t/h'),
-                         translator.indep_var_invariant(self.prey_predator))
+        self.assertEqual((sympy.sympify('k*t/h'),),
+                         translator.indep_var_invariants(self.prey_predator))
+
+    def test_every_clock_invariant_is_reported_not_just_the_first(self):
+        '''
+        Multiplying a clock invariant by one that is a monomial in the parameters alone
+        gives another clock invariant, so one column operation reaches two.  The singular
+        method this replaced returned the first in column order, which here is
+        d*k*t/(K*h) -- so it reported the one that is *not* the system's clock while
+        hiding k*t/h, which is.
+        '''
+        translator = ODETranslator.from_ode_system(self.prey_predator)
+        translator.multiplier_add_columns(translator.r + 0, translator.r + 3, 1)
+        self.assertEqual((sympy.sympify('d*k*t/(K*h)'), sympy.sympify('k*t/h')),
+                         translator.indep_var_invariants(self.prey_predator))
 
     def test_the_counting_law_holds_exactly_for_the_parameter_scheme(self):
         '''
@@ -381,7 +392,7 @@ class TestInvariantClassification(TestCase):
                 translator = ODETranslator.from_ode_system(system)
                 law = (len(translator.parameter_invariants(system))
                        == system.num_parameters - translator.r
-                       and translator.indep_var_invariant(system) is not None
+                       and len(translator.indep_var_invariants(system)) == 1
                        and len(translator.dependent_invariants(system))
                        == system.num_dependents)
                 self.assertEqual(translator.scheme(system) == 'parameter', law)
@@ -405,10 +416,11 @@ class TestInvariantClassification(TestCase):
         self.assertIn(conserved, translator.dependent_invariants(system))
         self.assertNotIn(conserved, translator.parameter_invariants(system))
 
-        # And its rate really is zero, so the rate could not have told us.
-        names = reduced.symbols[1 + translator.r:]
-        rates = {invariant: reduced.derivative_dict[name]
-                 for name, invariant in zip(names, translator.invariant_monomials())}
+        # And its rate really is zero, so the rate could not have told us.  Paired through
+        # the reduced system's own record of what its symbols mean, rather than by slicing
+        # at an offset -- which is only right while every column survives the reduction.
+        rates = {monomial: reduced.derivative_dict.get(name)
+                 for name, monomial in reduced.named_symbols.items()}
         self.assertEqual(0, rates[conserved])
 
     def test_the_two_faces_of_an_invariant_share_their_keys(self):
@@ -459,21 +471,30 @@ class TestInvariantClassification(TestCase):
                     if scheme == 'general':
                         self.assertEqual(system.indep_var, clocks[0])
 
-    def test_a_rescaled_clock_is_a_dependent_under_the_general_scheme(self):
+    def test_a_rescaled_clock_is_a_dependent_until_it_is_identified(self):
         '''
         A kind is the variable's role in the reduced system, not the shape of its monomial.
-        Under the general scheme k*t/h has an equation and evolves, while t is what the
-        system is integrated against -- so k*t/h is a dependent there and the clock under
-        the parameter scheme.  The monomial is the same either way.
+        The monomial k*t/h is the same in all three readings below.
+
+        Told not to identify it, the general scheme carries it as a variable with an
+        equation while t is what the system is integrated against, so it is a *dependent*
+        there.  Identified, it is the reduced system's own clock, and there is no second
+        variable left to give a role to -- which is also what the parameter scheme does,
+        and the sense in which that scheme is this one with both steps taken.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        clock = translator.indep_var_invariant(self.prey_predator)
+        clock, = translator.indep_var_invariants(self.prey_predator)
         self.assertEqual(sympify_expression('k*t/h'), clock)
 
-        for scheme, expected in (('parameter', 'independent'), ('general', 'dependent')):
-            with self.subTest(scheme=scheme):
-                meanings = translator.named_symbols(self.prey_predator, scheme=scheme)
-                kinds = translator.symbol_kinds(self.prey_predator, scheme=scheme)
+        for scheme, options, expected in (
+                ('parameter', {}, 'independent'),
+                ('general', {'identify_indep_var': False}, 'dependent'),
+                ('general', {}, 'independent')):
+            with self.subTest(scheme=scheme, **options):
+                meanings = translator.named_symbols(self.prey_predator, scheme=scheme,
+                                                    **options)
+                kinds = translator.symbol_kinds(self.prey_predator, scheme=scheme,
+                                                **options)
                 name = next(n for n, monomial in meanings.items() if monomial == clock)
                 self.assertEqual(expected, kinds[name])
 
@@ -485,14 +506,19 @@ class TestInvariantClassification(TestCase):
         The parameter scheme has no such extra, because it keeps nothing: the auxiliaries
         are normalised away and the clock invariant becomes the new independent variable
         instead of joining one.
+
+        Stated with both further steps off, which is Hubert & Labahn's reduction.  With
+        them on, the extra one goes wherever a clock invariant is identified with it,
+        which is what `test_the_extra_variable_goes_to_the_identification` checks.
         '''
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
+        faithful = {'normalise_parameters': False, 'identify_indep_var': False}
         for system in (self.prey_predator, self.hl66, catalyst):
             with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
                 n, r = len(system.symbols), translator.r
-                kinds = translator.symbol_kinds(system, scheme='general')
+                kinds = translator.symbol_kinds(system, scheme='general', **faithful)
                 tally = {kind: list(kinds.values()).count(kind)
                          for kind in set(kinds.values())}
                 self.assertEqual(1, tally['independent'])
@@ -500,17 +526,59 @@ class TestInvariantClassification(TestCase):
                 self.assertEqual(n - r, tally.get('parameter', 0) + tally.get('dependent', 0))
                 self.assertEqual(n + 1, len(kinds))
                 self.assertEqual(n + 1, translator.expected_variable_count(
-                    system, scheme='general'))
+                    system, scheme='general', **faithful))
+
+    def test_the_extra_variable_goes_to_the_identification(self):
+        '''
+        The general scheme's `+1` is the retained independent variable.  Where a clock
+        invariant is identified *with* it the two are one quantity, so the `+1` becomes a
+        `+0` and the count drops by one more than normalisation alone accounts for.
+
+        The parameter scheme is the case where that always happens; here it is computed.
+        '''
+        for system, normalised, identified in ((self.prey_predator, 3, 1),
+                                          (self.hl66, 0, 0)):
+            with self.subTest(variables=tuple(map(str, system.symbols))):
+                translator = ODETranslator.from_ode_system(system)
+                n = len(system.symbols)
+                self.assertEqual(
+                    normalised, len(translator.parameter_auxiliaries(system)))
+                reduced = translator.translate_general(system)
+                self.assertEqual(n + 1 - normalised - identified,
+                                 len(reduced.symbols))
+                self.assertEqual(len(reduced.symbols),
+                                 translator.expected_variable_count(system,
+                                                                    scheme='general'))
 
     def test_auxiliaries_are_their_own_kind(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        kinds = translator.symbol_kinds(self.prey_predator, scheme='general')
+        kinds = translator.symbol_kinds(self.prey_predator, scheme='general',
+                                        normalise_parameters=False)
         auxiliaries = [name for name, kind in kinds.items() if kind == 'auxiliary']
         self.assertEqual(translator.r, len(auxiliaries))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, auxiliaries)))
         # And the parameter scheme makes none.
         kinds = translator.symbol_kinds(self.prey_predator, scheme='parameter')
         self.assertNotIn('auxiliary', kinds.values())
+
+    def test_a_surviving_auxiliary_is_always_one_that_moves(self):
+        '''
+        With normalisation on, every auxiliary that is a monomial in the parameters alone
+        is normalised, so the ones a reduction still carries are exactly the ones that
+        move.
+        Prey-predator's three are all parameter monomials and none survive; Hubert &
+        Labahn 6.6's single auxiliary is t*z1**2, which moves, and does.
+        '''
+        for system, surviving in ((self.prey_predator, ()), (self.hl66, ('x0',))):
+            with self.subTest(variables=tuple(map(str, system.symbols))):
+                translator = ODETranslator.from_ode_system(system)
+                kinds = translator.symbol_kinds(system, scheme='general')
+                auxiliaries = [name for name, kind in kinds.items()
+                               if kind == 'auxiliary']
+                self.assertEqual(surviving, tuple(map(str, auxiliaries)))
+                self.assertEqual(surviving,
+                                 tuple(map(str, translator.translate_general(
+                                     system).auxiliary_names)))
 
     def test_dropping_the_auxiliaries_drops_them_from_both_maps(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
@@ -538,8 +606,13 @@ class TestInvariantClassification(TestCase):
         general = translator.named_symbols(self.prey_predator, scheme='general')
         self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
                          tuple(str(n) for n in inferred))
-        self.assertEqual(('t', 'x0', 'x1', 'x2', 'y0', 'y1', 'y2', 'y3', 'y4', 'y5'),
+        self.assertEqual(('t', 'y0', 'y1', 'y2', 'y4', 'y5'),
                          tuple(str(n) for n in general))
+        faithful = translator.named_symbols(self.prey_predator, scheme='general',
+                                            normalise_parameters=False,
+                                            identify_indep_var=False)
+        self.assertEqual(('t', 'x0', 'x1', 'x2', 'y0', 'y1', 'y2', 'y3', 'y4', 'y5'),
+                         tuple(str(n) for n in faithful))
 
 
 class TestNamingScheme(TestCase):
@@ -946,9 +1019,27 @@ class TestParameterValuesThroughTranslation(TestCase):
         # monomial, so these values are the ones this particular original system has.
         system = self.system()
         system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator.from_ode_system(system).translate_general(
+            system, normalise_parameters=False)
         self.assertEqual(reduced.parameter_values[sympy.Symbol('x1')],   # x1 = e_0
                          sympy.Integer(5))
+
+    def test_a_normalised_auxiliary_has_no_value_to_report(self):
+        '''
+        `e_0 = 5` and `normalisations` saying `e_0 |-> 1` are not in conflict: the value is
+        in the caller's units and the normalisation chooses different ones.  But the
+        auxiliary that denoted e_0 is no longer a symbol of the reduced system, so there is
+        nothing left to hang the value on, and the choice is recorded instead.
+        '''
+        system = self.system()
+        system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
+        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        self.assertNotIn(sympy.Symbol('x1'), reduced.parameter_values)
+        self.assertEqual({sympy.Symbol('e_0'): sympy.Integer(1),
+                          sympy.Symbol('k_1'): sympy.Integer(1)},
+                         reduced.normalisations)
+        self.assertEqual(sympy.Integer(5),
+                         reduced.original_system.parameter_values[sympy.Symbol('e_0')])
 
     def test_dropping_the_auxiliaries_drops_their_values(self):
         system = self.system()

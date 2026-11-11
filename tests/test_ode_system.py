@@ -74,10 +74,17 @@ class TestODESystemScaling(TestCase):
         self.assertEqual(translated, answer)
         self.assertEqual(translator.translate_dep_var(system), translator.translate(system))
 
-        ## Check our answer using the general translation
-        translated = translator.translate_general(system)
+        ## Check our answer using the general translation.  The paper's answer, so
+        ## both of the further steps are turned off: they are departures from it.
+        translated = translator.translate_general(system, normalise_parameters=False,
+                                                  identify_indep_var=False)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0*y1 + y0)/t\ndy0/dt = y0/t\ndy1/dt = y1*(y0 + 1)/t')
         self.assertEqual(translated, answer)
+
+        ## By default y0 is identified with t -- its monomial is t itself -- so the
+        ## equation dy0/dt = y0/t becomes dt/dt = 1, which the system already has.
+        default = translator.translate_general(system)
+        self.assertEqual(('t', 'x0', 'y1'), tuple(map(str, default.symbols)))
 
         ## Test reverse translating
         t_var, c1_var, c2_var = sympy.var('t c1 c2')
@@ -173,7 +180,8 @@ class TestODESystemScaling(TestCase):
         # is asked for by name.  `translate` would now choose the parameter scheme: the
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
-        translated = translator.translate_general(system)
+        translated = translator.translate_general(system, normalise_parameters=False,
+                                                  identify_indep_var=False)
         self.assertEqual(('t', 'x0', 'x1', 'y0', 'y1'),
                          tuple(map(str, translated.symbols)))
         # x0 and x1 are monomials in the original parameters alone, so they are parameters
@@ -203,8 +211,11 @@ class TestODESystemScaling(TestCase):
         ## of desr's own rather than against the paper.  Neither is necessary now.
         translator = ODETranslator.from_ode_system(system)
         self.assertEqual(translator.herm_mult, herm_mult_paper)
-        # Same multiplier, so the same reduced system as the one checked above.
-        self.assertEqual(translator.translate_general(system), translated)
+        # Same multiplier, so the same reduced system as the one checked above -- asked
+        # for the same way, since `translated` above is the paper's reduction.
+        self.assertEqual(translator.translate_general(system, normalise_parameters=False,
+                                                      identify_indep_var=False),
+                         translated)
         general_soln = translator.reverse_translate_general(reduced_solutions,
                                                             system_indep_var_index=2)
         self.assertTupleEqual(general_soln, paper_soln)

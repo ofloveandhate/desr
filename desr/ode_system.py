@@ -227,9 +227,29 @@ class ODESystem(object):
             anything.  Also stored rather than inferred: auxiliary-ness is a fact about
             which block of the Hermite multiplier a symbol came from, and nothing in the
             reduced system's own equations records it.
+        original_system (ODESystem, optional): For a reduced system, the system it was
+            reduced from.  `named_symbols`' monomials are written in *that* system's
+            symbols, so without it the record names symbols belonging to nobody, and two
+            different originals using the same letters are indistinguishable.  It is also
+            what tells a reduction this library produced from one assembled by hand.
+        named_symbols (dict, optional): For a reduced system, what each of its symbols
+            stands for: a map to the Laurent monomial in the *original* system's symbols
+            that it denotes.  Stored rather than asked of a translator afterwards, because
+            a translator is a machine whose multiplier and naming scheme can be changed
+            after it has produced a system -- and then its answers describe a different
+            reduction than the one in hand.  Together with `normalisations` this is the
+            whole change of variables: the exponent vectors of these monomials are the
+            multiplier columns that produced them, so a reduced system carrying both can
+            be read, and reversed, without reference to the machine that made it.
+        normalisations (dict, optional): For a reduced system, the original symbols that
+            the reduction set to 1, and the 1 it set them to.  Stored because it is a
+            statement about the *original* system's symbols, which the reduced system no
+            longer mentions: nothing in a reduced system records which of the original
+            parameters were normalised to obtain it.  See
+            :meth:`~desr.ode_translation.ODETranslator.normalisations`.
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None):
+    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, original_system=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -246,6 +266,9 @@ class ODESystem(object):
         self._scheme = scheme
         self._num_scaling_symmetries = num_scaling_symmetries
         self._auxiliary_names = tuple(auxiliary_names or ())
+        self._normalisations = dict(normalisations or {})
+        self._named_symbols = None if named_symbols is None else dict(named_symbols)
+        self._original_system = original_system
 
         # sanity checks
         assert len(self._variables) == len(self._derivatives)
@@ -319,7 +342,10 @@ class ODESystem(object):
                            is_reduced=self.is_reduced, same_units=self._requires_same_unit,
                            scheme=self._scheme,
                            num_scaling_symmetries=self._num_scaling_symmetries,
-                           auxiliary_names=self._auxiliary_names)
+                           auxiliary_names=self._auxiliary_names,
+                           normalisations=self._normalisations,
+                           named_symbols=self._named_symbols,
+                           original_system=self._original_system)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
@@ -369,6 +395,13 @@ class ODESystem(object):
 
         ind = self.independent_variable_index
         self._variables = self._variables[:ind] + (new_indep,) + self._variables[ind+1:]
+
+        # The record is keyed by this system's own symbols, so renaming one of them
+        # renames a key.  Left alone, `named_symbols` would go on describing a symbol the
+        # system no longer has, and say nothing about the one it does.
+        if self._named_symbols is not None and self._indep_var in self._named_symbols:
+            self._named_symbols[new_indep] = self._named_symbols.pop(self._indep_var)
+
         self._indep_var = new_indep
 
     @property
@@ -617,6 +650,83 @@ class ODESystem(object):
         if isinstance(variable, str):
             variable = sympy.Symbol(variable)
         return variable in self._auxiliary_names
+
+    @property
+    def original_system(self):
+        '''
+        The system this one was reduced from, or :const:`None` if it is not a reduction.
+
+        :attr:`named_symbols` writes each of this system's symbols as a monomial in *this*
+        system's symbols, so the two belong together: without the referent the monomials
+        name symbols belonging to nobody, and two different originals that happen to use
+        the same letters cannot be told apart.
+
+        It also tells a reduction this library produced from one assembled by hand, which
+        a reader of :attr:`named_symbols` needs, since :const:`None` there could otherwise
+        mean either.
+
+        Returns:
+            ODESystem or None
+        '''
+        return self._original_system
+
+    @property
+    def named_symbols(self):
+        '''
+        What each symbol of this reduced system stands for.
+
+        A map from the system's own symbol to the Laurent monomial in the **original**
+        system's symbols that it denotes -- ``{t: k_2_3*t, x3: x, y1: e*k_0_1/k_2_3, ...}``.
+
+        :const:`None` for a system that is not a reduction, and for one reduced by hand
+        rather than by a translation.  **Not an empty dict**: the map only means anything
+        relative to some other system, and an original system has none to be relative to,
+        so there is nothing to report rather than nothing reported.  The two readings have
+        to be told apart, because a reader that cannot distinguish "no record" from "an
+        empty record" falls back to guessing the layout by counting, and a wrong guess
+        there is silently wrong numbers.  :attr:`scheme` and
+        :attr:`num_scaling_symmetries` are :const:`None` for the same reason, while
+        :attr:`auxiliary_names` and :attr:`normalisations` are empty for the opposite one:
+        those ask something a non-reduction can truthfully answer with *none*.
+
+        Recorded by the translation rather than asked of a translator afterwards.  A
+        translator is a machine: :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns`
+        and its siblings change which invariants it produces, so a translator asked after
+        the fact answers about the reduction it would do *now*, not the one that made this
+        system.  The result has to be able to speak for itself.
+
+        With :attr:`normalisations` this is the entire change of variables.  Each
+        monomial's exponent vector over the original symbols is the multiplier column that
+        produced it, and the two together form a square unimodular matrix, so everything a
+        reader or a recovery needs is here.
+
+        Returns:
+            dict or None: ``{reduced symbol: monomial in the original symbols}``.
+        '''
+        return None if self._named_symbols is None else dict(self._named_symbols)
+
+    @property
+    def normalisations(self):
+        '''
+        The original symbols this reduction set to 1, and the 1 it set them to.
+
+        Normalisation is a **choice of units**.  An auxiliary *is* a unit, and a unit
+        measured in itself is 1, so spending an auxiliary that is a monomial in the
+        original parameters pins some of those parameters.  This records which, in the
+        caller's own symbols, because that is what a recovery has to be told and the
+        reduced system no longer names them.
+
+        Empty when nothing was normalised: for an original system, for a general reduction
+        asked not to normalise, and for one with no parameter auxiliary to spend.  It is
+        empty for a parameter reduction too, which discards its auxiliaries rather than
+        recording them -- see
+        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` for
+        that scheme's table.
+
+        Returns:
+            dict: ``{original symbol: 1}``.
+        '''
+        return dict(self._normalisations)
 
     @property
     def derivatives(self):
@@ -1532,7 +1642,20 @@ class ODESystem(object):
                                 auxiliary_names=[
                                     aux if aux in new_vars else to_sub.get(aux)
                                     for aux in self._auxiliary_names
-                                    if aux in new_vars or to_sub.get(aux) in new_vars])
+                                    if aux in new_vars or to_sub.get(aux) in new_vars],
+                                # Keyed by the *original* system's symbols, which a
+                                # substitution on the reduced system does not mention, so
+                                # it travels unchanged.
+                                normalisations=self._normalisations,
+                                # Keyed by *this* system's symbols, so a substitution that
+                                # renames one renames a key, and one that removes a symbol
+                                # removes its entry.  The monomials are in the original
+                                # system's symbols and are untouched either way.
+                                named_symbols=None if self._named_symbols is None else {
+                                    to_sub.get(name, name): monomial
+                                    for name, monomial in self._named_symbols.items()
+                                    if to_sub.get(name, name) in new_vars},
+                                original_system=self._original_system)
 
         subs_system._variable_sanity_check()
         return subs_system

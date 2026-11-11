@@ -151,6 +151,40 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate(original_system)
     dt/dt = 1
+    dy0/dt = -y0 - y0*y4/y1 + y3*y5
+    dy1/dt = y0*y1/y4
+    dy3/dt = y0 + y0*y4/y1 - y3*y5
+    dy4/dt = y0
+    dy5/dt = y0*y4/y1 - y3*y5
+
+The reduced system is autonomous and has no parameters at all.  Two things got it there,
+and both can be turned off.
+
+Both auxiliary variables are monomials in the original parameters alone, so each is
+constant and can be *normalised* -- set to 1, which is a choice of units rather than an
+assumption, since an auxiliary is a unit and a unit measured in itself is 1.  The choice is
+recorded in the caller's own symbols:
+
+    >>> max_scal2.translate(original_system).normalisations
+    {k_1: 1, k_2: 1}
+
+With :math:`k_2` pinned to 1, the invariant :code:`y2 = k_2*t` **is** :math:`t`, which the
+reduced system already carries, and its equation :code:`dy2/dt = y2/t` reads
+:math:`\frac{dt}{dt} = 1` -- which the system already has.  So the two are one quantity
+under two names, one of them is kept, and every :math:`1/t` cancels.  That is what makes
+the result autonomous.
+
+The remaining variables :code:`(y0, y1, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
+are our new dependent invariants; the first two are exactly the invariants we chose to study.
+
+To reproduce Hubert & Labahn exactly, ask for neither step.  The auxiliaries are then
+carried, and reported as *parameters* because each is a monomial in the original parameters
+alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
+:attr:`~desr.ode_system.ODESystem.auxiliary_names`.
+
+    >>> max_scal2.translate(original_system, normalise_parameters=False,
+    ...                     identify_indep_var=False)
+    dt/dt = 1
     dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
     dy1/dt = y0*y1*y2/(t*y4)
     dy2/dt = y2/t
@@ -158,13 +192,6 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
     dy4/dt = y0*y2/t
     dy5/dt = y5*(y0*y2*y4/(y1*y5) - y2*y3)/t
     parameters: x0, x1
-
-Here, :code:`x0` and :code:`x1` are auxiliary variables, which can be fixed at any value at all.
-They are reported as *parameters* because each is a monomial in the original parameters alone
-and so cannot vary; being auxiliaries is a separate fact, recorded in
-:attr:`~desr.ode_system.ODESystem.auxiliary_names`.
-The remaining variables :code:`(y0, y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
-are our new dependent invariants; the first two are exactly the invariants we chose to study.
 
 However, we can rearrange these invariants into an order that *does* satisfy the parameter reduction scheme.
 While this isn't implemented yet, we can do it by hand for the moment.
