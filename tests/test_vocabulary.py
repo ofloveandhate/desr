@@ -534,3 +534,65 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
                     reduced = self.translator.translate_general(self.system)
                 named = self.translator.named_symbols(self.system, scheme=scheme)
                 self.assertEqual(set(reduced.symbols), set(named))
+
+
+class TestTheDependentVariableSchemesNames(TestCase):
+    '''
+    That scheme does not reduce the system it is given: it deletes the independent
+    variable's row and column from the multiplier and reduces what is left.  So it has one
+    invariant fewer than the full multiplier has columns, and its monomials are written in
+    the other symbols.
+
+    Reading them off the full multiplier gave one invariant too many and, where the
+    missing column was not the last, paired every later name with the wrong monomial.
+    `test_the_names_match_the_reduced_systems_symbols` covered only the other two schemes,
+    which is why it survived.
+    '''
+
+    EQUATIONS = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(self.EQUATIONS)
+        self.translator = ODETranslator.from_ode_system(self.system)
+        self.reduced = self.translator.translate(self.system)
+        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.DEP_VAR)
+
+    def test_the_names_match_the_reduced_systems_symbols(self):
+        named = self.translator.named_symbols(self.system)
+        self.assertEqual(set(self.reduced.symbols), set(named))
+
+    def test_there_is_one_invariant_fewer_than_the_multiplier_has_columns(self):
+        self.assertEqual(len(self.translator.invariant_names(self.system)),
+                         self.translator.herm_mult_n.shape[1] - 1)
+
+    def test_no_name_stands_for_the_independent_variable(self):
+        # The clock invariant is not among them: the scheme keeps the system's own `t`.
+        named = self.translator.named_symbols(self.system)
+        clock = self.system.independent_variable
+        standing_for_t = [symbol for symbol, monomial in named.items()
+                          if monomial == clock and symbol != clock]
+        self.assertEqual(standing_for_t, [])
+
+    def test_each_name_means_a_monomial_whose_rate_the_system_agrees_with(self):
+        # The test that catches a shifted pairing, which a count cannot.  Differentiate
+        # each monomial along the original equations and compare with the equation the
+        # reduced system gives that name.
+        rates = dict(zip(self.system.symbols, self.system.derivatives))
+        named = self.translator.named_symbols(self.system)
+        clock = self.system.independent_variable
+        for symbol, monomial in named.items():
+            if symbol == clock:
+                continue
+            claimed = self.reduced.derivative_dict.get(symbol)
+            if claimed is None:
+                continue
+            actual = sympy.diff(monomial, clock)
+            for original, rate in rates.items():
+                if rate is not None and original != clock:
+                    actual += sympy.diff(monomial, original) * rate
+            # Every reduced symbol in the right-hand side has to go, not just this one.
+            replacement = {other: meaning for other, meaning in named.items()
+                           if other != clock}
+            with self.subTest(symbol=str(symbol)):
+                self.assertEqual(
+                    sympy.simplify(actual - claimed.subs(replacement)), 0)

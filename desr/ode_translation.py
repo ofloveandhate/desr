@@ -2381,6 +2381,11 @@ class ODETranslator(object):
             scheme = ReductionScheme(scheme)
 
         count = self.herm_mult_n.shape[1]
+        if scheme == ReductionScheme.DEP_VAR:
+            # That scheme reduces the system with the independent variable taken out, so
+            # it has one invariant fewer than the full multiplier has columns.  See
+            # :meth:`_dep_var_blocks`.
+            count = len(self._dep_var_blocks(system)[1])
 
         if scheme == ReductionScheme.PARAMETER:
             # The columns of V_n run (parameter invariants, the clock, the dependents), and
@@ -2753,6 +2758,35 @@ class ODETranslator(object):
         '''
         return self._invariants_by_kind(system, variables)[kind]
 
+    def _dep_var_blocks(self, system):
+        '''
+        The auxiliary and invariant monomials of the **dependent-variable** reduction.
+
+        That scheme does not reduce this system: it deletes the independent variable's row
+        and column from the multiplier and reduces what is left, which is what
+        :meth:`dep_var_herm_mult` returns.  So its monomials are written in the other
+        symbols, and there is one invariant fewer than :attr:`herm_mult_n` has columns --
+        the clock invariant is not among them, because the scheme keeps the system's own
+        independent variable instead.
+
+        Reading those monomials off the full multiplier gives one invariant too many, and
+        where the missing column is not the last it pairs every later name with the wrong
+        monomial.  Hubert & Labahn 6.4 is such a case: its invariants off the full
+        multiplier are :math:`t` and :math:`z_1 z_2`, and the reduction's single invariant
+        is the second, so naming them in order calls :math:`z_1 z_2` by the name belonging
+        to :math:`t`.
+
+        Returns:
+            tuple: ``(auxiliary monomials, invariant monomials)``, both lists.
+        '''
+        index = system.independent_variable_index
+        deflated = self.dep_var_herm_mult(index)
+        symbols = list(self._validate_variables(
+            tuple(system.symbols), self.n, 'y', True))
+        symbols.pop(index)
+        return (list(scale_action(symbols, deflated[:, :self.r])),
+                list(scale_action(symbols, deflated[:, self.r:])))
+
     def named_symbols(self, system, scheme=None, include_aux_vars=True):
         '''
         What each variable of the reduced system stands for.
@@ -2806,7 +2840,12 @@ class ODETranslator(object):
         # that the pairing here cannot disagree with what invariant_names and
         # auxiliary_names say on their own.
         invariant_names = list(self.invariant_names(system, scheme))
-        invariant_monomials = list(self.invariant_monomials())
+        if scheme == ReductionScheme.DEP_VAR:
+            # Written in the symbols other than the independent variable, and one shorter.
+            dep_var_auxiliaries, invariant_monomials = self._dep_var_blocks(system)
+        else:
+            dep_var_auxiliaries = None
+            invariant_monomials = list(self.invariant_monomials())
 
         if scheme == ReductionScheme.PARAMETER:
             names, monomials = invariant_names, invariant_monomials
@@ -2815,7 +2854,9 @@ class ODETranslator(object):
             # itself, then the auxiliaries, then the invariants.
             if include_aux_vars:
                 auxiliary_names = list(self.auxiliary_names(system, scheme))
-                auxiliary_monomials = list(self.auxiliary_monomials())
+                auxiliary_monomials = (dep_var_auxiliaries
+                                       if dep_var_auxiliaries is not None
+                                       else list(self.auxiliary_monomials()))
             else:
                 auxiliary_names, auxiliary_monomials = [], []
             names = ([system.independent_variable] + auxiliary_names + invariant_names)
