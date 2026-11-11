@@ -1109,9 +1109,10 @@ class TestGeneratedNameClashes(TestCase):
                                            'dp/dt = k_3*s - k_2*p'])
         system.update_initial_conditions('c(0) = c_0')
         system.reorder_parameters(['k_1', 'k_2', 'k_3', 'c_0'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'c_'})
         with self.assertRaises(ValueError) as caught:
-            translator.translate(system, naming_scheme={'parameters': 'c_'})
+            translator.translate(system)
         self.assertIn('c_0', str(caught.exception))
 
     def test_a_scheme_whose_names_are_all_normalised_out_cannot_clash(self):
@@ -1119,15 +1120,17 @@ class TestGeneratedNameClashes(TestCase):
         # at all and there is nothing to collide with.
         system = ODESystem.from_equations(['dc/dt = -k_1*c*s', 'ds/dt = k_1*c*s'])
         system.update_initial_conditions('c(0) = c_0')
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate(system, naming_scheme={'parameters': 'c_'})
+        translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'c_'})
+        reduced = translator.translate(system)
         self.assertEqual(set(system.symbols) & set(reduced.symbols), set())
 
     def test_a_scheme_that_avoids_the_clash_is_accepted(self):
         system = ODESystem.from_equations(['dx/dt = kappa0*x*y',
                                            'dy/dt = c_1*(1-x)*(1-y)'])
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate(system, naming_scheme={'parameters': 'theta'})
+        translator = ODETranslator.from_ode_system(
+            system, naming_scheme={'parameters': 'theta'})
+        reduced = translator.translate(system)
         self.assertTrue(reduced.is_reduced)
 
     def test_keeping_the_systems_own_clock_is_not_a_clash(self):

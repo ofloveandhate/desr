@@ -1190,17 +1190,22 @@ class ODETranslator(object):
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
 
-    def translate(self, system, naming_scheme=None, include_aux_vars=True,
+    def translate(self, system, include_aux_vars=True,
                   normalise_parameters=True, identify_indep_var=True):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
         First, try the simplest parameter reduction method, then the dependent variable translation (where the scaling action ignores the independent variable) and finally the general reduction scheme.
 
+        **The naming scheme is set before translating**, with
+        :meth:`set_naming_scheme` or at construction, and is not an argument here.  It used
+        to be one, and passing it wrote it onto the translator: a second call then used the
+        first call's names, and every report about the first reduced system described the
+        second one's.  A translator is a machine whose settings are chosen before it is
+        run, not along with each run.
+
         Args:
             system (ODESystem): System to reduce.
-            naming_scheme (dict): the scheme to use, over the keys in
-                :data:`NAMING_SCHEME_KEYS`.  See
             include_aux_vars (bool): Whether to keep the auxiliaries.  General scheme only.
             normalise_parameters (bool): Whether to set the parameter auxiliaries to 1.
                 General scheme only -- the parameter scheme normalises all of its
@@ -1211,10 +1216,6 @@ class ODETranslator(object):
 
         :rtype: ODESystem
         '''
-
-        if naming_scheme is not None:
-            self.set_naming_scheme(naming_scheme)
-
         scheme = self.scheme(system)
 
         if scheme == ReductionScheme.PARAMETER:
