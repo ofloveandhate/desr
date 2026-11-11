@@ -585,10 +585,14 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     written into the label, so the figure needs no key to the zero propagation.
 
     **Shape says what a symbol is** -- a square is a parameter, a circle a dependent
-    variable, a diamond the independent one, a hexagon an auxiliary -- and fill says which
-    layer it belongs to.  Shape is free to carry the kind because the layer is already
-    given by which column a vertex sits in, and given reliably, since the source layer is
-    always on the left.
+    variable, a diamond the independent one -- and fill says which layer it belongs to.
+    Shape is free to carry the kind because the layer is already given by which column a
+    vertex sits in, and given reliably, since the source layer is always on the left.
+
+    **Being an auxiliary is a hatch, not a shape**, because it is the other axis: an
+    auxiliary is a parameter or a dependent like any other symbol, and giving it a shape of
+    its own would put two independent questions on one channel and leave no way to say
+    which kind it is.
 
     Args:
         graph (networkx.DiGraph): From :func:`symbol_graph`.
@@ -796,3 +800,23 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     ax.set_xlim(-0.45 * width, 1.45 * width)
     ax.set_ylim(-0.12 * height, 1.12 * height)
     return ax
+
+
+def node_positions(graph, width=1.0, height=1.0):
+    """
+    Where :func:`draw_symbol_graph` puts each vertex, as ``{node: (x, y)}``.
+
+    For drawing something else beside a panel and keeping it in register.  A figure that
+    puts a second picture next to a graph -- a substitution, a table of values -- wants
+    its rows at the heights the symbols already have, so the eye can carry a symbol from
+    one panel to the next; working those heights out again from the layout rule would be
+    a second copy of it, free to drift.
+
+    Args:
+        graph (networkx.DiGraph): From :func:`symbol_graph`.
+        width, height (float): As passed to :func:`draw_symbol_graph`.
+
+    Returns:
+        dict: ``{(layer, symbol): (x, y)}``.
+    """
+    return _positions(graph, width, height)
