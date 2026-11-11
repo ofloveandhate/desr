@@ -244,8 +244,12 @@ class TestMonomialsVersusNames(TestCase):
                 self.assertTrue(monomial.is_Mul or monomial.is_Pow or monomial.is_Symbol)
 
     def test_the_auxiliary_pair_matches_too(self):
+        # With normalisation off, so that every column is still named: all three of
+        # this system's auxiliaries are monomials in the parameters alone, and a
+        # reduction that normalises them keeps none.
         monomials = list(self.translator.auxiliary_monomials())
-        names = self.translator.auxiliary_names(self.system, scheme='general')
+        names = self.translator.translate_general(
+            self.system, normalise_parameters=False).auxiliary_names
         self.assertEqual(len(monomials), len(names))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, names)))
 
@@ -308,7 +312,8 @@ class TestStoredProvenance(TestCase):
         self.assertEqual((), reduced.auxiliary_names)
 
     def test_the_general_scheme_records_itself_and_its_auxiliaries(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general(self.system,
+                                                    normalise_parameters=False)
         self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
         self.assertEqual(self.translator.r, reduced.num_scaling_symmetries)
         self.assertEqual(('x0', 'x1', 'x2'),
@@ -328,7 +333,8 @@ class TestStoredProvenance(TestCase):
         self.assertEqual(translator.r, reduced.num_scaling_symmetries)
 
     def test_is_auxiliary_takes_a_string_or_a_symbol(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general(self.system,
+                                                    normalise_parameters=False)
         self.assertTrue(reduced.is_auxiliary('x0'))
         self.assertTrue(reduced.is_auxiliary(sympy.Symbol('x0')))
         self.assertFalse(reduced.is_auxiliary('y3'))
@@ -355,7 +361,8 @@ class TestStoredProvenance(TestCase):
         in the original parameters has no equation, so it would be pruned -- losing part of
         the record of how the system was reduced, which it cannot reconstruct.
         '''
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general(self.system,
+                                                    normalise_parameters=False)
         substituted = reduced.subs({'y3': 'Y'})
         self.assertEqual(('x0', 'x1', 'x2'),
                          tuple(map(str, substituted.auxiliary_names)))
@@ -369,7 +376,8 @@ class TestStoredProvenance(TestCase):
         no equation does nothing.  It used to *delete* it; now it is left as it was, which
         is at least not lossy.
         '''
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general(self.system,
+                                                    normalise_parameters=False)
         substituted = reduced.subs({'x0': 'w0'})
         self.assertIn(sympy.Symbol('x0'), substituted.symbols)
         self.assertNotIn(sympy.Symbol('w0'), substituted.symbols)
@@ -407,7 +415,12 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
             with self.subTest(equations=equations[0]):
                 system = ODESystem.from_equations(equations)
                 translator = ODETranslator.from_ode_system(system)
-                reduced = translator.translate_general(system)
+                # Normalisation off: it is what makes both kinds reachable at once.
+                # With it on, a parameter auxiliary is always normalised away, so a
+                # surviving auxiliary is always one that moves -- which is the
+                # subject of its own test rather than a counterexample to this one.
+                reduced = translator.translate_general(system,
+                                                       normalise_parameters=False)
                 self.assertEqual(translator.r, len(reduced.auxiliary_names))
 
 
@@ -445,16 +458,29 @@ class TestClassificationSurvivesTheReduction(TestCase):
         '''
         Before this, the general reduction of a six-parameter system reported zero
         parameters and nine dependents, six of them with rate zero.
+
+        Counted with both further steps off, where every column survives to be
+        classified.  With them on the same reduction reports three parameters and two
+        dependents: the three parameter auxiliaries are normalised away and the clock
+        invariant is identified with `t`.  Fewer symbols, each still classified as
+        what it is, which is the claim being made here.
         '''
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general(self.system,
+                                                    normalise_parameters=False,
+                                                    identify_indep_var=False)
         self.assertEqual(6, self.system.num_parameters)
         self.assertEqual(6, reduced.num_parameters)
         self.assertEqual(3, reduced.num_dependents)
 
+        normalised = self.translator.translate_general(self.system)
+        self.assertEqual(3, normalised.num_parameters)
+        self.assertEqual(2, normalised.num_dependents)
+
     def test_only_the_genuinely_moving_symbols_need_integrating(self):
         reduced = self.translator.translate_general(self.system)
         self.assertEqual((), reduced.conserved_variables)
-        self.assertEqual(3, len(reduced.dependents))
+        # Two, not three: the third was the clock invariant, now identified with `t`.
+        self.assertEqual(2, len(reduced.dependents))
 
     def test_a_conserved_dependent_stays_a_dependent(self):
         '''
@@ -479,10 +505,16 @@ class TestClassificationSurvivesTheReduction(TestCase):
         '''
         Both print as nothing-that-moves, and only the classification separates them: a
         parameter has no equation, a conserved dependent has one that says zero.
+
+        Normalisation off, because this system's reduced parameters are all parameter
+        auxiliaries: normalise them and it has none left, and the distinction has
+        nothing to be drawn between.  A system with a parameter *invariant* keeps one
+        either way; this one happens not to have any.
         '''
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
-        reduced = ODETranslator.from_ode_system(catalyst).translate_general(catalyst)
+        reduced = ODETranslator.from_ode_system(catalyst).translate_general(
+            catalyst, normalise_parameters=False)
         self.assertTrue(reduced.parameters)
         self.assertTrue(reduced.conserved_variables)
         self.assertEqual(set(), set(reduced.parameters) & set(reduced.conserved_variables))

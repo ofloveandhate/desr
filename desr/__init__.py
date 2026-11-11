@@ -21,7 +21,7 @@ integer matrix algorithms, :mod:`desr.sympy_helper` for the parsing convention,
 #: the package, and `docs/source/conf.py` reads it too, so a bump happens once and cannot
 #: leave the three of them disagreeing -- which is what had happened: `setup.py` said
 #: 1.1.0 while the docs said version 1, release 0.
-__version__ = '2.0.3'
+__version__ = '3.0.0'
 
 from . import ode_system
 from . import matrix_normal_forms
@@ -38,12 +38,12 @@ from .sympy_helper import sympify_expression, to_symbol
 
 # desr.numerics needs numpy and scipy, which are optional for using the rest of the
 # library.  Importing it here would make them mandatory for `import desr`, so the numeric
-# names are resolved on first access instead: `from desr import NumericTranslation` works,
+# names are resolved on first access instead: `from desr import NumericTranslator` works,
 # and an ImportError for numpy arrives only if you actually reach for the numeric part.
 _LAZY = {
     'ConflictingKnownValues': 'numerics',
     'InsufficientKnownValues': 'numerics',
-    'NumericTranslation': 'numerics',
+    'NumericTranslator': 'numerics',
     'numerics': None,
 }
 
@@ -75,7 +75,7 @@ __all__ = [
     'Complex',
     'Reaction',
     # Numerical translation (needs numpy and scipy; imported on first access)
-    'NumericTranslation',
+    'NumericTranslator',
     'InsufficientKnownValues',
     'ConflictingKnownValues',
     # The one place text becomes sympy

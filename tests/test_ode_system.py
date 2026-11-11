@@ -74,10 +74,17 @@ class TestODESystemScaling(TestCase):
         self.assertEqual(translated, answer)
         self.assertEqual(translator.translate_dep_var(system), translator.translate(system))
 
-        ## Check our answer using the general translation
-        translated = translator.translate_general(system)
+        ## Check our answer using the general translation.  The paper's answer, so
+        ## both of the further steps are turned off: they are departures from it.
+        translated = translator.translate_general(system, normalise_parameters=False,
+                                                  identify_indep_var=False)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0*y1 + y0)/t\ndy0/dt = y0/t\ndy1/dt = y1*(y0 + 1)/t')
         self.assertEqual(translated, answer)
+
+        ## By default y0 is identified with t -- its monomial is t itself -- so the
+        ## equation dy0/dt = y0/t becomes dt/dt = 1, which the system already has.
+        default = translator.translate_general(system)
+        self.assertEqual(('t', 'x0', 'y1'), tuple(map(str, default.symbols)))
 
         ## Test reverse translating
         t_var, c1_var, c2_var = sympy.var('t c1 c2')
@@ -173,7 +180,8 @@ class TestODESystemScaling(TestCase):
         # is asked for by name.  `translate` would now choose the parameter scheme: the
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
-        translated = translator.translate_general(system)
+        translated = translator.translate_general(system, normalise_parameters=False,
+                                                  identify_indep_var=False)
         self.assertEqual(('t', 'x0', 'x1', 'y0', 'y1'),
                          tuple(map(str, translated.symbols)))
         # x0 and x1 are monomials in the original parameters alone, so they are parameters
@@ -203,8 +211,11 @@ class TestODESystemScaling(TestCase):
         ## of desr's own rather than against the paper.  Neither is necessary now.
         translator = ODETranslator.from_ode_system(system)
         self.assertEqual(translator.herm_mult, herm_mult_paper)
-        # Same multiplier, so the same reduced system as the one checked above.
-        self.assertEqual(translator.translate_general(system), translated)
+        # Same multiplier, so the same reduced system as the one checked above -- asked
+        # for the same way, since `translated` above is the paper's reduction.
+        self.assertEqual(translator.translate_general(system, normalise_parameters=False,
+                                                      identify_indep_var=False),
+                         translated)
         general_soln = translator.reverse_translate_general(reduced_solutions,
                                                             system_indep_var_index=2)
         self.assertTupleEqual(general_soln, paper_soln)
@@ -792,6 +803,81 @@ class TestParameterValuesAgainstConstraints(TestCase):
         # contradiction the caller could do nothing about.
         from desr import numerics
         self.assertIs(numerics.CONSISTENCY_TOLERANCE, CONSISTENCY_TOLERANCE)
+
+
+class TestCopyCarriesEverything(TestCase):
+    '''
+    `copy` is on the critical path of every reduction: a translator stores a copy of the
+    system it was built for, and a reduced system stores a copy of the system it came
+    from.  A field `copy` forgets is a field that silently empties, everywhere.
+
+    So these compare the whole of `__dict__` rather than a list of fields anyone has to
+    remember to extend.  A field added to `ODESystem` later and left out of `copy` fails
+    here without being named.
+    '''
+
+    def fully_populated(self):
+        '''An original system with every optional piece of state set.'''
+        system = ODESystem.from_equations(['dx/dt = c_0*x*y',
+                                           'dy/dt = c_1*(1-x)*(1-y)'])
+        system.update_initial_conditions({'x': 'x_0'})
+        system.add_constraint('c_0', 'c_1*2')
+        system.update_parameter_values({'c_1': 3})
+        system.require_same_unit({sympy.Symbol('x'): sympy.Symbol('y')})
+        return system
+
+    def a_reduction(self):
+        '''A reduced system, which carries the provenance an original one does not.'''
+        system = ODESystem.from_equations(
+            ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
+        return ODETranslator.from_ode_system(system).translate_general(
+            system, normalise_parameters=False)
+
+    def assert_copy_is_complete(self, system):
+        duplicate = system.copy()
+        self.assertEqual(sorted(vars(system)), sorted(vars(duplicate)),
+                         'copy produced an object with different state')
+        for field in sorted(vars(system)):
+            with self.subTest(field=field):
+                self.assertEqual(vars(system)[field], vars(duplicate)[field])
+
+    def test_an_original_system_copies_completely(self):
+        self.assert_copy_is_complete(self.fully_populated())
+
+    def test_a_reduced_system_copies_completely(self):
+        self.assert_copy_is_complete(self.a_reduction())
+
+    def test_the_provenance_a_reduction_carries_is_not_empty(self):
+        '''
+        Guards the test above: comparing two empty records passes while saying nothing, and
+        prey-predator's general reduction keeps no auxiliaries once they are normalised,
+        which is how a check like that goes quietly hollow.
+        '''
+        reduced = self.a_reduction()
+        self.assertTrue(reduced.named_symbols)
+        self.assertTrue(reduced.symbol_kinds)
+        self.assertTrue(reduced.auxiliary_names)
+        self.assertIsNotNone(reduced.original_system)
+        self.assertIsNotNone(reduced.scheme)
+
+    def test_a_copy_does_not_share_mutable_state(self):
+        ''' A copy that shares a dict is not a copy; editing one would edit the other. '''
+        system = self.fully_populated()
+        duplicate = system.copy()
+        duplicate.update_parameter_values({'c_0': 6})
+        self.assertNotIn(sympy.Symbol('c_0'), system.parameter_values)
+
+    def test_editing_the_original_does_not_reach_a_translator(self):
+        '''
+        A translator stores a copy for this reason: the scaling matrix and multiplier
+        describe the system as it was, so a later edit is not one the translator could
+        honour even if it saw it.
+        '''
+        system = ODESystem.from_equations(['dx/dt = c_0*x'])
+        translator = ODETranslator.from_ode_system(system)
+        system.update_parameter_values({'c_0': 5})
+        self.assertEqual({}, translator.system.parameter_values)
+        self.assertEqual(sympy.Integer(5), system.parameter_values[sympy.Symbol('c_0')])
 
 
 class TestParameterValuesSurviveTheSystem(TestCase):

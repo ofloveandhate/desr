@@ -447,7 +447,8 @@ Inspect
 
 Translate and reduce the system
 
-    >>> reduced_system = translator.translate(system_l, naming_scheme={'parameters': 'c', 'independent': 'T', 'dependents': ['s','c']})
+    >>> translator.set_naming_scheme({'parameters': 'c', 'independent': 'T', 'dependents': ['s','c']})
+    >>> reduced_system = translator.translate(system_l)
     >>> reduced_system
     dT/dT = 1
     dc/dT = -c*c1*c3*s/c2 - c*c3/c2 + c0*c3*s/c2

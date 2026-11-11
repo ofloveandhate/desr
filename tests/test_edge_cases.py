@@ -19,36 +19,22 @@ from desr.ode_translation import ODETranslator
 
 
 def expected_variable_count(system, translator, scheme=None, include_aux_vars=True):
-    '''
+    """
     How many variables the reduced system should have.
 
-    This is scheme-dependent, and the library does not expose it yet; when it does, this
-    helper should be deleted in favour of asking.
-
-      - parameter scheme: the n - r coordinates, and nothing else
-      - dependent-variable scheme: the independent variable, r auxiliaries and the
-        invariants of the remaining n - 1 variables, so n in total
-      - general scheme: as above but the independent variable is outside the count, n + 1,
-        or n - r + 1 when the auxiliaries are dropped
+    The library answers this itself now, so this asks rather than keeping a second copy of
+    the rule -- which is what the previous version of this helper was, and what would have
+    had to be taught about normalisation and the clock identification separately.  Counts
+    derived by hand, rather than from the library, are asserted in
+    `test_the_extra_variable_goes_to_the_identification` in test_ode_translation.py.
 
     `scheme` says which one, for a caller who picked it rather than letting `translate`
     choose.  Inferring it is only right when `translate` did the choosing -- calling
     `translate_general` on a system that `translate` would have given to another scheme is
     perfectly legal and gives a different count.
-    '''
-    n = len(system.symbols)
-    if scheme is None:
-        if translator._is_translate_parameter_compatible(system):
-            scheme = 'parameter'
-        elif translator.scaling_matrix[:, system.indep_var_index].is_zero_matrix:
-            scheme = 'dep_var'
-        else:
-            scheme = 'general'
-    if scheme == 'parameter':
-        return n - translator.r
-    if scheme == 'dep_var':
-        return n
-    return n + 1 if include_aux_vars else n - translator.r + 1
+    """
+    return translator.expected_variable_count(system, scheme=scheme,
+                                              include_aux_vars=include_aux_vars)
 
 
 class TestDisconnectedSymbols(TestCase):
@@ -247,11 +233,11 @@ class TestAdversarialNames(TestCase):
         # Both `from_equations` and desr.numerics go through sympy_helper, so 'S' is the
         # same symbol in each.  It used to be sympy's singleton registry in numerics, so
         # naming a variable by its own string did not find it.
-        from desr.numerics import NumericTranslation
+        from desr.numerics import NumericTranslator
         system = ODESystem.from_equations(['dS/dt = -k*S'])
         system.reorder_variables(['t', 'S', 'k'])
         self.assertIn(sympy.Symbol('S'), system.symbols)
-        numeric = NumericTranslation(system, ODETranslator.from_ode_system(system))
+        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate())
 
         by_symbol = numeric.forward({sympy.Symbol('t'): 1.0, sympy.Symbol('S'): 2.0,
                                      sympy.Symbol('k'): 0.5})
