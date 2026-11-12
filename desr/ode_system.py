@@ -227,6 +227,8 @@ class ODESystem(object):
             anything.  Also stored rather than inferred: auxiliary-ness is a fact about
             which block of the Hermite multiplier a symbol came from, and nothing in the
             reduced system's own equations records it.
+        physical_dimensions (dict, optional): Declared physical dimensions, as
+            :meth:`set_dimension` records them.
         original_system (ODESystem, optional): For a reduced system, the system it was
             reduced from.  `named_symbols`' monomials are written in *that* system's
             symbols, so without it the record names symbols belonging to nobody, and two
@@ -261,7 +263,7 @@ class ODESystem(object):
     '''
 
     def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None,
-                 column_monomials=None):
+                 column_monomials=None, physical_dimensions=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -280,7 +282,7 @@ class ODESystem(object):
         self._auxiliary_names = tuple(auxiliary_names or ())
         self._normalisations = dict(normalisations or {})
         self._named_symbols = None if named_symbols is None else dict(named_symbols)
-        self._physical_dimensions = {}
+        self._physical_dimensions = dict(physical_dimensions or {})
         self._symbol_kinds = None if symbol_kinds is None else dict(symbol_kinds)
         self._column_monomials = (None if column_monomials is None
                                   else tuple(column_monomials))
@@ -363,7 +365,8 @@ class ODESystem(object):
                            named_symbols=self._named_symbols,
                            symbol_kinds=self._symbol_kinds,
                            original_system=self._original_system,
-                           column_monomials=self._column_monomials)
+                           column_monomials=self._column_monomials,
+                           physical_dimensions=self._physical_dimensions)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
             system.add_constraint(eqn.lhs, eqn.rhs)
@@ -809,13 +812,28 @@ class ODESystem(object):
     @property
     def normalisations(self):
         '''
-        The original symbols this reduction set to 1, and the 1 it set them to.
+        The value each original symbol takes in the units this reduction chose.
 
-        Normalisation is a **choice of units**.  An auxiliary *is* a unit, and a unit
-        measured in itself is 1, so spending an auxiliary that is a monomial in the
-        original parameters pins some of those parameters.  This records which, in the
-        caller's own symbols, because that is what a recovery has to be told and the
-        reduced system no longer names them.
+        The reduction adopts auxiliaries as units: for the enzyme-catalysed chain it
+        takes :math:`1/k_{23}` as the unit of time and two monomials in the rate
+        constants as units of concentration.  Each adopted quantity then measures 1, the
+        way a metre measures one metre.  Working that through
+        :attr:`~desr.ode_translation.ODETranslator.inv_herm_mult`, which writes every
+        original symbol as a monomial in the reduced ones, leaves some original symbols
+        as numbers, and those are what this records.
+
+        So ``{k_2_3: 1}`` is a **consequence** of the units chosen, not a claim about
+        :math:`k_{23}`.  Read as a claim it is not even false, since :math:`k_{23}` has
+        dimension 1/time and a quantity of dimension 1/time cannot equal a pure number
+        until a unit is named.
+
+        **Substituting this into an invariant gives its value, not an equality.**  The
+        enzyme chain's :math:`y_1` is :math:`e k_{01}/k_{23}`, which is dimensionless.
+        Substituting here turns it into :math:`e`, which is not -- what the result means
+        is "the value of :math:`e` in the chosen units", and the dimensionless reading is
+        only available in the first form.  This is why
+        :attr:`named_symbols` records monomials in the caller's symbols and never
+        substitutes.
 
         Empty when nothing was normalised: for an original system, for a general reduction
         asked not to normalise, and for one with no parameter auxiliary to spend.  It is
@@ -1763,7 +1781,14 @@ class ODESystem(object):
                                 original_system=self._original_system,
                                 # In the *original* system's symbols, so a
                                 # substitution on this one leaves them alone.
-                                column_monomials=self._column_monomials)
+                                column_monomials=self._column_monomials,
+                                # A dimension belongs to a symbol, so a rename
+                                # takes it along and a removal drops it.
+                                physical_dimensions={
+                                    to_sub.get(symbol, symbol): dimension
+                                    for symbol, dimension
+                                    in self._physical_dimensions.items()
+                                    if to_sub.get(symbol, symbol) in new_vars})
 
         subs_system._variable_sanity_check()
         return subs_system
@@ -2467,7 +2492,7 @@ class ODESystem(object):
 
         Declaring a dimension changes nothing else -- not the scaling matrix, the
         multiplier, the structural dimensions, or the reduction.  It adds a reading, in
-        which :meth:`dimension_ranks` can report how much of a reduction is a change of
+        which :meth:`num_dimensions` can report how much of a reduction is a change of
         unit and how much is not.
 
         Args:
@@ -2636,7 +2661,7 @@ class ODESystem(object):
             physical[symbol] = sympy.simplify(monomial)
         return physical
 
-    def dimension_ranks(self, scaling_matrix=None):
+    def num_dimensions(self, scaling_matrix=None):
         """
         How many dimensions this system has, of each kind.
 
@@ -2653,19 +2678,22 @@ class ODESystem(object):
                 the difference: directions that are symmetries of the equations without
                 being changes of unit.
 
+        The names of the structural dimensions are in :meth:`dimensions_of`, and of the
+        physical ones in :meth:`physical_dimensions_of`; this counts them.
+
         Args:
             scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
 
         >>> system = ODESystem.from_equations(
         ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        >>> system.dimension_ranks()
+        >>> system.num_dimensions()
         {'structural': 2, 'physical': 0, 'structural_only': 2}
 
         Every scaling Michaelis-Menten admits is a change of unit:
 
         >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
-        >>> system.dimension_ranks()
+        >>> system.num_dimensions()
         {'structural': 2, 'physical': 2, 'structural_only': 0}
 
         The cell cycle control network gives ``structural`` 7 and ``physical`` 2.

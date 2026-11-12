@@ -824,6 +824,9 @@ class TestCopyCarriesEverything(TestCase):
         system.add_constraint('c_0', 'c_1*2')
         system.update_parameter_values({'c_1': 3})
         system.require_same_unit({sympy.Symbol('x'): sympy.Symbol('y')})
+        # Populated, not merely present: comparing two empty dicts passes while
+        # checking nothing, which is how `copy` came to drop this one silently.
+        system.set_dimensions({'x': 'concentration', 'y': 'concentration'})
         return system
 
     def a_reduction(self):
@@ -1486,23 +1489,23 @@ class TestPhysicalDimensions(TestCase):
     def test_the_ranks_say_how_much_is_structure_alone(self):
         system = self.michaelis_menten()
         self.assertEqual({'structural': 2, 'physical': 0, 'structural_only': 2},
-                         system.dimension_ranks())
+                         system.num_dimensions())
         system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
         # Every scaling Michaelis-Menten admits is a change of unit.
         self.assertEqual({'structural': 2, 'physical': 2, 'structural_only': 0},
-                         system.dimension_ranks())
+                         system.num_dimensions())
 
         enzyme = self.enzyme()
         enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
                                'f': 'concentration', 'x': 'concentration'})
         self.assertEqual({'structural': 4, 'physical': 2, 'structural_only': 2},
-                         enzyme.dimension_ranks())
+                         enzyme.num_dimensions())
 
     def test_nothing_declared_is_not_a_claim_that_there_are_none(self):
         system = self.michaelis_menten()
         self.assertEqual({}, system.physical_dimensions)
         self.assertEqual({}, system.physical_dimensions_of())
-        self.assertEqual(0, system.dimension_ranks()['physical'])
+        self.assertEqual(0, system.num_dimensions()['physical'])
 
     def test_naming_changes_nothing(self):
         # Physical dimensions are an overlay.  Whatever is declared, the scaling matrix,

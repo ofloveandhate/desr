@@ -254,6 +254,54 @@ def draw_substitution(ax, pairs, font, heights):
     ax.axis('off')
     return ax
 
+
+UNIT_COLOUR, VALUE_COLOUR = '#8a4500', '#1f5c86'
+
+
+def draw_unit_table(ax, rows, font, heights, kind):
+    """
+    One half of the unit table: the units, or the values.
+
+    Every symbol a reduction introduces is a unit or the value of one of the caller's
+    quantities measured in those units.  The two middle maps of the chain are those two
+    halves, so each panel draws its own.
+
+    `heights` puts a row at the height its symbol has in the graph alongside, so a
+    symbol can be followed across the figure.
+    """
+    import sympy
+
+    wanted = [row for row in rows if row['role'] == kind]
+    if not wanted:
+        ax.text(0.5, 0.5, 'nothing to do', fontsize=font, style='italic',
+                ha='center', va='center', color='#777777', transform=ax.transAxes)
+        ax.axis('off')
+        return ax
+
+    colour = UNIT_COLOUR if kind == 'unit' else VALUE_COLOUR
+    for index, row in enumerate(wanted):
+        y = heights.get(row['symbol'])
+        if y is None:
+            y = 1.0 - index / max(len(wanted) - 1, 1)
+
+        ax.text(-0.04, y, '$' + sympy.latex(row['symbol']) + '$', fontsize=font,
+                ha='right', va='center')
+        ax.text(0.04, y, '$=\\;' + sympy.latex(row['denotes']) + '$',
+                fontsize=font - 0.5, ha='left', va='center')
+        if kind == 'unit':
+            tail = 'the unit of ${}$'.format(sympy.latex(row['dimension']))
+        elif row['of'] is not None:
+            tail = 'the value of ${}$'.format(sympy.latex(row['of']))
+        else:
+            tail = 'dimensionless'
+        ax.text(1.46, y, tail, fontsize=font - 1, ha='right', va='center',
+                color=colour)
+
+    ax.set_xlim(-0.5, 1.5)
+    ax.set_ylim(-0.12, 1.12)
+    ax.axis('off')
+    return ax
+
 def _system_box(figure, rect, title, system, font):
     ax = figure.add_axes(rect)
     ax.axis('off')
@@ -314,22 +362,21 @@ def chain_figure(system, title, size=(13.3, 7.5), font=6.5):
     heights = {symbol: place[1] for (layer, symbol), place
                in node_positions(forward).items() if layer == REDUCED}
 
-    maps = [('forward', None), ('normalise', normalise_pairs(
-                translator, system, reduced, normalised)),
-            ('identify', identify_pairs(translator, system, reduced, normalised, final)),
+    table = translator.unit_table(system)
+    maps = [('forward', None), ('units', 'unit'), ('values', 'value'),
             ('reverse', None)]
 
     # Centred between the two boxes it maps between, so each reads as the arrow from one
     # to the next.  The two exponent graphs carry expressions and want the width; a
     # substitution is two short columns and does not.
-    for index, (name, pairs) in enumerate(maps):
+    for index, (name, kind) in enumerate(maps):
         centre = (box_centre[index] + box_centre[index + 1]) / 2
         reach = box_centre[index + 1] - box_centre[index]
-        graph_width = reach * (0.60 if pairs is not None else 0.96)
+        graph_width = reach * (0.88 if kind is not None else 0.96)
         ax = figure.add_axes([centre - graph_width / 2, bottom,
                               graph_width, top - bottom])
-        if pairs is not None:
-            draw_substitution(ax, pairs, font + 1, heights)
+        if kind is not None:
+            draw_unit_table(ax, table, font + 0.5, heights, kind)
         else:
             # The forward graph says what each new symbol *is* -- that is the whole
             # content of a change of coordinates, and without it the reduced column is a

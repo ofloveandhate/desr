@@ -704,6 +704,115 @@ class ODETranslator(object):
         system = self._system_or(system)
         return system.dimensions_of(self.scaling_matrix)
 
+
+    def _measured_symbol(self, invariant, system):
+        """
+        The original symbol an invariant is the value of, or :const:`None`.
+
+        An invariant is dimensionless, so it is some quantity divided by a unit.  When
+        that quantity is a single one of the caller's symbols, the invariant reads as
+        "the value of `e`", which is shorter and clearer than its monomial.  Solved as
+        ``V_i a = exponents(symbol / invariant)`` over the integers: a solution says the
+        quotient is a monomial in the auxiliaries, which is what being a unit means.
+
+        :const:`None` when no single symbol works.  Hubert & Labahn 6.6 has one such
+        invariant: with one auxiliary and two invariants there are not enough units to go
+        round, and the second is a genuine combination.
+        """
+        symbols = list(system.symbols)
+        block = self.herm_mult_i
+        for candidate in symbols:
+            quotient = sympy.simplify(candidate / invariant)
+            powers = quotient.as_powers_dict()
+            exponents = sympy.Matrix([powers.get(s, 0) for s in symbols])
+            try:
+                solution, free = block.gauss_jordan_solve(exponents)
+            except ValueError:
+                continue
+            solution = solution.subs({parameter: 0 for parameter in free})
+            if not all(value.is_integer for value in solution):
+                continue
+            if block * solution == exponents:
+                return candidate
+        return None
+
+    def unit_table(self, system=None):
+        """
+        One row per column of the multiplier: what it denotes, and what it is for.
+
+        Every symbol a reduction introduces is one of two things -- a **unit**, or the
+        **value** of one of the caller's quantities measured in those units.  The
+        auxiliaries are the units; the invariants are the values.  The table says which
+        is which and names the quantity each value belongs to.
+
+        Dimensions are the physical ones where any have been declared with
+        :meth:`~desr.ode_system.ODESystem.set_dimension`, and the structural ones
+        otherwise.
+
+        Args:
+            system (ODESystem, optional): Defaults to the system this translator was
+                built for.
+
+        Returns:
+            list of dict: in column order, with keys
+
+            ``symbol``
+                the reduced system's name for this column.
+            ``denotes``
+                the quantity, as a monomial in the original symbols.
+            ``dimension``
+                of that quantity; 1 for every invariant.
+            ``role``
+                ``'unit'`` or ``'value'``.
+            ``of``
+                for a value, the original symbol it measures, or :const:`None` when the
+                invariant is a combination rather than one symbol's value.
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
+        ...                        'f': 'concentration', 'x': 'concentration'})
+        >>> table = ODETranslator.from_ode_system(enzyme).unit_table()
+        >>> for row in table[:2]:
+        ...     print(row['symbol'], row['denotes'], row['dimension'], row['role'])
+        x0 1/k_2_3 time unit
+        x1 k_2_3/k_0_1 concentration unit
+
+        The reduction coins three units of concentration, because the equations never
+        force the three branches to share a scale:
+
+        >>> sorted(str(row['dimension']) for row in table if row['role'] == 'unit')
+        ['concentration', 'concentration', 'concentration', 'time']
+
+        >>> for row in table[4:6]:
+        ...     print(row['symbol'], '=', row['denotes'], '= the value of', row['of'])
+        y0 = k_2_3*t = the value of t
+        y1 = e*k_0_1/k_2_3 = the value of e
+        """
+        system = self._system_or(system)
+        dimensions = (system.physical_dimensions_of(self.scaling_matrix)
+                      if system.physical_dimensions
+                      else system.dimensions_of(self.scaling_matrix))
+
+        names = self.column_names(system)
+        monomials = self.column_monomials()
+
+        rows = []
+        for index, name in enumerate(names):
+            monomial = monomials[index]
+            powers = monomial.as_powers_dict()
+            dimension = sympy.simplify(sympy.prod(
+                [dimensions[s] ** powers.get(s, 0) for s in system.symbols]))
+            if index < self.r:
+                rows.append({'symbol': name, 'denotes': monomial,
+                             'dimension': dimension, 'role': 'unit', 'of': None})
+            else:
+                rows.append({'symbol': name, 'denotes': monomial,
+                             'dimension': dimension, 'role': 'value',
+                             'of': self._measured_symbol(monomial, system)})
+        return rows
+
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
                          normalise_parameters=True, identify_indep_var=True):
         '''
