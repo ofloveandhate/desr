@@ -1265,14 +1265,13 @@ class TestTheTwoFacesOfAValue(TestCase):
 
 class TestStructuralDimensions(TestCase):
     '''
-    A scaling symmetry is a direction the system can be rescaled in, so a symbol's column
-    of the scaling matrix says how it transforms -- its weight -- and weights read
-    multiplicatively are dimensions.
+    A symbol's column of the scaling matrix says how it transforms under each scaling --
+    its weight -- and weights written multiplicatively are dimensions.
 
-    **Structural, not physical.** These come from the equations. The dimensions a
-    modeller means are contained among them, because a dimensionally consistent system is
-    invariant under its own changes of unit, but the containment is usually strict, and
-    nothing here can tell the two apart. Naming the physical ones changes none of this.
+    These are structural dimensions, from the equations.  Physical dimensions are
+    contained among them, since a dimensionally consistent system is invariant under its
+    own changes of unit, but the containment is usually strict and nothing here
+    distinguishes the two.  Declaring physical dimensions changes none of this.
     '''
 
     MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
@@ -1301,10 +1300,8 @@ class TestStructuralDimensions(TestCase):
             [dimensions[s] ** powers.get(s, 0) for s in system.symbols]))
 
     def test_every_invariant_is_dimensionless(self):
-        '''
-        The reason an invariant is the content of a reduction: a value is a number
-        relative to a scale, except at dimension 1, where every scale agrees.
-        '''
+        # A value is a number relative to a scale, so only at dimension 1 is it
+        # independent of which scale was chosen.
         from desr.ode_translation import scale_action
         for label, system in self.systems():
             dimensions = system.dimensions_of()
@@ -1315,11 +1312,8 @@ class TestStructuralDimensions(TestCase):
                         1, self.dimension_of(monomial, dimensions, system))
 
     def test_the_auxiliaries_carry_one_dimension_each(self):
-        '''
-        A * V_i is the identity, so the auxiliaries are a basis of dimension space: r
-        directions, r auxiliaries, one apiece and no two alike. That is what makes
-        "adopt the auxiliaries as scales" a definite act rather than a reading.
-        '''
+        # A * V_i is the identity, so the auxiliaries are a basis of dimension space:
+        # r directions and r auxiliaries, one apiece and no two alike.
         from desr.ode_translation import scale_action
         for label, system in self.systems():
             dimensions = system.dimensions_of()
@@ -1358,11 +1352,9 @@ class TestStructuralDimensions(TestCase):
                          dimensions[sympy.Symbol('t')])
 
     def test_a_direction_with_nothing_at_plus_one_falls_back_to_minus_one(self):
-        '''
-        Hubert & Labahn 6.6 has no symbol of weight +1 in its single direction, but z1
-        sits there at -1.  Both generate the lattice direction, so naming by the other
-        one is presentation and changes no matrix.
-        '''
+        # Hubert & Labahn 6.6 has no symbol of weight +1 in its single direction, but
+        # z1 sits there at -1.  Both generate the same lattice direction, so naming by
+        # the other one is presentation and changes no matrix.
         system = ODESystem.from_equations(self.HL66)
         dimensions = system.dimensions_of()
         self.assertEqual(sympy.Symbol('dimension_of_z1'),
@@ -1371,22 +1363,17 @@ class TestStructuralDimensions(TestCase):
                          dimensions[sympy.Symbol('t')])
 
     def test_the_clock_can_be_dimensionless(self):
-        '''
-        Hubert & Labahn 6.4's scaling does not act on t at all, which is exactly the
-        condition the dependent-variable scheme is chosen by.  So t has dimension 1, and
-        that is a fact about the system rather than an omission.
-        '''
+        # Hubert & Labahn 6.4's scaling does not act on t, which is the condition the
+        # dependent-variable scheme is chosen by.  So t has dimension 1.
         system = ODESystem.from_equations(self.HL64)
         self.assertEqual(1, system.dimensions_of()[sympy.Symbol('t')])
         self.assertEqual(ODETranslator.from_ode_system(system).scheme(system),
                          ReductionScheme.DEP_VAR)
 
     def test_naming_physical_dimensions_would_change_none_of_this(self):
-        '''
-        The containment is strict and the structure does not care.  The enzyme chain has
-        four structural dimensions; a modeller would call three of them concentration and
-        one time, which is a statement about those directions and not a change to them.
-        '''
+        # The enzyme chain has four structural dimensions.  A modeller would call three
+        # of them concentration and one time, which says something about those
+        # directions without changing them.
         from desr.chemical_reaction_network import ChemicalReactionNetwork
         system = ChemicalReactionNetwork.from_diagram(
             self.ENZYME_CHAIN).to_ode_system()
@@ -1408,3 +1395,127 @@ class TestStructuralDimensions(TestCase):
         matrix = system.maximal_scaling_matrix()
         self.assertEqual(system.dimensions_of(),
                          system.dimensions_of(scaling_matrix=matrix))
+
+
+class TestPhysicalDimensions(TestCase):
+    '''
+    Physical dimensions are an overlay on the structural ones.  A dimensionally
+    consistent system is invariant under its own changes of unit, so physical directions
+    sit among the structural ones, usually strictly.  The gap is reduction that no choice
+    of unit accounts for.
+    '''
+
+    MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                        'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+    ENZYME_CHAIN = 'x + e -> y + e\ny -> z\nz + f -> x + f'
+
+    def michaelis_menten(self):
+        return ODESystem.from_equations(self.MICHAELIS_MENTEN)
+
+    def enzyme(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        return ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
+
+    def test_a_few_declarations_determine_the_rest(self):
+        # Two declarations out of seven symbols.  The structural weights fix the
+        # relations between symbols, so the others follow.
+        system = self.michaelis_menten()
+        system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        physical = system.physical_dimensions_of()
+
+        time, concentration = sympy.Symbol('time'), sympy.Symbol('concentration')
+        self.assertEqual(time, physical[sympy.Symbol('t')])
+        self.assertEqual(concentration, physical[sympy.Symbol('s')])
+        self.assertEqual(1 / time, physical[sympy.Symbol('k_2')])
+        self.assertEqual(1 / (concentration * time), physical[sympy.Symbol('k_1')])
+
+    def test_declaring_one_dimension_merges_structural_directions(self):
+        # The enzyme chain gives e, f and x three different structural dimensions.
+        # Declaring all three to be concentration identifies those directions, and
+        # symbols that were never declared follow.
+        system = self.enzyme()
+        structural = system.dimensions_of()
+        species = [structural[sympy.Symbol(name)] for name in ('e', 'f', 'x')]
+        self.assertEqual(3, len(set(species)))
+
+        system.set_dimensions({'t': 'time', 'e': 'concentration',
+                               'f': 'concentration', 'x': 'concentration'})
+        physical = system.physical_dimensions_of()
+        self.assertEqual(
+            1, len({physical[sympy.Symbol(name)] for name in ('e', 'f', 'x')}))
+        self.assertEqual(physical[sympy.Symbol('e')], physical[sympy.Symbol('y')])
+        self.assertEqual(physical[sympy.Symbol('e')], physical[sympy.Symbol('z')])
+
+    def test_every_invariant_is_physically_dimensionless_too(self):
+        # A change of unit is one of the scalings an invariant is invariant under, so an
+        # invariant carries no dimension.  This is also the condition under which the
+        # declarations are consistent.
+        from desr.ode_translation import scale_action
+        system = self.enzyme()
+        system.set_dimensions({'t': 'time', 'e': 'concentration',
+                               'f': 'concentration', 'x': 'concentration'})
+        physical = system.physical_dimensions_of()
+        translator = ODETranslator.from_ode_system(system)
+        for monomial in scale_action(system.symbols, translator.herm_mult_n):
+            with self.subTest(invariant=str(monomial)):
+                powers = monomial.as_powers_dict()
+                self.assertEqual(1, sympy.simplify(sympy.prod(
+                    [physical[s] ** powers.get(s, 0) for s in system.symbols])))
+
+    def test_a_declaration_the_equations_contradict_is_refused(self):
+        # k_2 multiplies a concentration to give a rate of change of concentration, so
+        # it is an inverse time.  Declaring it a concentration has no solution.
+        system = self.michaelis_menten()
+        system.set_dimensions({'t': 'time', 'k_2': 'concentration'})
+        with self.assertRaises(ValueError) as caught:
+            system.physical_dimensions_of()
+        self.assertIn('dimensionally consistent', str(caught.exception))
+
+    def test_a_sum_is_not_a_dimension(self):
+        system = self.michaelis_menten()
+        with self.assertRaises(ValueError) as caught:
+            system.set_dimension('t', 'time + length')
+        self.assertIn('not a dimension', str(caught.exception))
+
+    def test_a_symbol_of_another_system_is_refused(self):
+        system = self.michaelis_menten()
+        with self.assertRaises(ValueError) as caught:
+            system.set_dimension('nonsense', 'time')
+        self.assertIn('not a symbol of this system', str(caught.exception))
+
+    def test_the_counts_say_how_much_is_structure_alone(self):
+        system = self.michaelis_menten()
+        self.assertEqual((2, 0), system.dimension_counts())
+        system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        # Every scaling Michaelis-Menten admits is a change of unit.
+        self.assertEqual((2, 2), system.dimension_counts())
+
+        enzyme = self.enzyme()
+        enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
+                               'f': 'concentration', 'x': 'concentration'})
+        self.assertEqual((4, 2), enzyme.dimension_counts())
+
+    def test_nothing_declared_is_not_a_claim_that_there_are_none(self):
+        system = self.michaelis_menten()
+        self.assertEqual({}, system.physical_dimensions)
+        self.assertEqual({}, system.physical_dimensions_of())
+        self.assertEqual(0, system.dimension_counts()[1])
+
+    def test_naming_changes_nothing(self):
+        # Physical dimensions are an overlay.  Whatever is declared, the scaling matrix,
+        # the multiplier, its inverse, the structural dimensions and the reduced system
+        # are the same.
+        plain, named = self.enzyme(), self.enzyme()
+        named.set_dimensions({'t': 'time', 'e': 'concentration',
+                              'f': 'concentration', 'x': 'concentration'})
+
+        self.assertEqual(plain.maximal_scaling_matrix(),
+                         named.maximal_scaling_matrix())
+        self.assertEqual(plain.dimensions_of(), named.dimensions_of())
+
+        before = ODETranslator.from_ode_system(plain)
+        after = ODETranslator.from_ode_system(named)
+        self.assertEqual(before.herm_mult, after.herm_mult)
+        self.assertEqual(before.inv_herm_mult, after.inv_herm_mult)
+        self.assertEqual(before.r, after.r)
+        self.assertEqual(before.translate(), after.translate())

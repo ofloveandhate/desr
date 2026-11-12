@@ -280,6 +280,7 @@ class ODESystem(object):
         self._auxiliary_names = tuple(auxiliary_names or ())
         self._normalisations = dict(normalisations or {})
         self._named_symbols = None if named_symbols is None else dict(named_symbols)
+        self._physical_dimensions = {}
         self._symbol_kinds = None if symbol_kinds is None else dict(symbol_kinds)
         self._column_monomials = (None if column_monomials is None
                                   else tuple(column_monomials))
@@ -2398,25 +2399,21 @@ class ODESystem(object):
         '''
         The **structural** dimension of every symbol, as a monomial in dimension names.
 
-        A scaling symmetry is a direction in which the system can be rescaled, so the
-        column of the scaling matrix belonging to a symbol says how that symbol transforms
-        -- its weight.  Read multiplicatively, those weights are dimensions: dimensions
-        form a free abelian group, which is why :math:`k_{01}` comes back as a quotient
-        rather than as a list of numbers.
+        A symbol's column of the scaling matrix says how that symbol transforms under
+        each scaling -- its weight.  Those weights are dimensions, written
+        multiplicatively, so a rate constant comes back as a quotient of dimension names
+        rather than as a list of integers.
 
-        **Structural, not physical.**  These come from the equations, and there are
-        :math:`r` of them.  The dimensions a modeller means -- time, concentration -- are
-        *contained* among them, because a dimensionally consistent system is invariant
-        under its own changes of unit, but the containment is usually strict: the cell
-        cycle network has seven structural dimensions where the physics has two, and the
-        other five are symmetries of the equations that are not changes of unit.  Which
-        of these directions are physical is something only a modeller can say, and saying
-        it changes nothing here -- not this, not the scaling matrix, not the multiplier,
-        not the reduction.
+        These dimensions are structural: they come from the equations, and there are
+        :math:`r` of them.  Physical dimensions -- time, concentration -- are contained
+        among them, since a dimensionally consistent system is invariant under its own
+        changes of unit, but the containment is usually strict.  The cell cycle network
+        has seven structural dimensions and two physical ones.  Declaring which are
+        physical, with :meth:`set_dimension`, leaves this and everything downstream of it
+        unchanged.
 
-        An invariant has dimension 1, which is what makes it the content of a reduction:
-        a value is a number relative to a scale, except at dimension 1, where every scale
-        agrees.
+        Invariants have dimension 1.  A value is a number relative to a scale, so only at
+        dimension 1 does the value not depend on the choice of scale.
 
         Args:
             scaling_matrix (sympy.Matrix, optional): The scaling to read dimensions from.
@@ -2458,6 +2455,224 @@ class ODESystem(object):
                 monomial *= name ** (sign * scaling_matrix[row, column])
             dimensions[symbol] = monomial
         return dimensions
+
+
+    def set_dimension(self, symbol, dimension):
+        """
+        Declare the **physical** dimension of a symbol: time, concentration, length.
+
+        A dimension, not a scale: molar rather than millimolar, metres rather than
+        nanometres.  Choosing scales is what a reduction does, and :meth:`dimensions_of`
+        gives the structural dimensions.
+
+        Declaring a dimension changes nothing else -- not the scaling matrix, the
+        multiplier, the structural dimensions, or the reduction.  It adds a reading, in
+        which :meth:`dimension_counts` can report how much of a reduction is a change of
+        unit and how much is not.
+
+        Args:
+            symbol (str or sympy.Symbol): One of this system's symbols.
+            dimension: A dimension name, or a Laurent monomial in dimension names --
+                ``'concentration'``, ``'1/time'``, ``'mass/length**3'``.
+
+        Raises:
+            ValueError: if `symbol` is not a symbol of this system, or `dimension` is not
+                a monomial.  A sum is not a dimension.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> system.set_dimension('t', 'time')
+        >>> system.set_dimension('e_0', 'concentration')
+        >>> system.physical_dimensions[sympy.Symbol('t')]
+        time
+
+        Two declarations are enough here, and the rest follow:
+
+        >>> physical = system.physical_dimensions_of()
+        >>> physical[sympy.Symbol('k_1')]
+        1/(concentration*time)
+        >>> physical[sympy.Symbol('s')]
+        concentration
+        """
+        symbol = to_symbol(symbol) if isinstance(symbol, str) else symbol
+        if symbol not in self.symbols:
+            raise ValueError(
+                '{} is not a symbol of this system.  Expected one of: {}.'.format(
+                    symbol, ', '.join(map(str, self.symbols))))
+
+        dimension = sympify_expression(dimension)
+        powers = dimension.as_powers_dict()
+        if dimension.free_symbols and not all(
+                power.is_integer and base.is_Symbol
+                for base, power in powers.items()):
+            raise ValueError(
+                '{} is not a dimension.  A dimension is a product of dimension names '
+                'with whole-number powers -- concentration, 1/time, mass/length**3 -- '
+                'because dimensions multiply and nothing else.  A sum is not a '
+                'dimension.'.format(dimension))
+
+        self._physical_dimensions[symbol] = dimension
+
+    def set_dimensions(self, mapping):
+        """
+        :meth:`set_dimension` for several at once, from ``{symbol: dimension}``.
+        """
+        for symbol, dimension in dict(mapping).items():
+            self.set_dimension(symbol, dimension)
+
+    @property
+    def physical_dimensions(self):
+        """
+        The physical dimensions that were **declared**, by :meth:`set_dimension`.
+
+        :meth:`physical_dimensions_of` is the derived answer for every symbol.
+
+        Returns:
+            dict: ``{symbol: dimension}``, empty when nothing has been declared.
+        """
+        return dict(self._physical_dimensions)
+
+    def _physical_map(self, scaling_matrix):
+        """
+        The map taking a structural dimension to a physical one, as one row per
+        physical dimension name.
+
+        A physical change of unit is a scaling the equations admit, so the physical
+        action is the structural one composed with a homomorphism, and on dimensions that
+        is a linear map ``phi`` with ``phi(weight(s)) == declared(s)`` for everything
+        declared.  Solved one physical name at a time: each is an independent row.
+
+        A structural direction no declaration reaches is taken to be physically trivial,
+        which sets the free parameters of the solve to zero.  For the cell cycle network
+        that is five directions out of seven.
+
+        Returns:
+            dict: ``{dimension name: row vector over the structural directions}``.
+
+        Raises:
+            ValueError: if no such map exists.  That happens when the declarations give
+                a dimension to some combination of symbols that the scaling leaves
+                unchanged.  Invariants cannot carry a dimension, because a change of unit
+                is one of the scalings they are invariant under.
+        """
+        declared = self._physical_dimensions
+        if not declared:
+            return {}
+
+        symbols = list(self.symbols)
+        rows = scaling_matrix.shape[0]
+        names = sorted(
+            {base for dimension in declared.values()
+             for base in dimension.free_symbols}, key=str)
+
+        columns = [symbols.index(symbol) for symbol in declared]
+        weights = sympy.Matrix(
+            [[scaling_matrix[row, column] for row in range(rows)]
+             for column in columns])
+
+        solved = {}
+        for name in names:
+            wanted = sympy.Matrix(
+                [[dimension.as_powers_dict().get(name, 0)]
+                 for dimension in declared.values()])
+            try:
+                row, free = weights.gauss_jordan_solve(wanted)
+            except ValueError:
+                raise ValueError(self._dimension_conflict(name))
+            solved[name] = row.subs({parameter: 0 for parameter in free}).T
+        return solved
+
+    def _dimension_conflict(self, name):
+        """Say which declarations cannot hold at once, and why."""
+        declared = ', '.join('[{}] = {}'.format(symbol, dimension)
+                             for symbol, dimension in
+                             self._physical_dimensions.items())
+        return (
+            'These declarations cannot all hold: {}.  No assignment of {} is consistent '
+            'with the scaling symmetries of this system, which means some combination of '
+            'these symbols is left unchanged by every scaling the equations admit while '
+            'being declared to carry a dimension.  Such a combination is dimensionless '
+            'whatever the units, since a change of unit is one of those scalings.  Either '
+            'a declaration is wrong, or the equations are not dimensionally '
+            'consistent.'.format(declared, name))
+
+    def physical_dimensions_of(self, scaling_matrix=None):
+        """
+        The physical dimension of **every** symbol, derived from what was declared.
+
+        A few declarations determine the rest, because the structural weights already
+        fix the relations between symbols.  Michaelis-Menten needs two of its seven.
+
+        Symbols differing only along a direction no declaration reaches come out with the
+        same physical dimension, though their structural dimensions differ.  The enzyme
+        chain's `e`, `f` and `x` have three structural dimensions; declaring all three to
+        be concentration identifies those directions.
+
+        Args:
+            scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+
+        Returns:
+            dict: ``{symbol: dimension}``, empty when nothing has been declared.
+
+        Raises:
+            ValueError: if the declarations are inconsistent; see :meth:`_physical_map`.
+        """
+        if not self._physical_dimensions:
+            return {}
+        if scaling_matrix is None:
+            scaling_matrix = self.maximal_scaling_matrix()
+
+        rows = scaling_matrix.shape[0]
+        solved = self._physical_map(scaling_matrix)
+
+        physical = {}
+        for column, symbol in enumerate(self.symbols):
+            weight = [scaling_matrix[row, column] for row in range(rows)]
+            monomial = sympy.Integer(1)
+            for name, row in solved.items():
+                power = sum(row[index] * weight[index] for index in range(rows))
+                monomial *= name ** power
+            physical[symbol] = sympy.simplify(monomial)
+        return physical
+
+    def dimension_counts(self, scaling_matrix=None):
+        """
+        The number of structural dimensions, and how many of them are changes of unit.
+
+        The first is :math:`r`, the number of rows of the scaling matrix.  The second is
+        the rank of the map from structural dimensions to the declared physical ones.
+        Their difference counts directions that are symmetries of the equations without
+        being changes of unit.
+
+        Michaelis-Menten gives ``(2, 2)``: every scaling it admits is a change of unit.
+        The cell cycle control network gives ``(7, 2)``.
+
+        Args:
+            scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+
+        Returns:
+            tuple: ``(structural, physical)``.  The second is 0 until something has
+            been declared; it means nothing has been said, not that the system is
+            dimensionless.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> system.dimension_counts()
+        (2, 0)
+        >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        >>> system.dimension_counts()
+        (2, 2)
+        """
+        if scaling_matrix is None:
+            scaling_matrix = self.maximal_scaling_matrix()
+        structural = scaling_matrix.shape[0]
+        solved = self._physical_map(scaling_matrix)
+        if not solved:
+            return (structural, 0)
+        physical = sympy.Matrix([list(row) for row in solved.values()]).rank()
+        return (structural, physical)
 
     def reorder_variables(self, variables):
         '''
