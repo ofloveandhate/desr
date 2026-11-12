@@ -550,12 +550,8 @@ _GONE_ALPHA = 0.22
 
 def _swatch_side(legend, fontsize):
     '''
-    How big to draw a swatch so that it matches the plain markers beside it.
-
-    A marker is sized in points and a handle box in whatever the legend's spacing works
-    out to, so sizing a swatch from the box gives a key whose hatched entries are a
-    different size from its plain ones -- and the two are meant to be read as the same
-    shape wearing a pattern.
+    The size in pixels of a marker of `fontsize` points, which is what a swatch is drawn
+    at so that it matches the plain markers beside it.
     '''
     return fontsize * legend.figure.dpi / 72.0
 
@@ -783,6 +779,21 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                 handles.append(marker(shape, 'white', 0.8))
                 labels.append(_KIND_LABELS[kind])
 
+        # Here rather than at the end, because it is another mark on those same shapes
+        # and because it leaves the two auxiliary entries adjacent -- and a legend set
+        # in columns fills them top to bottom, so adjacent is what puts the pair in a
+        # column of its own.
+        if any(data['must_not_be_zero'] for _, data in graph.nodes(data=True)):
+            # Both shapes under the one label.  Either layer can carry the mark depending
+            # on the direction drawn, so showing a single shape would read as a claim
+            # about which layer it applies to.
+            #
+            # Smaller than the rest: two markers have to share one handle's width, and
+            # at full size they touch.
+            handles.append((marker('o', 'white', 2.0, scale=0.78),
+                            marker('s', 'white', 2.0, scale=0.78)))
+            labels.append('must not be zero')
+
         auxiliaries = [data for _, data in graph.nodes(data=True) if data['auxiliary']]
         if auxiliaries:
             def hatched(kind, text):
@@ -807,16 +818,6 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                                ('dependent', 'a quadrature')):
                 if any(data['kind'] == kind for data in auxiliaries):
                     hatched(kind, word)
-
-        if any(data['must_not_be_zero'] for _, data in graph.nodes(data=True)):
-            # Both shapes under the one label.  Either layer can carry the mark depending
-            # on the direction drawn, so showing a single shape would read as a claim
-            # about which layer it applies to.
-            # Smaller than the rest: two markers have to share one handle's width, and
-            # at full size they touch.
-            handles.append((marker('o', 'white', 2.0, scale=0.78),
-                            marker('s', 'white', 2.0, scale=0.78)))
-            labels.append('must not be zero')
 
         # One column.  Two splits the three kinds across the break -- and where they land
         # depends on how many entries there are, which varies with the figure -- so the
