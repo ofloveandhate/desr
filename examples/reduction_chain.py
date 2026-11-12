@@ -134,13 +134,14 @@ def summary_lines(system):
     else:
         lines.append(BULLET + plural(parameters, 'parameter'))
 
-    if is_autonomous(system):
-        lines.append('autonomous')
     units, integrals = auxiliary_split(system)
     if units:
         lines.append(plural(units, 'unit'))
     if integrals:
         lines.append(plural(integrals, 'quadrature'))
+    # Last, under the counts.  It is the one line that is not a count of anything.
+    if is_autonomous(system):
+        lines.append('autonomous')
     return lines
 
 
@@ -215,10 +216,20 @@ def identify_pairs(translator, system, reduced, normalised, final):
 
 
 
-#: The units are one colour and the values the other, throughout: the split the table
-#: draws is the auxiliaries against the invariants, and a reader should see it before
-#: reading a word.
+#: The whole figure's colour, in one place, so that a colour means one thing wherever it
+#: appears.  Colour names a **kind of symbol** and nothing else: **rust** the
+#: auxiliaries, which are the units, and **blue** the invariants, which are the values.
+#:
+#: Not the steps.  An arrow is grey, because the two middle ones do not divide the way
+#: the colours do -- adopting units touches every rust symbol, while identifying the
+#: clock touches one blue one and makes it the independent variable, which is the one
+#: thing blue does not mean.
+#:
+#: Black is for what is neither kind -- an expression, a dimension, a count.  Grey
+#: labels the figure rather than saying anything about the system, and the palest grey
+#: is a step that does nothing.
 UNIT_COLOUR, VALUE_COLOUR = '#8a4500', '#1f5c86'
+PLAIN, QUIET, INERT = 'black', '#555555', '#aaaaaa'
 
 
 def dimensions_shown(system, scaling_matrix):
@@ -271,15 +282,19 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
             y = (origins or {}).get(symbol)
             if y is None:
                 continue
-            written = ax.text(-0.84, y, '$' + expr_to_tex(symbol) + '$',
-                              fontsize=font, ha='right', va='center')
+            # Bracketed, because the column states a dimension rather than a quantity:
+            # `t  time` reads as t being a time, and `[t] = time` says what is meant.
+            written = ax.text(
+                -0.84, y, '$\\left[{}\\right]$'.format(expr_to_tex(symbol)),
+                fontsize=font, ha='right', va='center')
             drawn.append(written)
             drawn.append(ax.text(
-                _right_edge(ax, written, renderer) + 0.06, y,
-                '${}$'.format(display_tex(dimension_to_tex(dimension)))
-                if dimension is not None else 'not declared',
+                _right_edge(ax, written, renderer) + 0.05, y,
+                '$=\\;{}$'.format(display_tex(dimension_to_tex(dimension)))
+                if dimension is not None else '=  not declared',
                 fontsize=font - 1, ha='left', va='center'))
 
+    meanings, widest = [], 0.03
     for index, row in enumerate(rows):
         symbol = row['symbol']
         y = heights.get(symbol)
@@ -323,6 +338,7 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
         written = ax.text(0.03, y, '$=\\;' + display_tex(reads_as) + '$',
                           fontsize=font - 0.5, ha='left', va='center')
         drawn.append(written)
+        widest = max(widest, _right_edge(ax, written, renderer))
 
         if unit:
             # "unit of concentration", not "*the* unit of concentration": the model has
@@ -345,12 +361,14 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
             meaning = None
 
         if meaning:
-            # Against the expression it annotates, not in a column of its own.  The
-            # expressions are monomials of no fixed width, so where one ends is
-            # something to measure rather than to guess at.
-            drawn.append(ax.text(_right_edge(ax, written, renderer) + 0.06, y,
-                                 meaning, fontsize=font - 1, ha='left', va='center',
-                                 color=colour))
+            meanings.append((y, meaning, colour))
+
+    # One column, flush left, clear of the longest expression.  The expressions are
+    # monomials of no fixed width, so where that is lies in the measuring; set each
+    # against its own row instead and the column comes out ragged.
+    for y, meaning, colour in meanings:
+        drawn.append(ax.text(widest + 0.10, y, meaning, fontsize=font - 1,
+                             ha='left', va='center', color=colour))
 
     # Which half is which, in the same words as the boxes below, so the two halves are
     # the two systems the first graph runs between and not two unnamed lists.
@@ -363,10 +381,10 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
     if dimensions:
         drawn.append(ax.text(-0.62, rows_extent.y1 + 0.07, 'original',
                              fontsize=font - 0.5, ha='center', va='bottom',
-                             color='#555555'))
+                             color=QUIET))
         drawn.append(ax.text(0.34, rows_extent.y1 + 0.07, 'reduced',
                              fontsize=font - 0.5, ha='center', va='bottom',
-                             color='#555555'))
+                             color=QUIET))
 
     # Over the middle of the rows, which is where the heading of a table goes and is not
     # a column position any of them share.
@@ -405,7 +423,7 @@ def _tight_box(ax, drawn, renderer, pad=0.045):
         (extent.x0 - pad, extent.y0 - pad),
         extent.width + 2 * pad, extent.height + 2 * pad,
         boxstyle='round,pad=0.004,rounding_size=0.025', transform=ax.transAxes,
-        facecolor='#fbfaf8', edgecolor='#aaaaaa', linewidth=0.7, zorder=0,
+        facecolor='#fbfaf8', edgecolor=INERT, linewidth=0.7, zorder=0,
         clip_on=False))
 
 
@@ -417,7 +435,7 @@ def _system_box(figure, rect, title, system, font, note=None):
     ax.add_patch(FancyBboxPatch((0.012, 0.012), 0.976, 0.976,
                                 boxstyle='round,pad=0.012,rounding_size=0.03',
                                 transform=ax.transAxes, facecolor='#f6f5f2',
-                                edgecolor='#aaaaaa', linewidth=0.7, zorder=0,
+                                edgecolor=INERT, linewidth=0.7, zorder=0,
                                 clip_on=False))
     ax.text(0.5, 0.95, title, fontsize=font + 1, weight='bold', ha='center',
             va='top', transform=ax.transAxes)
@@ -425,11 +443,10 @@ def _system_box(figure, rect, title, system, font, note=None):
     step = 0.66 / max(len(lines), 1)
     for index, line in enumerate(lines):
         ax.text(0.5, 0.74 - index * step, line, fontsize=font, ha='center', va='top',
-                transform=ax.transAxes,
-                color='#8a4500' if 'parameter' in line else 'black')
+                transform=ax.transAxes, color=PLAIN)
     if note:
         ax.text(0.5, 0.045, note, fontsize=font - 1, ha='center', va='bottom',
-                transform=ax.transAxes, style='italic', color='#555555', wrap=True)
+                transform=ax.transAxes, style='italic', color=QUIET, wrap=True)
     return ax
 
 
@@ -574,7 +591,7 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
     # The forward graph spans the first seam and the reverse graph the last.  The table
     # spans both middle seams, because choosing the units is what makes the clock
     # identifiable: the two steps are one table read downwards, not two panels.
-    panels = [('forward', 0, 1), ('units and normalization', 1, 3),
+    panels = [('forward', 0, 1), ('dimensions, units, and normalization', 1, 3),
               ('reverse', 3, 4)]
     for name, start, end in panels:
         centre = (box_centre[start] + box_centre[end]) / 2
@@ -631,10 +648,10 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
     arrow_y = box_bottom + box_height * 0.52
     if steps is None:
         steps = step_labels(normalised_symbols, identified)
-    colours = ['#555555',
-               UNIT_COLOUR if normalised_symbols else '#aaaaaa',
-               VALUE_COLOUR if identified else '#aaaaaa',
-               '#555555']
+    colours = [QUIET,
+               QUIET if normalised_symbols else INERT,
+               QUIET if identified else INERT,
+               QUIET]
     for index, (label, colour) in enumerate(zip(steps, colours)):
         _step_arrow(figure, box_left[index] + box_width, box_left[index + 1],
                     arrow_y, label, font, colour)
