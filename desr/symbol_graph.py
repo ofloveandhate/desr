@@ -544,11 +544,23 @@ _AUXILIARY_LABEL_HATCH = None
 _GONE_ALPHA = 0.22
 
 
+def _swatch_side(legend, fontsize):
+    '''
+    How big to draw a swatch so that it matches the plain markers beside it.
+
+    A marker is sized in points and a handle box in whatever the legend's spacing works
+    out to, so sizing a swatch from the box gives a key whose hatched entries are a
+    different size from its plain ones -- and the two are meant to be read as the same
+    shape wearing a pattern.
+    '''
+    return fontsize * legend.figure.dpi / 72.0
+
+
 def _square_swatch(legend, orig_handle, xdescent, ydescent, width, height, fontsize):
     '''A square swatch, matching the marker a parameter is drawn with.'''
     import matplotlib.patches
 
-    side = 0.95 * height
+    side = _swatch_side(legend, fontsize)
     return matplotlib.patches.Rectangle(
         (width / 2.0 - xdescent - side / 2.0, height / 2.0 - ydescent - side / 2.0),
         side, side,
@@ -561,7 +573,8 @@ def _circle_swatch(legend, orig_handle, xdescent, ydescent, width, height, fonts
     import matplotlib.patches
 
     return matplotlib.patches.Circle(
-        (width / 2.0 - xdescent, height / 2.0 - ydescent), radius=0.5 * height,
+        (width / 2.0 - xdescent, height / 2.0 - ydescent),
+        radius=0.5 * _swatch_side(legend, fontsize),
         facecolor=orig_handle.get_facecolor(), edgecolor=orig_handle.get_edgecolor(),
         linewidth=orig_handle.get_linewidth(), hatch=orig_handle.get_hatch())
 
@@ -575,7 +588,8 @@ _KIND_SWATCHES = {'parameter': _square_swatch, 'dependent': _circle_swatch}
 
 def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                       latex=True, legend=True, width=1.0, height=1.0, font_size=10,
-                      node_size=320, faded=None, show_normalisation=None):
+                      node_size=320, faded=None, show_normalisation=None,
+                      legend_kwargs=None):
     '''
     Draw an exponent graph.
 
@@ -622,6 +636,11 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
             a recovery has to be told, and an arrow there describes the wrong direction.
             Set it explicitly to draw the normalisation against a *reverse* graph, which
             is where the substitution can be watched being made.
+        legend_kwargs (dict, optional): Passed to :meth:`~matplotlib.axes.Axes.legend`,
+            over the defaults.  The key hangs under the axes, which is where the room is
+            for a graph drawn on its own; a caller building a figure from several axes
+            has the room somewhere else and places it with ``bbox_to_anchor`` and
+            ``bbox_transform``, usually the figure's.
 
     Returns:
         matplotlib.axes.Axes: The axes drawn on.
@@ -692,7 +711,7 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     # Labels go *outside* the columns, not on the markers: a marker big enough to hold
     # `kappa0` or `c_0 = 0` would be a box of text rather than a vertex, and the middle of
     # the figure is needed for the edges.
-    padding = 0.06 * width
+    padding = 0.11 * width
     target_layer = REDUCED if graph.graph.get('direction', FORWARD) == FORWARD else ORIGINAL
     for node, data in graph.nodes(data=True):
         x, y = positions[node]
@@ -732,12 +751,18 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
 
     if legend:
         handler_map = {tuple: matplotlib.legend_handler.HandlerTuple(
-            ndivide=None, pad=0.7)}
+            ndivide=None, pad=1.1)}
 
-        def marker(shape, face, border):
+        # With the text.  A marker set in points while the label shrinks with the figure
+        # is a key whose shapes grow as the words get smaller, and a diamond -- drawn to
+        # the same width as a circle and so taller -- shows it first.
+        key_font = max(font_size - 1, 5)
+
+        def marker(shape, face, border, scale=1.0):
             return matplotlib.lines.Line2D(
-                [], [], linestyle='none', marker=shape, markersize=9,
-                markerfacecolor=face, markeredgecolor=_BORDER, markeredgewidth=border)
+                [], [], linestyle='none', marker=shape,
+                markersize=scale * key_font, markerfacecolor=face,
+                markeredgecolor=_BORDER, markeredgewidth=border)
 
         handles = [matplotlib.lines.Line2D([], [], color='#1f3b63', linestyle='solid'),
                    matplotlib.lines.Line2D([], [], color='#8c2f39', linestyle='dashed')]
@@ -783,15 +808,24 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
             # Both shapes under the one label.  Either layer can carry the mark depending
             # on the direction drawn, so showing a single shape would read as a claim
             # about which layer it applies to.
-            handles.append((marker('o', 'white', 2.5), marker('s', 'white', 2.5)))
+            # Smaller than the rest: two markers have to share one handle's width, and
+            # at full size they touch.
+            handles.append((marker('o', 'white', 2.0, scale=0.78),
+                            marker('s', 'white', 2.0, scale=0.78)))
             labels.append('must not be zero')
 
         # One column.  Two splits the three kinds across the break -- and where they land
         # depends on how many entries there are, which varies with the figure -- so the
         # group that most wants reading together is the group that gets broken up.
-        ax.legend(handles=handles, labels=labels, loc='upper center',
-                  bbox_to_anchor=(0.5, 0.0), frameon=False, ncol=1,
-                  fontsize=max(font_size - 1, 5), handler_map=handler_map)
+        #
+        # Under the axes, which is where the room is for a graph drawn on its own.  A
+        # caller composing a figure out of several axes has the room somewhere else, and
+        # says so with `legend_kwargs`.
+        settings = dict(loc='upper center', bbox_to_anchor=(0.5, 0.0), frameon=False,
+                        ncol=1, fontsize=key_font, handleheight=1.0,
+                        handletextpad=0.7)
+        settings.update(legend_kwargs or {})
+        ax.legend(handles=handles, labels=labels, handler_map=handler_map, **settings)
 
     ax.set_axis_off()
     # Room for the labels outside the columns.  Text does not take part in autoscaling, so
