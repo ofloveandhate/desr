@@ -1483,23 +1483,26 @@ class TestPhysicalDimensions(TestCase):
             system.set_dimension('nonsense', 'time')
         self.assertIn('not a symbol of this system', str(caught.exception))
 
-    def test_the_counts_say_how_much_is_structure_alone(self):
+    def test_the_ranks_say_how_much_is_structure_alone(self):
         system = self.michaelis_menten()
-        self.assertEqual((2, 0), system.dimension_counts())
+        self.assertEqual({'structural': 2, 'physical': 0, 'structural_only': 2},
+                         system.dimension_ranks())
         system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
         # Every scaling Michaelis-Menten admits is a change of unit.
-        self.assertEqual((2, 2), system.dimension_counts())
+        self.assertEqual({'structural': 2, 'physical': 2, 'structural_only': 0},
+                         system.dimension_ranks())
 
         enzyme = self.enzyme()
         enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
                                'f': 'concentration', 'x': 'concentration'})
-        self.assertEqual((4, 2), enzyme.dimension_counts())
+        self.assertEqual({'structural': 4, 'physical': 2, 'structural_only': 2},
+                         enzyme.dimension_ranks())
 
     def test_nothing_declared_is_not_a_claim_that_there_are_none(self):
         system = self.michaelis_menten()
         self.assertEqual({}, system.physical_dimensions)
         self.assertEqual({}, system.physical_dimensions_of())
-        self.assertEqual(0, system.dimension_counts()[1])
+        self.assertEqual(0, system.dimension_ranks()['physical'])
 
     def test_naming_changes_nothing(self):
         # Physical dimensions are an overlay.  Whatever is declared, the scaling matrix,

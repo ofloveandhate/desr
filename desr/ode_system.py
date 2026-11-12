@@ -2467,7 +2467,7 @@ class ODESystem(object):
 
         Declaring a dimension changes nothing else -- not the scaling matrix, the
         multiplier, the structural dimensions, or the reduction.  It adds a reading, in
-        which :meth:`dimension_counts` can report how much of a reduction is a change of
+        which :meth:`dimension_ranks` can report how much of a reduction is a change of
         unit and how much is not.
 
         Args:
@@ -2636,43 +2636,50 @@ class ODESystem(object):
             physical[symbol] = sympy.simplify(monomial)
         return physical
 
-    def dimension_counts(self, scaling_matrix=None):
+    def dimension_ranks(self, scaling_matrix=None):
         """
-        The number of structural dimensions, and how many of them are changes of unit.
+        How many dimensions this system has, of each kind.
 
-        The first is :math:`r`, the number of rows of the scaling matrix.  The second is
-        the rank of the map from structural dimensions to the declared physical ones.
-        Their difference counts directions that are symmetries of the equations without
-        being changes of unit.
+        Returns:
+            dict: with three keys.
 
-        Michaelis-Menten gives ``(2, 2)``: every scaling it admits is a change of unit.
-        The cell cycle control network gives ``(7, 2)``.
+            ``structural``
+                :math:`r`, the number of scaling symmetries the equations admit.
+            ``physical``
+                how many of those directions the declared physical dimensions reach.
+                Zero until something has been declared, which means nothing has been
+                said rather than that the system is dimensionless.
+            ``structural_only``
+                the difference: directions that are symmetries of the equations without
+                being changes of unit.
 
         Args:
             scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
 
-        Returns:
-            tuple: ``(structural, physical)``.  The second is 0 until something has
-            been declared; it means nothing has been said, not that the system is
-            dimensionless.
-
         >>> system = ODESystem.from_equations(
         ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        >>> system.dimension_counts()
-        (2, 0)
+        >>> system.dimension_ranks()
+        {'structural': 2, 'physical': 0, 'structural_only': 2}
+
+        Every scaling Michaelis-Menten admits is a change of unit:
+
         >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
-        >>> system.dimension_counts()
-        (2, 2)
+        >>> system.dimension_ranks()
+        {'structural': 2, 'physical': 2, 'structural_only': 0}
+
+        The cell cycle control network gives ``structural`` 7 and ``physical`` 2.
         """
         if scaling_matrix is None:
             scaling_matrix = self.maximal_scaling_matrix()
         structural = scaling_matrix.shape[0]
+
         solved = self._physical_map(scaling_matrix)
-        if not solved:
-            return (structural, 0)
-        physical = sympy.Matrix([list(row) for row in solved.values()]).rank()
-        return (structural, physical)
+        physical = (sympy.Matrix([list(row) for row in solved.values()]).rank()
+                    if solved else 0)
+        return {'structural': structural,
+                'physical': physical,
+                'structural_only': structural - physical}
 
     def reorder_variables(self, variables):
         '''
