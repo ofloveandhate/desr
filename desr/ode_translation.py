@@ -681,6 +681,29 @@ class ODETranslator(object):
                              symbols_domain=symbols_domain,
                              hermite_multiplier=hermite_multiplier)
 
+    def dimensions_of(self, system=None):
+        '''
+        The structural dimension of every symbol, in **this** reduction's scaling.
+
+        :meth:`~desr.ode_system.ODESystem.dimensions_of` is where this lives and what it
+        means; the dimensions belong to the system, not to a reduction of it.  This passes
+        the scaling matrix the translator actually holds, which matters for a translator
+        built from a scaling other than the maximal one -- the paper's, say -- where the
+        directions are a different basis of the same group.
+
+        Returns:
+            dict: ``{symbol: dimension}``.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.dimensions_of()[sympy.Symbol('k_2')]
+        1/dimension_of_t
+        '''
+        system = self._system_or(system)
+        return system.dimensions_of(self.scaling_matrix)
+
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
                          normalise_parameters=True, identify_indep_var=True):
         '''

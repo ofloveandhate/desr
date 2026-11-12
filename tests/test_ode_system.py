@@ -4,7 +4,7 @@ import sympy
 
 from desr.matrix_normal_forms import hnf_row
 from desr.ode_system import ConflictingParameterValues, ODESystem
-from desr.ode_translation import ODETranslator
+from desr.ode_translation import ODETranslator, ReductionScheme
 from desr.sympy_helper import CONSISTENCY_TOLERANCE, monomial_to_powers
 
 
@@ -1261,3 +1261,150 @@ class TestTheTwoFacesOfAValue(TestCase):
         system = self.system()
         self.assertEqual(system.value_of('C_0'), sympy.Integer(0))
         self.assertIsNotNone(system.value_of('C_0'))
+
+
+class TestStructuralDimensions(TestCase):
+    '''
+    A scaling symmetry is a direction the system can be rescaled in, so a symbol's column
+    of the scaling matrix says how it transforms -- its weight -- and weights read
+    multiplicatively are dimensions.
+
+    **Structural, not physical.** These come from the equations. The dimensions a
+    modeller means are contained among them, because a dimensionally consistent system is
+    invariant under its own changes of unit, but the containment is usually strict, and
+    nothing here can tell the two apart. Naming the physical ones changes none of this.
+    '''
+
+    MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                        'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+    ENZYME_CHAIN = 'x + e -> y + e\ny -> z\nz + f -> x + f'
+    HL66 = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+            'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
+    HL64 = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        return (('Michaelis-Menten', ODESystem.from_equations(self.MICHAELIS_MENTEN)),
+                ('prey-predator', ODESystem.from_equations(
+                    ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                     'dp/dt = s*p*(1 - h*p / n)'])),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    self.ENZYME_CHAIN).to_ode_system()),
+                ('HL 6.6', ODESystem.from_equations(self.HL66)),
+                ('HL 6.4', ODESystem.from_equations(self.HL64)))
+
+    @staticmethod
+    def dimension_of(monomial, dimensions, system):
+        '''The dimension of a monomial, from the dimensions of its symbols.'''
+        powers = monomial.as_powers_dict()
+        return sympy.simplify(sympy.prod(
+            [dimensions[s] ** powers.get(s, 0) for s in system.symbols]))
+
+    def test_every_invariant_is_dimensionless(self):
+        '''
+        The reason an invariant is the content of a reduction: a value is a number
+        relative to a scale, except at dimension 1, where every scale agrees.
+        '''
+        from desr.ode_translation import scale_action
+        for label, system in self.systems():
+            dimensions = system.dimensions_of()
+            translator = ODETranslator.from_ode_system(system)
+            for monomial in scale_action(system.symbols, translator.herm_mult_n):
+                with self.subTest(system=label, invariant=str(monomial)):
+                    self.assertEqual(
+                        1, self.dimension_of(monomial, dimensions, system))
+
+    def test_the_auxiliaries_carry_one_dimension_each(self):
+        '''
+        A * V_i is the identity, so the auxiliaries are a basis of dimension space: r
+        directions, r auxiliaries, one apiece and no two alike. That is what makes
+        "adopt the auxiliaries as scales" a definite act rather than a reading.
+        '''
+        from desr.ode_translation import scale_action
+        for label, system in self.systems():
+            dimensions = system.dimensions_of()
+            translator = ODETranslator.from_ode_system(system)
+            carried = [self.dimension_of(monomial, dimensions, system)
+                       for monomial in scale_action(system.symbols,
+                                                    translator.herm_mult_i)]
+            with self.subTest(system=label):
+                self.assertEqual(translator.r, len(carried))
+                self.assertEqual(len(carried), len(set(carried)))
+                self.assertNotIn(1, carried)
+
+    def test_symbols_the_equations_tie_together_share_a_dimension(self):
+        # Nobody said c, e_0 and s are concentrations; the equations did.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        dimensions = system.dimensions_of()
+        shared = {dimensions[sympy.Symbol(name)] for name in ('c', 'e_0', 's')}
+        self.assertEqual(1, len(shared))
+
+    def test_a_rate_constant_comes_out_an_inverse_time(self):
+        # Read off the equations rather than asserted: k_2 is first order and k_1 is
+        # second, and the dimensions say so without anyone naming a unit.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        dimensions = system.dimensions_of()
+        time = dimensions[sympy.Symbol('t')]
+        self.assertEqual(1 / time, dimensions[sympy.Symbol('k_2')])
+        self.assertEqual(1 / (time * dimensions[sympy.Symbol('e_0')]),
+                         dimensions[sympy.Symbol('k_1')])
+
+    def test_a_direction_is_named_after_a_symbol_that_has_it(self):
+        # Michaelis-Menten's first direction holds t at +1 and k_2 at -1.  Naming it
+        # after the rate constant would be right and backwards to read, so +1 wins.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        dimensions = system.dimensions_of()
+        self.assertEqual(sympy.Symbol('dimension_of_t'),
+                         dimensions[sympy.Symbol('t')])
+
+    def test_a_direction_with_nothing_at_plus_one_falls_back_to_minus_one(self):
+        '''
+        Hubert & Labahn 6.6 has no symbol of weight +1 in its single direction, but z1
+        sits there at -1.  Both generate the lattice direction, so naming by the other
+        one is presentation and changes no matrix.
+        '''
+        system = ODESystem.from_equations(self.HL66)
+        dimensions = system.dimensions_of()
+        self.assertEqual(sympy.Symbol('dimension_of_z1'),
+                         dimensions[sympy.Symbol('z1')])
+        self.assertEqual(sympy.Symbol('dimension_of_z1') ** -3,
+                         dimensions[sympy.Symbol('t')])
+
+    def test_the_clock_can_be_dimensionless(self):
+        '''
+        Hubert & Labahn 6.4's scaling does not act on t at all, which is exactly the
+        condition the dependent-variable scheme is chosen by.  So t has dimension 1, and
+        that is a fact about the system rather than an omission.
+        '''
+        system = ODESystem.from_equations(self.HL64)
+        self.assertEqual(1, system.dimensions_of()[sympy.Symbol('t')])
+        self.assertEqual(ODETranslator.from_ode_system(system).scheme(system),
+                         ReductionScheme.DEP_VAR)
+
+    def test_naming_physical_dimensions_would_change_none_of_this(self):
+        '''
+        The containment is strict and the structure does not care.  The enzyme chain has
+        four structural dimensions; a modeller would call three of them concentration and
+        one time, which is a statement about those directions and not a change to them.
+        '''
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        system = ChemicalReactionNetwork.from_diagram(
+            self.ENZYME_CHAIN).to_ode_system()
+        dimensions = system.dimensions_of()
+        species = [dimensions[sympy.Symbol(name)] for name in ('e', 'f', 'x')]
+        # All concentrations physically, and three different structural dimensions.
+        self.assertEqual(3, len(set(species)))
+
+    def test_the_translator_reads_dimensions_in_its_own_scaling(self):
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(system.dimensions_of(), translator.dimensions_of())
+
+    def test_an_explicit_scaling_matrix_is_honoured(self):
+        # A translator may hold a scaling other than the maximal one, and then the
+        # dimensions are that one's.  Here the two agree, which is the point: the
+        # argument is plumbed, not ignored.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        matrix = system.maximal_scaling_matrix()
+        self.assertEqual(system.dimensions_of(),
+                         system.dimensions_of(scaling_matrix=matrix))

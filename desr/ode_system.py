@@ -2347,6 +2347,118 @@ class ODESystem(object):
 
         return maximal_scaling_matrix(exprs, variables=self.symbols)
 
+    def _dimension_names(self, scaling_matrix):
+        '''
+        One name per structural dimension, in row order, with the sign to read it by.
+
+        A direction is named after a symbol that lives in it **alone** and with weight
+        :math:`\\pm 1`, so that the symbol's dimension is that name exactly.  Where the
+        weight is :math:`-1` the direction is named by the *other* generator, which is why
+        a sign comes back with the name: both :math:`e_i` and :math:`-e_i` generate the
+        same direction of the lattice, so choosing between them is presentation and
+        changes no matrix.
+
+        A direction with no such symbol -- Hubert & Labahn 6.6 has none at weight
+        :math:`+1`, though `z_1` sits there at :math:`-1` -- falls back to a positional
+        name.  That is the only place the row order shows, and it shows precisely when
+        there is nothing better to say.
+
+        Returns:
+            list: ``(name, sign)`` per row.
+        '''
+        rows, columns = scaling_matrix.shape
+        symbols = list(self.symbols)
+
+        names = []
+        for row in range(rows):
+            chosen = None
+            # Weight +1 first, so a direction is named after a symbol that *has* that
+            # dimension rather than its inverse.  Michaelis-Menten's first direction holds
+            # `t` at +1 and `k_2` at -1, and naming it after the rate constant would be
+            # right but backwards to read.
+            for wanted in (1, -1):
+                for column in range(columns):
+                    if scaling_matrix[row, column] != wanted:
+                        continue
+                    if any(scaling_matrix[other, column] != 0
+                           for other in range(rows) if other != row):
+                        continue
+                    chosen = (symbols[column], wanted)
+                    break
+                if chosen is not None:
+                    break
+            if chosen is None:
+                names.append((sympy.Symbol('dimension_{}'.format(row)), 1))
+            else:
+                names.append((sympy.Symbol('dimension_of_{}'.format(chosen[0])),
+                              chosen[1]))
+        return names
+
+    def dimensions_of(self, scaling_matrix=None):
+        '''
+        The **structural** dimension of every symbol, as a monomial in dimension names.
+
+        A scaling symmetry is a direction in which the system can be rescaled, so the
+        column of the scaling matrix belonging to a symbol says how that symbol transforms
+        -- its weight.  Read multiplicatively, those weights are dimensions: dimensions
+        form a free abelian group, which is why :math:`k_{01}` comes back as a quotient
+        rather than as a list of numbers.
+
+        **Structural, not physical.**  These come from the equations, and there are
+        :math:`r` of them.  The dimensions a modeller means -- time, concentration -- are
+        *contained* among them, because a dimensionally consistent system is invariant
+        under its own changes of unit, but the containment is usually strict: the cell
+        cycle network has seven structural dimensions where the physics has two, and the
+        other five are symmetries of the equations that are not changes of unit.  Which
+        of these directions are physical is something only a modeller can say, and saying
+        it changes nothing here -- not this, not the scaling matrix, not the multiplier,
+        not the reduction.
+
+        An invariant has dimension 1, which is what makes it the content of a reduction:
+        a value is a number relative to a scale, except at dimension 1, where every scale
+        agrees.
+
+        Args:
+            scaling_matrix (sympy.Matrix, optional): The scaling to read dimensions from.
+                Defaults to :meth:`maximal_scaling_matrix`.  Pass one when a reduction
+                uses a scaling other than the maximal one, so the dimensions match it.
+
+        Returns:
+            dict: ``{symbol: dimension}``, each a Laurent monomial in dimension names.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> dimensions = system.dimensions_of()
+        >>> dimensions[sympy.Symbol('t')]
+        dimension_of_t
+        >>> dimensions[sympy.Symbol('c')]
+        dimension_of_e_0
+
+        `c` and `e_0` share a dimension, which the equations say and nobody had to:
+
+        >>> dimensions[sympy.Symbol('c')] == dimensions[sympy.Symbol('e_0')]
+        True
+
+        A rate constant is an inverse time, read off rather than asserted:
+
+        >>> dimensions[sympy.Symbol('k_2')]
+        1/dimension_of_t
+        >>> dimensions[sympy.Symbol('k_1')]
+        1/(dimension_of_e_0*dimension_of_t)
+        '''
+        if scaling_matrix is None:
+            scaling_matrix = self.maximal_scaling_matrix()
+        names = self._dimension_names(scaling_matrix)
+
+        dimensions = {}
+        for column, symbol in enumerate(self.symbols):
+            monomial = sympy.Integer(1)
+            for row, (name, sign) in enumerate(names):
+                monomial *= name ** (sign * scaling_matrix[row, column])
+            dimensions[symbol] = monomial
+        return dimensions
+
     def reorder_variables(self, variables):
         '''
         Store the new variable order, and reorder the equations according to the new order of variables.
