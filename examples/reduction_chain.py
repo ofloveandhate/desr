@@ -243,7 +243,7 @@ def dimensions_shown(system, scaling_matrix):
             or system.dimensions_of(scaling_matrix))
 
 
-def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
+def draw_unit_table(ax, rows, font, heights, normalisations, title,
                     dimensions=None, origins=None):
     """
     Both tables, in one box: what the system is measured in, and what the reduction
@@ -256,14 +256,17 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
     measures and in which unit, and is set as that quantity against the rest of its
     monomial, so the unit stands as a factor.
 
-    A unit built from the parameters alone cannot vary, so the map sets it to 1 -- a
-    :math:`\\mapsto` rather than an :math:`=`, an adoption of a unit rather than a claim
-    about a rate constant.  A unit the scaling moves carries no map and has to be
-    integrated.  An invariant that is the clock measured in a unit now equal to 1 is
-    mapped to the clock.
+    The map is where the monomial goes once the units are adopted, worked out by making
+    the substitution and shown wherever anything changed.  One rule for every row, so
+    :math:`x_0 \\mapsto 1` and :math:`y_1 \\mapsto e` are the same kind of statement --
+    an arrow and never an equals, because neither claims that :math:`1/k_{23}` *is* 1 or
+    that :math:`y_1` *is* :math:`e`.  A row whose monomial survives the substitution
+    carries no arrow, which is what marks a quadrature and the values measured in it.
 
     Args:
         rows (list): :meth:`~desr.ode_translation.ODETranslator.unit_table`.
+        normalisations (dict):
+            :meth:`~desr.ode_translation.ODETranslator.normalisations`.
         heights, origins (dict): the heights the graph alongside gives the reduced and
             the original symbols, so either can be followed across the figure.
         dimensions (dict, optional): ``{symbol: dimension}`` for the original system,
@@ -325,13 +328,17 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
             reads_as = '{}\\,{}'.format(expr_to_tex(quantity),
                                         expr_to_tex(per_unit))
 
-        # The map is part of the same string, not a column of its own.  x0 |-> 1 is a
-        # sentence about x0 = 1/k_2_3, and set apart it reads as a later step rather
-        # than as what that line of the table says.
-        if symbol in identified:
-            reads_as += '\\;\\;\\mapsto\\;' + expr_to_tex(identified[symbol])
-        elif symbol in normalised:
-            reads_as += '\\;\\;\\mapsto\\;1'
+        # Where the monomial goes once the units are adopted, for every row by the one
+        # rule: substitute, and say so where anything changed.  `x0 |-> 1` and
+        # `y1 |-> e` are then the same statement, which is what they are -- the second
+        # is not an identification and the arrow does not claim one, any more than the
+        # first claims that 1/k_2_3 equals 1.
+        #
+        # Part of the same string, not a column of its own: set apart it reads as a
+        # later step rather than as what that line of the table says.
+        after = sympy.simplify(row['denotes'].subs(normalisations, simultaneous=True))
+        if after != row['denotes']:
+            reads_as += '\\;\\;\\mapsto\\;' + expr_to_tex(after)
 
         drawn.append(ax.text(0.0, y, '$' + expr_to_tex(symbol) + '$', fontsize=font,
                              ha='right', va='center', color=colour))
@@ -347,9 +354,9 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
                          if row['dimension'] is not None else None)
             meaning = ('unit of ${}$'.format(display_tex(dimension)) if dimension
                        else 'unit of a dimension not declared')
-            if symbol not in normalised:
-                # The one kind of unit nobody can choose: the scaling moves it, so it is
-                # a quadrature rather than a number to set, and it carries no |->.
+            if after == row['denotes']:
+                # The one kind of unit nobody can adopt: the scaling moves it, so it is
+                # a quadrature rather than a number to set, and nothing sends it to 1.
                 meaning += ', a quadrature'
         elif row['measured_in'] is not None:
             # In words, which is what keeps it out of the equations.  y1 is the value of
@@ -604,8 +611,8 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
         if start == 1:
             # Its name goes inside its box, where it reads as the table's heading rather
             # than as a second subtitle under the figure's own.
-            draw_unit_table(ax, table, font + 0.5, heights, normalised_symbols,
-                            identified, name,
+            draw_unit_table(ax, table, font + 0.5, heights,
+                            translator.normalisations(system), name,
                             dimensions=dimensions_shown(system,
                                                         translator.scaling_matrix),
                             origins=origins)
