@@ -1,18 +1,16 @@
 """A reduction drawn as a chain of systems, with each map written out above it.
 
-    original --forward--> reduced --units--> normalised --clock--> ... --reverse--> original
+    original -> reduced -> normalised -> nondimensionalised -> original
+      forward   adopt units   identify t        reverse
 
-Five systems and the maps between them.  The maps run across the top and the systems sit
-below at the seams, because the column a map ends on is the column the next one begins
-from, and that shared column *is* the system they share.
+Five systems in a row, an arrow between each pair naming what that step does, and above
+them the maps themselves.  The systems sit at the seams, because the column a map ends
+on is the column the next one begins from, and that shared column *is* the system they
+share.
 
 The two outer maps are changes of coordinates, drawn as the exponent graphs that realise
-them.  The two middle maps are one table: choosing the units is what makes the clock
-identifiable, so the table is read downwards and its right-hand column is both maps.
-
-No arrows are drawn between the systems.  What stands above a seam is already the map
-from the box on its left to the box on its right, and drawing an arrow as well would
-state it twice.
+them.  The two middle maps are one table, read downwards: adopting the units is what
+makes the clock identifiable, so the two steps are one table and not two panels.
 
 What each stage is
 -------------------
@@ -26,8 +24,8 @@ parameters its own equations never use, which is the thing that made them worth
 normalising.
 
 **normalised** -- the auxiliaries that are monomials in the parameters alone are
-constant, so each is set to 1.  That is a choice of units rather than an assumption:
-:math:`x_0 = 1/k_{23}` is adopted as the unit of time, after which the model's own
+constant, so each is set to 1.  That is an adoption of units rather than an assumption:
+:math:`x_0 = 1/k_{23}` becomes the unit of time, after which the model's own
 characteristic time measures 1 by definition.
 
 **nondimensionalised** -- an invariant that is the clock measured in a unit now equal to
@@ -110,14 +108,10 @@ def summary_lines(system):
     """
     What a box says about a system.
 
-    **No symbol names.**  A reduction's symbols are generated -- `x0`, `y3` -- and those
-    names are desr's rather than the reader's; they will not be the names in a paper, and
-    the graph beside the box is already where a symbol is named.  What a box is for is the
-    shape of the system, which is what changes along the chain.
-
-    **No $\\dot y = F(y, t)$ either.**  It is the same line in every box but for the
-    presence of a `t`, and a reader has to work out that the `t` is autonomy before the
-    line says anything.  The word says it.
+    The shape of the system, which is what changes along the chain: how many symbols and
+    of which kinds, whether it is autonomous, and how many units and quadratures its
+    auxiliaries come to.  No symbol names -- a reduction's are generated, and the graph
+    beside the box is where a symbol is named.
     """
     def plural(count, noun):
         return '{} {}{}'.format(count, noun, '' if count == 1 else 's')
@@ -245,17 +239,17 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
     coins to measure it with.
 
     On the left, every symbol the caller wrote down and its dimension.  On the right,
-    one row per symbol of the reduced system.  Every symbol a reduction introduces is a
-    unit, or the value of one of the caller's quantities measured in those units, and a
-    value is written as its quantity over its unit -- :math:`y_1 = e / x_1` -- so the
-    units named above are the ones the rows below divide by.
+    one row per symbol of the reduced system: what it denotes as a monomial in the
+    caller's symbols, the map the chain's middle two steps apply to it, and in words
+    what it is.  A unit says which dimension it measures; a value says which quantity it
+    measures and in which unit, and is set as that quantity against the rest of its
+    monomial, so the unit stands as a factor.
 
-    Each row carries its own map.  A unit built from the parameters alone cannot vary,
-    so it can be set to 1, and the arrow is a :math:`\\mapsto` rather than an :math:`=`
-    because that is an adoption of a unit and not a claim about a rate constant.  A unit
-    the scaling moves has no arrow: it cannot be adopted and has to be integrated.  An
-    invariant that is the clock measured in a unit now equal to 1 is identified with the
-    clock, which is the second step and follows from the first.
+    A unit built from the parameters alone cannot vary, so the map sets it to 1 -- a
+    :math:`\\mapsto` rather than an :math:`=`, an adoption of a unit rather than a claim
+    about a rate constant.  A unit the scaling moves carries no map and has to be
+    integrated.  An invariant that is the clock measured in a unit now equal to 1 is
+    mapped to the clock.
 
     Args:
         rows (list): :meth:`~desr.ode_translation.ODETranslator.unit_table`.
@@ -294,15 +288,27 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
         unit = row['role'] == 'unit'
         colour = UNIT_COLOUR if unit else VALUE_COLOUR
 
-        if unit or row['of'] is None:
+        # What the symbol denotes, in the caller's symbols, for a unit and a value
+        # alike.  Never `y1 = e / x1`: true after substituting what x0 denotes, but
+        # written on a figure it says that a reduced symbol depends on another reduced
+        # symbol, and the reduced system's invariants and auxiliaries are independent
+        # coordinates.  The equations the next box holds are in the y's alone.
+        #
+        # A value is set as the quantity against the rest of its monomial, which is the
+        # reciprocal of the unit: `e * k_0_1/k_2_3` rather than `e*k_0_1/k_2_3`, so the
+        # unit is a factor a reader can see.  Both halves are computed -- `of` from the
+        # table, the other by dividing -- and a reduction desr has never met factors the
+        # same way or not at all.
+        quantity = row['of'] if not unit else None
+        per_unit = (sympy.simplify(row['denotes'] / quantity)
+                    if quantity is not None else 1)
+        if quantity is None or per_unit == 1:
             reads_as = expr_to_tex(row['denotes'])
         else:
-            # The quantity over its unit.  Written this way a value row names the unit
-            # row it belongs to, which is the whole content of "measured in".
-            #
-            # As one monomial, not a fraction built by hand: a unit of 1/x0 would come
-            # out as k_2 over 1/x_0, and what that says is k_2 x_0.
-            reads_as = expr_to_tex(row['of'] / row['measured_in'])
+            # Juxtaposed, with a thin space.  A dot earns its place between dimension
+            # *names*, which are words, and gets in the way between two symbols.
+            reads_as = '{}\\,{}'.format(expr_to_tex(quantity),
+                                        expr_to_tex(per_unit))
 
         # The map is part of the same string, not a column of its own.  x0 |-> 1 is a
         # sentence about x0 = 1/k_2_3, and set apart it reads as a later step rather
@@ -329,6 +335,16 @@ def draw_unit_table(ax, rows, font, heights, normalised, identified, title,
                 # The one kind of unit nobody can choose: the scaling moves it, so it is
                 # a quadrature rather than a number to set, and it carries no |->.
                 meaning += ', a quadrature'
+        elif row['measured_in'] is not None:
+            # In words, which is what keeps it out of the equations.  y1 is the value of
+            # e in the unit x1, and saying so is a remark about two symbols rather than
+            # a relation the reduced system holds.
+            meaning = '${}$ in units of ${}$'.format(
+                expr_to_tex(row['of']), expr_to_tex(row['measured_in']))
+        else:
+            meaning = None
+
+        if meaning:
             # Against the expression it annotates, not in a column of its own.  The
             # expressions are monomials of no fixed width, so where one ends is
             # something to measure rather than to guess at.
@@ -381,11 +397,7 @@ def _right_edge(ax, artist, renderer):
 
 def _tight_box(ax, drawn, renderer, pad=0.045):
     """
-    A rounded box around what was actually drawn.
-
-    Around the text, not around the axes: the axes is as tall as the panel beside it and
-    as wide as the layout gave it, and a box on those edges is a box around a lot of
-    nothing.
+    A rounded box around the text that was drawn, `pad` outside its extent.
     """
     extent = Bbox.union([artist.get_window_extent(renderer) for artist in drawn])
     extent = extent.transformed(ax.transAxes.inverted())
@@ -426,37 +438,32 @@ def step_labels(normalised, identified):
     The words on the four arrows, worked out from what the two middle steps do.
 
     The outer two name the graph above them.  The inner two are the chain's own steps,
-    and what they say has to be true of *this* reduction: Hubert & Labahn 6.6 normalises
-    nothing and identifies nothing, and an arrow reading "identify the clock" over a step
-    that identifies no clock is the figure telling a story the reduction did not.
+    and say what this reduction does at each: a reduction that normalises nothing is
+    told apart from one that does.
 
     Args:
         normalised (set): The auxiliaries this reduction sets to 1.
         identified (dict): ``{invariant: the symbol it is identified with}``.
 
     Returns:
-        tuple: four labels, newline-broken to fit the gaps between boxes.
+        tuple: four labels, one line each.
     """
     # "adopt", not "choose".  Nobody picks these: the reduction coins them out of the
     # equations and then measures in them, and the only choice anyone made was to write
     # the model down.
     # No count: the table beside it lists them, and the arrow is for the step.
-    units = 'adopt\nunits' if normalised else 'no units\nto adopt'
+    units = 'adopt units' if normalised else 'no units to adopt'
     if identified:
-        clock = 'identify\n' + ', '.join(
+        clock = 'identify ' + ', '.join(
             sorted('$' + expr_to_tex(image) + '$' for image in identified.values()))
     else:
-        clock = 'no clock\nto identify'
+        clock = 'no clock to identify'
     return ('forward', units, clock, 'reverse')
 
 
 def _step_arrow(figure, start, end, y, label, font, colour):
     """
-    One arrow between two system boxes, with its name above it.
-
-    The arrows are what put the chain in order.  Without them the table's ``|-> 1`` sits
-    to the right of the box it produces, so a reader meets the result before the step,
-    and nothing on the page says which way to read.
+    One arrow between two system boxes, named above it with what the step does.
     """
     figure.add_artist(FancyArrowPatch(
         (start, y), (end, y), transform=figure.transFigure,
@@ -497,10 +504,9 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
             is what a journal wants: the caption says what the figure is, and a title
             says it a second time in a place the typesetter cannot reach.
         size (tuple, optional): Figure size in inches.  Left out, the height follows the
-            number of symbols, because that is the number of rows in the graphs and in
-            the table alike: Hubert & Labahn 6.6 has three and a fixed height spreads
-            them down a page of nothing.  The width is a 16:9 slide's; a journal column
-            wants something nearer 5.5 and a smaller `font`.
+            number of symbols, which is the number of rows in the graphs and in the
+            table alike, and the width is :data:`WIDTH_IN`.  A journal column wants
+            something nearer 5.5 wide and a smaller `font`.
         font (float): Base point size; everything else is set relative to it.
         steps (sequence of str, optional): The words on the four arrows, in order.
             Worked out from the reduction by :func:`step_labels` when left out.  A
