@@ -89,6 +89,31 @@ def expr_to_tex(expr):
     tex = re.sub(r'\_\{?m([^\}]+)\}?', r'_{-\1}', tex)
     return tex
 
+def display_tex(tex):
+    """
+    The same TeX, with its fractions set at display size.
+
+    A figure is not running text.  A fraction set inline comes out half height, and the
+    subscripts inside it are smaller again, which is how `1/k_{2 3}` ends up unreadable
+    at the size a journal column asks for.
+
+    `\\dfrac` one fraction at a time rather than `\\displaystyle` over the lot, because
+    :mod:`matplotlib`'s mathtext has the first and not the second.
+
+    Args:
+        tex (str): As :func:`expr_to_tex` or :func:`dimension_to_tex` returns it.
+
+    Returns:
+        str
+
+    >>> print(display_tex(expr_to_tex(sympy.sympify('1/k_m1'))))
+    \\dfrac{1}{k_{-1}}
+    >>> print(display_tex('k_{2} x_{0}'))
+    k_{2} x_{0}
+    """
+    return tex.replace('\\frac', '\\dfrac')
+
+
 #: What goes between two dimension names being multiplied.
 _TIMES = ' \\cdot '
 

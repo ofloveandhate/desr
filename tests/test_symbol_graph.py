@@ -736,7 +736,23 @@ class TestDrawing(TestCase):
                             with_monomial=True)
         self.assertTrue(label.startswith('$') and label.endswith('$'))
         self.assertIn(r'\kappa', label)
-        self.assertIn(r'\frac', label)
+        # Display size, because a graph is a figure and an inline fraction comes out
+        # half height with its subscripts smaller again.
+        self.assertIn(r'\dfrac', label)
+
+    def test_a_negative_subscript_is_set_as_a_minus(self):
+        # desr writes k_m1 for what a paper writes as k_{-1}, and sympy's own printer
+        # sets that m literally.
+        from desr.tex_tools import expr_to_tex
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        translator = ODETranslator.from_ode_system(system)
+        graph = symbol_graph(translator, system)
+        label = _node_label(graph.nodes[(ORIGINAL, sympy.Symbol('k_m1'))])
+        self.assertIn('k_{-1}', label)
+        self.assertNotIn('k_{m1}', label)
+        self.assertEqual('k_{-1}', expr_to_tex(sympy.Symbol('k_m1')))
 
     def test_drawing_returns_the_axes_it_drew_on(self):
         import matplotlib.pyplot

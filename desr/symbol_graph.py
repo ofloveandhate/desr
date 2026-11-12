@@ -41,6 +41,7 @@ import networkx
 import sympy
 
 from desr.ode_translation import ReductionScheme
+from desr.tex_tools import display_tex, expr_to_tex
 
 #: The two vertex layers.  A node is a ``(layer, symbol)`` pair, because the two layers can
 #: contain the *same* sympy symbol -- a naming scheme may reuse the original letters, and
@@ -488,7 +489,10 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
 
     normalised = data['normalised'] and show_normalisation
     if latex:
-        chain = ' = '.join(sympy.latex(part) for part in parts)
+        # expr_to_tex rather than sympy.latex: desr writes a negative subscript `k_m1`,
+        # which sympy sets as a literal m.  display_tex because this is a figure, where
+        # an inline fraction comes out half height.
+        chain = ' = '.join(display_tex(expr_to_tex(part)) for part in parts)
         return '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
     chain = ' = '.join(str(part) for part in parts)
     return chain + (' |-> 1' if normalised else '')
