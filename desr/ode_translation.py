@@ -699,28 +699,32 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.dimensions_of()[sympy.Symbol('k_2')]
-        1/dimension_of_t
+        1/[t]
         '''
         system = self._system_or(system)
         return system.dimensions_of(self.scaling_matrix)
 
 
-    def _measured_symbol(self, invariant, system):
+    def _measured_in(self, invariant, system):
         """
-        The original symbol an invariant is the value of, or :const:`None`.
+        The symbol an invariant is the value of, and the unit it is measured in.
 
         An invariant is dimensionless, so it is some quantity divided by a unit.  When
         that quantity is a single one of the caller's symbols, the invariant reads as
-        "the value of `e`", which is shorter and clearer than its monomial.  Solved as
-        ``V_i a = exponents(symbol / invariant)`` over the integers: a solution says the
-        quotient is a monomial in the auxiliaries, which is what being a unit means.
+        "`e`, measured in `x1`", which is shorter and clearer than its monomial.  Solved
+        as ``V_i a = exponents(symbol / invariant)`` over the integers: a solution says
+        the quotient is a monomial in the auxiliaries, which is what being a unit means,
+        and ``a`` says which monomial.
 
-        :const:`None` when no single symbol works.  Hubert & Labahn 6.6 has one such
-        invariant: with one auxiliary and two invariants there are not enough units to go
-        round, and the second is a genuine combination.
+        Returns:
+            tuple: ``(symbol, unit)``, or ``(None, None)`` when no single symbol works.
+            Hubert & Labahn 6.6 has one such invariant: with one auxiliary and two
+            invariants there are not enough units to go round, and the second is a
+            genuine combination.
         """
         symbols = list(system.symbols)
         block = self.herm_mult_i
+        auxiliaries = self.column_names(system)[:self.r]
         for candidate in symbols:
             quotient = sympy.simplify(candidate / invariant)
             powers = quotient.as_powers_dict()
@@ -733,8 +737,10 @@ class ODETranslator(object):
             if not all(value.is_integer for value in solution):
                 continue
             if block * solution == exponents:
-                return candidate
-        return None
+                unit = sympy.prod([name ** solution[index]
+                                   for index, name in enumerate(auxiliaries)])
+                return candidate, unit
+        return None, None
 
     def unit_table(self, system=None):
         """
@@ -761,12 +767,18 @@ class ODETranslator(object):
             ``denotes``
                 the quantity, as a monomial in the original symbols.
             ``dimension``
-                of that quantity; 1 for every invariant.
+                of that quantity; 1 for every invariant, and :const:`None` where the
+                declarations do not determine it.
             ``role``
                 ``'unit'`` or ``'value'``.
             ``of``
                 for a value, the original symbol it measures, or :const:`None` when the
                 invariant is a combination rather than one symbol's value.
+            ``measured_in``
+                for a value, the unit it is measured in, as a monomial in the
+                auxiliaries: ``y1`` is ``e`` measured in ``x1``, and ``y1 == e / x1``
+                says the whole of it.  :const:`None` alongside an ``of`` of
+                :const:`None`, and for a unit row.
 
         >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
         >>> enzyme = ChemicalReactionNetwork.from_diagram(
@@ -785,10 +797,14 @@ class ODETranslator(object):
         >>> sorted(str(row['dimension']) for row in table if row['role'] == 'unit')
         ['concentration', 'concentration', 'concentration', 'time']
 
+        A value is its symbol divided by its unit, which is the sentence the two halves
+        of the table make together:
+
         >>> for row in table[4:6]:
-        ...     print(row['symbol'], '=', row['denotes'], '= the value of', row['of'])
-        y0 = k_2_3*t = the value of t
-        y1 = e*k_0_1/k_2_3 = the value of e
+        ...     print('{} = {} = {} / {}'.format(
+        ...         row['symbol'], row['denotes'], row['of'], row['measured_in']))
+        y0 = k_2_3*t = t / x0
+        y1 = e*k_0_1/k_2_3 = e / x1
         """
         system = self._system_or(system)
         dimensions = (system.physical_dimensions_of(self.scaling_matrix)
@@ -802,16 +818,85 @@ class ODETranslator(object):
         for index, name in enumerate(names):
             monomial = monomials[index]
             powers = monomial.as_powers_dict()
-            dimension = sympy.simplify(sympy.prod(
-                [dimensions[s] ** powers.get(s, 0) for s in system.symbols]))
+            carried = [(dimensions[s], powers[s]) for s in system.symbols
+                       if powers.get(s, 0)]
+            if any(dimension is None for dimension, _ in carried):
+                # A symbol in this monomial has a dimension the declarations do not
+                # determine, so neither is this one determined.  A 1 here would read as
+                # "dimensionless", which is a claim nobody made.
+                dimension = None
+            else:
+                dimension = sympy.simplify(sympy.prod(
+                    [dimension ** power for dimension, power in carried]))
             if index < self.r:
                 rows.append({'symbol': name, 'denotes': monomial,
-                             'dimension': dimension, 'role': 'unit', 'of': None})
+                             'dimension': dimension, 'role': 'unit',
+                             'of': None, 'measured_in': None})
             else:
+                measures, unit = self._measured_in(monomial, system)
                 rows.append({'symbol': name, 'denotes': monomial,
                              'dimension': dimension, 'role': 'value',
-                             'of': self._measured_symbol(monomial, system)})
+                             'of': measures, 'measured_in': unit})
         return rows
+
+    def units_and_dimensions(self, system=None):
+        """
+        How many units this reduction coins, and how many dimensions they measure.
+
+        A reduction coins one unit per scaling symmetry, so one per auxiliary.  Those
+        units need not measure different things.  The enzyme chain coins four, and three
+        of them are concentrations, because its equations never force the three branches
+        to share a scale.  That gap is a fact about the model, and it is why a reduction
+        reaches further than nondimensionalising by hand: by hand you pick one unit per
+        dimension, and the equations will let you pick more.
+
+        :meth:`unit_table` has the units themselves, one row each; this counts them.
+
+        Args:
+            system (ODESystem, optional): Defaults to the system this translator was
+                built for.
+
+        Returns:
+            dict: ``units``, the number of auxiliaries, and ``dimensions``, how many
+            independent physical dimensions those units measure.  ``dimensions`` is
+            :const:`None` until the declarations determine every symbol, since a count
+            drawn from a partial declaration would claim more than anyone said.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.units_and_dimensions()
+        {'units': 2, 'dimensions': None}
+
+        Michaelis-Menten coins one unit per dimension, so every scaling it admits is a
+        change of unit:
+
+        >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        >>> translator.units_and_dimensions(system)
+        {'units': 2, 'dimensions': 2}
+
+        The enzyme chain coins two more units than it has dimensions:
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
+        ...                        'f': 'concentration', 'x': 'concentration'})
+        >>> ODETranslator.from_ode_system(enzyme).units_and_dimensions()
+        {'units': 4, 'dimensions': 2}
+        """
+        system = self._system_or(system)
+        physical = system.physical_dimensions_of(self.scaling_matrix)
+        if not physical or any(each is None for each in physical.values()):
+            return {'units': self.r, 'dimensions': None}
+
+        names = sorted({base for each in physical.values()
+                        for base in each.free_symbols}, key=str)
+        exponents = sympy.Matrix([
+            [each.as_powers_dict().get(name, 0) for name in names]
+            for each in physical.values()])
+        return {'units': self.r, 'dimensions': exponents.rank()}
 
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
                          normalise_parameters=True, identify_indep_var=True):

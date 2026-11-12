@@ -89,6 +89,68 @@ def expr_to_tex(expr):
     tex = re.sub(r'\_\{?m([^\}]+)\}?', r'_{-\1}', tex)
     return tex
 
+#: What goes between two dimension names being multiplied.
+_TIMES = ' \\cdot '
+
+
+def dimension_to_tex(dimension):
+    """
+    Given a dimension, write out the TeX.
+
+    A structural dimension is named ``[t]``, after the symbol whose dimension it is.
+    sympy's printer reads that name as a base and a subscript and splits it at the
+    underscore, so ``[e_0]`` comes out as ``[e_{0]}`` with the brackets interleaved.
+    This writes the monomial itself and hands only the inner symbol to
+    :func:`expr_to_tex`.
+
+    Args:
+        dimension (sympy.Expr): A Laurent monomial in dimension names, as
+            :meth:`~desr.ode_system.ODESystem.dimensions_of` returns.
+
+    Returns:
+        str
+
+    >>> print(dimension_to_tex(sympy.Symbol('[e_0]')))
+    \\left[e_{0}\\right]
+    >>> print(dimension_to_tex(sympy.Integer(1)))
+    1
+    >>> print(dimension_to_tex(1 / (sympy.Symbol('[e_0]') * sympy.Symbol('[t]'))))
+    \\frac{1}{\\left[e_{0}\\right] \\cdot \\left[t\\right]}
+    >>> print(dimension_to_tex(sympy.Symbol('concentration') / sympy.Symbol('time')))
+    \\frac{concentration}{time}
+    """
+    above, below = [], []
+    for base, power in sorted(dimension.as_powers_dict().items(), key=str):
+        if base == 1 or power == 0:
+            continue
+        name = _dimension_name_to_tex(base)
+        size = abs(power)
+        factor = name if size == 1 else '{}^{{{}}}'.format(name, size)
+        (below if power < 0 else above).append(factor)
+
+    # A dot between the factors.  A space is whitespace in maths mode and vanishes,
+    # which runs `concentration` and `time` into one word, and a dimension name is a
+    # word rather than a letter, so juxtaposition does not read as multiplication.
+    if not above and not below:
+        return '1'
+    if not below:
+        return _TIMES.join(above)
+    return '\\frac{{{}}}{{{}}}'.format(_TIMES.join(above) or '1', _TIMES.join(below))
+
+
+def _dimension_name_to_tex(name):
+    """
+    TeX for one dimension name: ``[t]`` bracketed, anything else as it stands.
+    """
+    text = str(name)
+    if text.startswith('[') and text.endswith(']'):
+        inner = text[1:-1]
+        if ' ' in inner:
+            return '\\left[\\text{{{}}}\\right]'.format(inner)
+        return '\\left[{}\\right]'.format(expr_to_tex(sympy.Symbol(inner)))
+    return expr_to_tex(name)
+
+
 def eqn_to_tex(eqn):
     eqn = str(eqn).replace(' ', '')
 

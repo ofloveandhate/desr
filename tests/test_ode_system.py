@@ -1266,6 +1266,88 @@ class TestTheTwoFacesOfAValue(TestCase):
         self.assertIsNotNone(system.value_of('C_0'))
 
 
+class TestScalingSymmetries(TestCase):
+    '''
+    A row of the scaling matrix is a one-parameter group of scalings the equations
+    admit.  `scaling_symmetries` writes the row out with its factor in place, which is
+    the form a reader can check against the equations.
+    '''
+
+    MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                        'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+    HL64 = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        return (('Michaelis-Menten', ODESystem.from_equations(self.MICHAELIS_MENTEN)),
+                ('prey-predator', ODESystem.from_equations(
+                    ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                     'dp/dt = s*p*(1 - h*p / n)'])),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
+                ('HL 6.4', ODESystem.from_equations(self.HL64)))
+
+    def test_every_symmetry_leaves_the_equations_invariant(self):
+        # The claim the report makes, checked against the equations rather than against
+        # the matrix it came from.  A derivative dv/dt scales by the weight of v less
+        # the weight of t, so substituting the symmetry into a right-hand side gives
+        # that power of the factor times what was there.
+        factor = sympy.Symbol('lamda')
+        for label, system in self.systems():
+            matrix = system.maximal_scaling_matrix()
+            symbols = list(system.symbols)
+            clock = symbols.index(system.indep_var)
+            for row, symmetry in enumerate(system.scaling_symmetries()):
+                for variable, derivative in system.derivative_dict.items():
+                    if variable == system.indep_var:
+                        continue
+                    with self.subTest(system=label, symmetry=row, variable=str(variable)):
+                        weight = matrix[row, symbols.index(variable)] - matrix[row, clock]
+                        scaled = derivative.subs(symmetry, simultaneous=True)
+                        self.assertEqual(0, sympy.simplify(
+                            scaled - factor ** weight * derivative))
+
+    def test_a_symbol_the_symmetry_fixes_is_left_out(self):
+        # Hubert & Labahn 6.4's scaling does not act on t, which is the condition the
+        # dependent-variable scheme is chosen by.  A symbol multiplied by 1 is noise in
+        # a report of what moves.
+        system = ODESystem.from_equations(self.HL64)
+        symmetry, = system.scaling_symmetries()
+        self.assertNotIn(system.indep_var, symmetry)
+        self.assertEqual({sympy.Symbol('z1'), sympy.Symbol('z2')}, set(symmetry))
+
+    def test_the_images_read_as_a_change_of_unit(self):
+        # t lengthens by lambda and the rate constants shorten by it, which is what
+        # changing the unit of time does and what [t] names that direction after.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        time, concentration = system.scaling_symmetries()
+        factor = sympy.Symbol('lamda')
+        self.assertEqual(factor * sympy.Symbol('t'), time[sympy.Symbol('t')])
+        self.assertEqual(sympy.Symbol('k_2') / factor, time[sympy.Symbol('k_2')])
+        self.assertEqual(factor * sympy.Symbol('s'),
+                         concentration[sympy.Symbol('s')])
+
+    def test_the_factor_can_be_renamed(self):
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        symmetry, _ = system.scaling_symmetries(factor='mu')
+        self.assertEqual(sympy.Symbol('mu') * sympy.Symbol('t'),
+                         symmetry[sympy.Symbol('t')])
+
+    def test_the_rows_line_up_with_the_dimension_names(self):
+        # The i-th symmetry is the change of unit of the i-th dimension, which is what
+        # lets a reader pair the two reports.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        dimensions = system.dimensions_of()
+        for symmetry, (name, sign) in zip(
+                system.scaling_symmetries(),
+                system._dimension_names(system.maximal_scaling_matrix())):
+            with self.subTest(dimension=str(name)):
+                # The symbol the direction is named after is one the symmetry moves.
+                named = sympy.Symbol(str(name)[1:-1])
+                self.assertIn(named, symmetry)
+                self.assertEqual(name ** sign, dimensions[named])
+
+
 class TestStructuralDimensions(TestCase):
     '''
     A symbol's column of the scaling matrix says how it transforms under each scaling --
@@ -1351,8 +1433,7 @@ class TestStructuralDimensions(TestCase):
         # after the rate constant would be right and backwards to read, so +1 wins.
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         dimensions = system.dimensions_of()
-        self.assertEqual(sympy.Symbol('dimension_of_t'),
-                         dimensions[sympy.Symbol('t')])
+        self.assertEqual(sympy.Symbol('[t]'), dimensions[sympy.Symbol('t')])
 
     def test_a_direction_with_nothing_at_plus_one_falls_back_to_minus_one(self):
         # Hubert & Labahn 6.6 has no symbol of weight +1 in its single direction, but
@@ -1360,10 +1441,8 @@ class TestStructuralDimensions(TestCase):
         # the other one is presentation and changes no matrix.
         system = ODESystem.from_equations(self.HL66)
         dimensions = system.dimensions_of()
-        self.assertEqual(sympy.Symbol('dimension_of_z1'),
-                         dimensions[sympy.Symbol('z1')])
-        self.assertEqual(sympy.Symbol('dimension_of_z1') ** -3,
-                         dimensions[sympy.Symbol('t')])
+        self.assertEqual(sympy.Symbol('[z1]'), dimensions[sympy.Symbol('z1')])
+        self.assertEqual(sympy.Symbol('[z1]') ** -3, dimensions[sympy.Symbol('t')])
 
     def test_the_clock_can_be_dimensionless(self):
         # Hubert & Labahn 6.4's scaling does not act on t, which is the condition the
@@ -1486,26 +1565,38 @@ class TestPhysicalDimensions(TestCase):
             system.set_dimension('nonsense', 'time')
         self.assertIn('not a symbol of this system', str(caught.exception))
 
-    def test_the_ranks_say_how_much_is_structure_alone(self):
-        system = self.michaelis_menten()
-        self.assertEqual({'structural': 2, 'physical': 0, 'structural_only': 2},
-                         system.num_dimensions())
-        system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
-        # Every scaling Michaelis-Menten admits is a change of unit.
-        self.assertEqual({'structural': 2, 'physical': 2, 'structural_only': 0},
-                         system.num_dimensions())
+    def test_a_symbol_the_declarations_do_not_reach_has_no_dimension(self):
+        # Declaring t and x reaches two of the enzyme chain's four directions.  e is
+        # left unsaid, and k_0_1 multiplies e, so neither follows.  Reporting 1 for
+        # those would read as "dimensionless", which nobody said.
+        system = self.enzyme()
+        system.set_dimensions({'t': 'time', 'x': 'concentration'})
+        physical = system.physical_dimensions_of()
 
-        enzyme = self.enzyme()
-        enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
-                               'f': 'concentration', 'x': 'concentration'})
-        self.assertEqual({'structural': 4, 'physical': 2, 'structural_only': 2},
-                         enzyme.num_dimensions())
+        self.assertEqual(sympy.Symbol('concentration'), physical[sympy.Symbol('x')])
+        self.assertEqual(sympy.Symbol('time'), physical[sympy.Symbol('t')])
+        for name in ('e', 'f', 'k_0_1', 'k_4_5'):
+            with self.subTest(symbol=name):
+                self.assertIsNone(physical[sympy.Symbol(name)])
+
+    def test_declaring_the_rest_turns_none_into_a_dimension(self):
+        # The same system, said in full.  Nothing but a declaration can fill the gap.
+        system = self.enzyme()
+        system.set_dimensions({'t': 'time', 'x': 'concentration'})
+        self.assertIsNone(system.physical_dimensions_of()[sympy.Symbol('e')])
+
+        system.set_dimensions({'e': 'concentration', 'f': 'concentration'})
+        physical = system.physical_dimensions_of()
+        concentration, time = sympy.Symbol('concentration'), sympy.Symbol('time')
+        self.assertEqual(concentration, physical[sympy.Symbol('e')])
+        # k_0_1 is second order, k_2_3 first, read off the equations as always.
+        self.assertEqual(1 / (concentration * time), physical[sympy.Symbol('k_0_1')])
+        self.assertEqual(1 / time, physical[sympy.Symbol('k_2_3')])
 
     def test_nothing_declared_is_not_a_claim_that_there_are_none(self):
         system = self.michaelis_menten()
         self.assertEqual({}, system.physical_dimensions)
         self.assertEqual({}, system.physical_dimensions_of())
-        self.assertEqual(0, system.num_dimensions()['physical'])
 
     def test_naming_changes_nothing(self):
         # Physical dimensions are an overlay.  Whatever is declared, the scaling matrix,

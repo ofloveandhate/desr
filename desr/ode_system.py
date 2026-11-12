@@ -2378,16 +2378,19 @@ class ODESystem(object):
         One name per structural dimension, in row order, with the sign to read it by.
 
         A direction is named after a symbol that lives in it **alone** and with weight
-        :math:`\\pm 1`, so that the symbol's dimension is that name exactly.  Where the
+        :math:`\\pm 1`, so that the symbol's dimension is that name exactly.  The name is
+        written ``[t]``, which is the usual notation for the dimension of :math:`t`, and
+        is a name rather than an operation: desr has no ``[]`` to apply to an arbitrary
+        expression, only these names and the monomials in them.  Where the
         weight is :math:`-1` the direction is named by the *other* generator, which is why
         a sign comes back with the name: both :math:`e_i` and :math:`-e_i` generate the
         same direction of the lattice, so choosing between them is presentation and
         changes no matrix.
 
         A direction with no such symbol -- Hubert & Labahn 6.6 has none at weight
-        :math:`+1`, though `z_1` sits there at :math:`-1` -- falls back to a positional
-        name.  That is the only place the row order shows, and it shows precisely when
-        there is nothing better to say.
+        :math:`+1`, though `z_1` sits there at :math:`-1` -- falls back to
+        ``[direction 0]``.  That is the only place the row order shows, and it shows
+        precisely when there is nothing better to say.
 
         Returns:
             list: ``(name, sign)`` per row.
@@ -2414,10 +2417,9 @@ class ODESystem(object):
                 if chosen is not None:
                     break
             if chosen is None:
-                names.append((sympy.Symbol('dimension_{}'.format(row)), 1))
+                names.append((sympy.Symbol('[direction {}]'.format(row)), 1))
             else:
-                names.append((sympy.Symbol('dimension_of_{}'.format(chosen[0])),
-                              chosen[1]))
+                names.append((sympy.Symbol('[{}]'.format(chosen[0])), chosen[1]))
         return names
 
     def dimensions_of(self, scaling_matrix=None):
@@ -2453,9 +2455,9 @@ class ODESystem(object):
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
         >>> dimensions = system.dimensions_of()
         >>> dimensions[sympy.Symbol('t')]
-        dimension_of_t
+        [t]
         >>> dimensions[sympy.Symbol('c')]
-        dimension_of_e_0
+        [e_0]
 
         `c` and `e_0` share a dimension, which the equations say and nobody had to:
 
@@ -2465,9 +2467,9 @@ class ODESystem(object):
         A rate constant is an inverse time, read off rather than asserted:
 
         >>> dimensions[sympy.Symbol('k_2')]
-        1/dimension_of_t
+        1/[t]
         >>> dimensions[sympy.Symbol('k_1')]
-        1/(dimension_of_e_0*dimension_of_t)
+        1/([e_0]*[t])
         '''
         if scaling_matrix is None:
             scaling_matrix = self.maximal_scaling_matrix()
@@ -2492,8 +2494,10 @@ class ODESystem(object):
 
         Declaring a dimension changes nothing else -- not the scaling matrix, the
         multiplier, the structural dimensions, or the reduction.  It adds a reading, in
-        which :meth:`num_dimensions` can report how much of a reduction is a change of
-        unit and how much is not.
+        which :meth:`~desr.ode_translation.ODETranslator.unit_table` names the units a
+        reduction coins and
+        :meth:`~desr.ode_translation.ODETranslator.units_and_dimensions` says how many
+        dimensions those units measure.
 
         Args:
             symbol (str or sympy.Symbol): One of this system's symbols.
@@ -2568,9 +2572,11 @@ class ODESystem(object):
         is a linear map ``phi`` with ``phi(weight(s)) == declared(s)`` for everything
         declared.  Solved one physical name at a time: each is an independent row.
 
-        A structural direction no declaration reaches is taken to be physically trivial,
-        which sets the free parameters of the solve to zero.  For the cell cycle network
-        that is five directions out of seven.
+        The declared weights need not span every structural direction.  Where they do
+        not, the solve leaves free parameters and this sets them to zero -- a choice,
+        not a derivation, so :meth:`physical_dimensions_of` throws that half away and
+        reports those symbols as having no dimension.  Every choice of the free
+        parameters agrees on the span, and that half stands.
 
         Returns:
             dict: ``{dimension name: row vector over the structural directions}``.
@@ -2585,16 +2591,10 @@ class ODESystem(object):
         if not declared:
             return {}
 
-        symbols = list(self.symbols)
-        rows = scaling_matrix.shape[0]
         names = sorted(
             {base for dimension in declared.values()
              for base in dimension.free_symbols}, key=str)
-
-        columns = [symbols.index(symbol) for symbol in declared]
-        weights = sympy.Matrix(
-            [[scaling_matrix[row, column] for row in range(rows)]
-             for column in columns])
+        weights = self._declared_weights(scaling_matrix)
 
         solved = {}
         for name in names:
@@ -2607,6 +2607,25 @@ class ODESystem(object):
                 raise ValueError(self._dimension_conflict(name))
             solved[name] = row.subs({parameter: 0 for parameter in free}).T
         return solved
+
+    def _declared_weights(self, scaling_matrix):
+        """
+        The weight vector of each declared symbol, one per row.
+
+        These rows span the directions the declarations speak for.  A symbol whose
+        weight lies in that span has a physical dimension; a symbol whose weight points
+        out of it has none, until a further declaration widens the span.
+
+        Returns:
+            sympy.Matrix: ``len(physical_dimensions)`` rows, one column per structural
+            direction.
+        """
+        symbols = list(self.symbols)
+        rows = scaling_matrix.shape[0]
+        columns = [symbols.index(symbol) for symbol in self._physical_dimensions]
+        return sympy.Matrix(
+            [[scaling_matrix[row, column] for row in range(rows)]
+             for column in columns])
 
     def _dimension_conflict(self, name):
         """Say which declarations cannot hold at once, and why."""
@@ -2624,24 +2643,51 @@ class ODESystem(object):
 
     def physical_dimensions_of(self, scaling_matrix=None):
         """
-        The physical dimension of **every** symbol, derived from what was declared.
+        The physical dimension of every symbol, derived from what was declared.
 
-        A few declarations determine the rest, because the structural weights already
-        fix the relations between symbols.  Michaelis-Menten needs two of its seven.
+        A few declarations determine many symbols, because the structural weights
+        already fix the relations between them: Michaelis-Menten needs two of its seven.
+        A symbol the declarations do **not** determine comes back as :const:`None`,
+        which is the difference between *you did not say* and *you said it is
+        dimensionless*.  Declaring more can turn a :const:`None` into a dimension;
+        nothing can turn it into ``1`` except declaring it so.
 
-        Symbols differing only along a direction no declaration reaches come out with the
-        same physical dimension, though their structural dimensions differ.  The enzyme
-        chain's `e`, `f` and `x` have three structural dimensions; declaring all three to
-        be concentration identifies those directions.
+        Symbols differing only along a direction no declaration reaches come out with
+        the same physical dimension, though their structural dimensions differ.  The
+        enzyme chain's `e`, `f` and `x` have three structural dimensions; declaring all
+        three to be concentration identifies those directions.
 
         Args:
             scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
 
         Returns:
-            dict: ``{symbol: dimension}``, empty when nothing has been declared.
+            dict: ``{symbol: dimension or None}``, empty when nothing has been declared.
 
         Raises:
             ValueError: if the declarations are inconsistent; see :meth:`_physical_map`.
+
+        Two declarations reach every direction Michaelis-Menten has, so every symbol
+        follows:
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        >>> sorted(system.physical_dimensions_of().values(), key=str)
+        [1/(concentration*time), 1/time, 1/time, concentration, concentration, concentration, time]
+
+        The enzyme chain has four directions, and declaring `t` and `x` reaches two of
+        them.  `e` is left unsaid, so `e` and the rate constant beside it are unsaid too:
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> enzyme.set_dimensions({'t': 'time', 'x': 'concentration'})
+        >>> physical = enzyme.physical_dimensions_of()
+        >>> physical[sympy.Symbol('x')], physical[sympy.Symbol('y')]
+        (concentration, concentration)
+        >>> physical[sympy.Symbol('e')] is None, physical[sympy.Symbol('k_0_1')] is None
+        (True, True)
         """
         if not self._physical_dimensions:
             return {}
@@ -2650,10 +2696,15 @@ class ODESystem(object):
 
         rows = scaling_matrix.shape[0]
         solved = self._physical_map(scaling_matrix)
+        declared = self._declared_weights(scaling_matrix)
+        reach = declared.rank()
 
         physical = {}
         for column, symbol in enumerate(self.symbols):
             weight = [scaling_matrix[row, column] for row in range(rows)]
+            if declared.col_join(sympy.Matrix([weight])).rank() != reach:
+                physical[symbol] = None
+                continue
             monomial = sympy.Integer(1)
             for name, row in solved.items():
                 power = sum(row[index] * weight[index] for index in range(rows))
@@ -2661,53 +2712,54 @@ class ODESystem(object):
             physical[symbol] = sympy.simplify(monomial)
         return physical
 
-    def num_dimensions(self, scaling_matrix=None):
+    def scaling_symmetries(self, scaling_matrix=None, factor='lamda'):
         """
-        How many dimensions this system has, of each kind.
+        The scaling symmetries themselves, written out as substitutions.
 
-        Returns:
-            dict: with three keys.
+        A row of the scaling matrix is a one-parameter group: multiply every symbol by
+        the matching power of one factor and the equations are unchanged.  The row holds
+        the powers; this puts the factor back, because a weight of :math:`-1` means
+        *divided by* and reading that off a matrix is a step to make nobody take.
 
-            ``structural``
-                :math:`r`, the number of scaling symmetries the equations admit.
-            ``physical``
-                how many of those directions the declared physical dimensions reach.
-                Zero until something has been declared, which means nothing has been
-                said rather than that the system is dimensionless.
-            ``structural_only``
-                the difference: directions that are symmetries of the equations without
-                being changes of unit.
-
-        The names of the structural dimensions are in :meth:`dimensions_of`, and of the
-        physical ones in :meth:`physical_dimensions_of`; this counts them.
+        The rows are in the same order as :meth:`dimensions_of`'s names, so the
+        :math:`i`-th symmetry is the change of unit of the :math:`i`-th dimension.
 
         Args:
             scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+            factor (str or sympy.Symbol): the name of the scaling factor.  `lamda` is
+                sympy's spelling of the greek letter -- `lambda` is a Python keyword and
+                so does not parse -- and it is the spelling that renders as
+                :math:`\\lambda`.
+
+        Returns:
+            list of dict: one per symmetry, in row order, mapping each symbol the
+            symmetry moves to its image.  Symbols it fixes are left out.
 
         >>> system = ODESystem.from_equations(
         ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        >>> system.num_dimensions()
-        {'structural': 2, 'physical': 0, 'structural_only': 2}
+        >>> for symmetry in system.scaling_symmetries():
+        ...     print(',  '.join('{} -> {}'.format(symbol, image)
+        ...                      for symbol, image in symmetry.items()))
+        k_1 -> k_1/lamda,  k_2 -> k_2/lamda,  k_m1 -> k_m1/lamda,  t -> lamda*t
+        e_0 -> e_0*lamda,  k_1 -> k_1/lamda,  c -> c*lamda,  s -> lamda*s
 
-        Every scaling Michaelis-Menten admits is a change of unit:
-
-        >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
-        >>> system.num_dimensions()
-        {'structural': 2, 'physical': 2, 'structural_only': 0}
-
-        The cell cycle control network gives ``structural`` 7 and ``physical`` 2.
+        The first is a change of the unit of time, the second of concentration, which is
+        what :meth:`dimensions_of` names those directions after.
         """
         if scaling_matrix is None:
             scaling_matrix = self.maximal_scaling_matrix()
-        structural = scaling_matrix.shape[0]
+        factor = to_symbol(factor)
 
-        solved = self._physical_map(scaling_matrix)
-        physical = (sympy.Matrix([list(row) for row in solved.values()]).rank()
-                    if solved else 0)
-        return {'structural': structural,
-                'physical': physical,
-                'structural_only': structural - physical}
+        symmetries = []
+        for row in range(scaling_matrix.shape[0]):
+            moved = {}
+            for column, symbol in enumerate(self.symbols):
+                power = scaling_matrix[row, column]
+                if power:
+                    moved[symbol] = factor ** power * symbol
+            symmetries.append(moved)
+        return symmetries
 
     def reorder_variables(self, variables):
         '''
