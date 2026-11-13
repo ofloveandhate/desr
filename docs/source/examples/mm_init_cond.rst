@@ -190,6 +190,71 @@ An initial condition can be read as its expression or as its value:
     >>> reduced_system.initial_condition_values
     {u: 1, v: 0}
 
+Reading the reduction as a graph
+*************************************************
+
+The Hermite multiplier is the weighted biadjacency matrix of a bipartite graph: the
+original symbols on one side, the reduced ones on the other, and an edge carrying the
+exponent with which its source appears in its target.  So the reduction can be drawn as
+well as printed, and the zero can be followed through it.
+
+    >>> graph = translator.symbol_graph(system)
+    >>> graph.number_of_nodes(), graph.number_of_edges()
+    (20, 22)
+
+:math:`c_0` has exactly one edge.  It is positive, and it runs to an invariant rather than
+to an auxiliary -- which is the whole of why a zero initial condition survives this
+reduction.  Nothing divides by :math:`c_0`, so the invariant it feeds is simply zero.
+
+    >>> list(graph.out_edges(('original', sympy.Symbol('c_0')), data='exponent'))
+    [(('original', c_0), ('reduced', kappa4), 1)]
+    >>> graph.nodes[('reduced', sympy.Symbol('kappa4'))]['monomial']
+    c_0/s_0
+    >>> graph.nodes[('reduced', sympy.Symbol('kappa4'))]['value']
+    0
+
+The symbols the reduction *does* divide by are those with an edge into an auxiliary, which
+is set to 1, or a negative edge into an invariant.  Coming back is a different question
+over the other set of symbols, and gets a different answer:
+
+    >>> translator.symbols_that_must_not_be_zero(system)
+    (s_0, e_0, k_1)
+    >>> translator.reduced_symbols_that_must_not_be_zero(system)
+    (x0, x1, kappa0)
+
+The zero returns the way it came.  Every node says what it equals in terms of the other
+side, so the reverse graph gives :math:`c_0` as a monomial in the reduced symbols, with
+:math:`\kappa_4` a factor of it:
+
+    >>> back = translator.symbol_graph(system, direction='reverse')
+    >>> back.nodes[('original', sympy.Symbol('c_0'))]['monomial']
+    kappa4*x1
+
+Drawing it is one further call --
+:meth:`~desr.ode_translation.ODETranslator.draw_symbol_graph` for a figure straight from
+the translator, or :func:`desr.symbol_graph.draw_symbol_graph` on a graph you already
+hold.
+
+.. plot:: _examples/michaelis_menten_graph.py
+
+The source layer is on the left in both panels, so the reduced column ends the first and
+begins the second at the same heights, and the round trip
+:math:`c_0 \rightarrow \kappa_4 \rightarrow c_0` reads as one path across the pair.  Shape
+says what a symbol is and a heavy border marks what must not be zero, so the three symbols
+listed above are the three outlined ones, and :math:`c_0` is plainly not among them.
+
+The hatched hexagons are the auxiliaries, and they are the one thing the two panels
+disagree about.  Going out they are normalised to 1, which is how :math:`s_0` and
+:math:`k_1` are absorbed.  Coming back they are unknowns: recovering the original values
+needs two of them supplied from somewhere, which is what
+:class:`desr.numerics.InsufficientKnownValues` is raised about.
+
+Drawing needs :mod:`networkx` and :mod:`matplotlib`, which the rest of `desr` does not --
+``pip install desr[graphs]``.
+
+Matching the names in the literature
+*************************************************
+
 Now we have a system, but the names of symbols don't match.  We'll do substitutions.
 Murray has no name for :math:`\kappa_4`, because he sets it to zero; :math:`\gamma` until
 we do the same.

@@ -55,6 +55,9 @@ setup(
         # must keep working without them -- tests/test_namespace.py pins that, and CI
         # proves it on a bare install.
         'numerics': ['numpy', 'scipy'],
+        # Only desr.symbol_graph needs these, and its drawing is the only part that needs
+        # matplotlib.  `import desr` must keep working without either.
+        'graphs': ['networkx', 'matplotlib'],
     },
     # The DOI first because it is the citable identifier and does not depend on which
     # forge hosts the code.  Then the repository where the work happens, and last the

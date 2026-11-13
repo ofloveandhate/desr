@@ -18,6 +18,8 @@ build:
       - pip install sphinx sphinxcontrib-bibtex sphinx-rtd-theme
       # needed by the doctests and figures in the numerical examples
       - pip install numpy scipy matplotlib
+      # needed by the exponent graph figure and its doctests
+      - pip install networkx
     build:
       html:
         - cd docs && sphinx-build -b doctest source/ $READTHEDOCS_OUTPUT/

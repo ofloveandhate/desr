@@ -45,6 +45,12 @@ _LAZY = {
     'InsufficientKnownValues': 'numerics',
     'NumericTranslator': 'numerics',
     'numerics': None,
+    # desr.symbol_graph needs networkx, and its drawing needs matplotlib.  Same bargain as
+    # numerics: resolved on first access, so neither is needed for `import desr`.  The
+    # submodule only, not its functions: the module and its main function share a name, so
+    # a top-level `symbol_graph` would be ambiguous.  `ODETranslator.symbol_graph` is the
+    # way in, and `from desr.symbol_graph import draw_symbol_graph` gets the drawing.
+    'symbol_graph': None,
 }
 
 
@@ -87,6 +93,7 @@ __all__ = [
     'numerics',
     'ode_system',
     'ode_translation',
+    'symbol_graph',
     'sympy_helper',
     'tex_tools',
 ]

@@ -1866,3 +1866,146 @@ class TestTheTranslatorRemembersItsSystem(TestCase):
         # and the monomials it records are written in those symbols
         named = set().union(*(m.free_symbols for m in reduced.named_symbols.values()))
         self.assertTrue(named <= set(reduced.original_system.symbols))
+
+
+class TestUnitTable(TestCase):
+    '''
+    Every symbol a reduction introduces is a unit, or the value of one of the caller's
+    quantities measured in those units.  The table says which, so that a reader never
+    has to decode a block name.
+
+    The rows are the reduced system's symbols.  That is what keeps the categories
+    apart: `x` appears in the *denotes* column and never as a row, so it is never a
+    unit and a symbol at once.
+    '''
+
+    ENZYME_CHAIN = 'x + e -> y + e\ny -> z\nz + f -> x + f'
+    MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                        'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def enzyme(self, declare=True):
+        system = ChemicalReactionNetwork.from_diagram(
+            self.ENZYME_CHAIN).to_ode_system()
+        if declare:
+            system.set_dimensions({'t': 'time', 'e': 'concentration',
+                                   'f': 'concentration', 'x': 'concentration'})
+        return system
+
+    def table(self, system):
+        return ODETranslator.from_ode_system(system).unit_table(system)
+
+    def test_the_units_are_the_auxiliaries_and_the_values_the_invariants(self):
+        system = self.enzyme()
+        translator = ODETranslator.from_ode_system(system)
+        table = translator.unit_table(system)
+
+        self.assertEqual(len(system.symbols), len(table))
+        roles = [row['role'] for row in table]
+        self.assertEqual(['unit'] * translator.r, roles[:translator.r])
+        self.assertEqual(['value'] * (len(table) - translator.r),
+                         roles[translator.r:])
+
+    def test_a_row_denotes_a_monomial_in_the_callers_symbols(self):
+        # Never a substituted number.  y1 = e*k_0_1/k_2_3 is dimensionless; y1 = e is
+        # false as written, and is what substituting the normalisations would print.
+        system = self.enzyme()
+        for row in self.table(system):
+            with self.subTest(symbol=str(row['symbol'])):
+                self.assertTrue(
+                    row['denotes'].free_symbols <= set(system.symbols))
+                self.assertNotIn(row['symbol'], row['denotes'].free_symbols)
+
+    def test_every_value_is_dimensionless(self):
+        # An invariant is invariant under the changes of unit too, so it carries no
+        # dimension.  That is what makes it a number a reader can quote.
+        for declare in (True, False):
+            system = self.enzyme(declare=declare)
+            for row in self.table(system):
+                if row['role'] == 'value':
+                    with self.subTest(declared=declare, symbol=str(row['symbol'])):
+                        self.assertEqual(1, row['dimension'])
+
+    def test_one_dimension_can_carry_several_units(self):
+        # Three concentration units, one concentration dimension: the equations never
+        # force the three branches of the chain to share a scale.
+        system = self.enzyme()
+        units = [row for row in self.table(system) if row['role'] == 'unit']
+        concentration = sympy.Symbol('concentration')
+        self.assertEqual(3, sum(row['dimension'] == concentration for row in units))
+        self.assertEqual(
+            {'units': 4, 'dimensions': 2},
+            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+
+    def test_a_value_names_the_symbol_it_measures(self):
+        system = self.enzyme()
+        measured = {str(row['symbol']): row['of'] for row in self.table(system)
+                    if row['role'] == 'value'}
+        self.assertEqual(sympy.Symbol('t'), measured['y0'])
+        self.assertEqual(sympy.Symbol('e'), measured['y1'])
+
+    def test_a_value_is_its_symbol_divided_by_its_unit(self):
+        # The sentence the two halves of the table make together, checked as algebra.
+        # Substituting what each auxiliary denotes turns y1 = e / x1 into an identity,
+        # which is what makes "e, measured in x1" a statement rather than a gloss.
+        system = self.enzyme()
+        table = self.table(system)
+        denotes = {row['symbol']: row['denotes'] for row in table}
+        for row in table:
+            if row['role'] == 'value' and row['of'] is not None:
+                with self.subTest(symbol=str(row['symbol'])):
+                    unit = row['measured_in'].subs(denotes, simultaneous=True)
+                    self.assertEqual(
+                        0, sympy.simplify(row['denotes'] - row['of'] / unit))
+
+    def test_a_value_that_is_no_single_symbols_measure_says_none(self):
+        # Hubert & Labahn 6.6 has one auxiliary and two invariants, so there are too few
+        # units to go round and one invariant is nobody's value.  Guessing would be
+        # worse than saying so.
+        system = ODESystem.from_equations(
+            ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+             'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        values = [row for row in self.table(system) if row['role'] == 'value']
+        orphans = [row for row in values if row['of'] is None]
+        self.assertTrue(orphans)
+        self.assertTrue(all(row['measured_in'] is None for row in orphans))
+
+    def test_an_undeclared_system_reports_structural_dimensions(self):
+        # Nothing declared is not a claim that there are none, so the table falls back
+        # to the dimensions the equations alone give.
+        system = self.enzyme(declare=False)
+        units = [row for row in self.table(system) if row['role'] == 'unit']
+        self.assertEqual({sympy.Symbol('[t]'), sympy.Symbol('[e]'),
+                          sympy.Symbol('[f]'), sympy.Symbol('[x]')},
+                         {row['dimension'] for row in units})
+
+    def test_a_unit_the_declarations_do_not_reach_has_no_dimension(self):
+        # Declaring t and x leaves e unsaid, so k_2_3/k_0_1 is unsaid.  A 1 in that
+        # cell would read as "dimensionless", which is a claim nobody made, and the
+        # count refuses to be drawn from a partial declaration.
+        system = self.enzyme(declare=False)
+        system.set_dimensions({'t': 'time', 'x': 'concentration'})
+        dimensions = {str(row['symbol']): row['dimension']
+                      for row in self.table(system)}
+        self.assertEqual(sympy.Symbol('time'), dimensions['x0'])
+        self.assertIsNone(dimensions['x1'])
+        self.assertEqual(
+            {'units': 4, 'dimensions': None},
+            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+
+    def test_every_scaling_michaelis_menten_admits_is_a_change_of_unit(self):
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        self.assertEqual(
+            {'units': 2, 'dimensions': 2},
+            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+
+    def test_declaring_dimensions_changes_no_row_but_the_dimension(self):
+        # Physical dimensions are an overlay.  The symbols, what they denote and their
+        # roles are the reduction's, and naming cannot touch them.
+        plain, named = self.enzyme(declare=False), self.enzyme()
+        for row, other in zip(self.table(plain), self.table(named)):
+            with self.subTest(symbol=str(row['symbol'])):
+                self.assertEqual(row['symbol'], other['symbol'])
+                self.assertEqual(row['denotes'], other['denotes'])
+                self.assertEqual(row['role'], other['role'])
+                self.assertEqual(row['of'], other['of'])

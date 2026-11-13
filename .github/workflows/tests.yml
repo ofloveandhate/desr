@@ -13,9 +13,11 @@ name: tests
 #                     else runs them; that is how a parameter-ordering bug survived until
 #                     one of them tripped over it
 #
-# The second axis is numpy.  desr is pure sympy and `import desr` must work without numpy
-# or scipy; only desr.numerics needs them.  `without-numeric-extras` proves that on a bare
-# install, which a test running inside a full environment cannot.
+# The second axis is the optional dependencies.  desr is sympy and python-flint, and
+# `import desr` must work without numpy, scipy, networkx or matplotlib -- the first two
+# are the `numerics` extra and desr.numerics alone needs them, the other two are the
+# `graphs` extra and desr.symbol_graph alone needs them.  `without-numeric-extras` proves
+# that on a bare install, which a test running inside a full environment cannot.
 
 on:
   push:
@@ -40,10 +42,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install desr with the numeric extras
+      - name: Install desr with every extra
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[numerics]' pytest
+          python -m pip install '.[numerics,graphs]' pytest
 
       - name: Unit tests
         run: python -m pytest tests/ -v
@@ -52,7 +54,7 @@ jobs:
         run: python -m pytest --doctest-modules desr/ -v
 
   without-numeric-extras:
-    name: no numpy, python ${{ matrix.python-version }}
+    name: no extras, python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -65,19 +67,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install desr without numpy or scipy
+      - name: Install desr with no extras at all
         run: |
           python -m pip install --upgrade pip
           python -m pip install .
 
-      - name: numpy and scipy really are absent
+      - name: the optional dependencies really are absent
         run: |
           python - <<'PY'
           import importlib.util
-          for name in ('numpy', 'scipy'):
+          for name in ('numpy', 'scipy', 'networkx', 'matplotlib'):
               assert importlib.util.find_spec(name) is None, (
                   name + ' is installed, so this job proves nothing')
-          print('neither numpy nor scipy is present')
+          print('none of the optional dependencies is present')
           PY
 
       - name: A whole symbolic workflow, with no numeric dependency
@@ -120,7 +122,7 @@ jobs:
       - name: Install desr and the docs toolchain
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[numerics]' sphinx sphinxcontrib-bibtex sphinx-rtd-theme matplotlib
+          python -m pip install '.[numerics,graphs]' sphinx sphinxcontrib-bibtex sphinx-rtd-theme
 
       - name: Sphinx doctests
         run: python -m sphinx -b doctest docs/source docs/build/doctest
@@ -149,10 +151,10 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install desr, the numeric extras and matplotlib
+      - name: Install desr with every extra
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[numerics]' matplotlib
+          python -m pip install '.[numerics,graphs]'
 
       # They can be run unattended: under the Agg backend plt.show() is a no-op.  CLAUDE.md
       # used to claim otherwise, which is why nothing ran them.

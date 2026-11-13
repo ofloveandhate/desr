@@ -87,7 +87,8 @@ class TestPublicNames(TestCase):
 
     def test_submodules_are_reachable_as_attributes(self):
         for name in ('chemical_reaction_network', 'matrix_normal_forms', 'numerics',
-                     'ode_system', 'ode_translation', 'sympy_helper', 'tex_tools'):
+                     'ode_system', 'ode_translation', 'symbol_graph', 'sympy_helper',
+                     'tex_tools'):
             with self.subTest(module=name):
                 self.assertTrue(hasattr(desr, name))
 
@@ -113,12 +114,12 @@ class TestOptionalDependencies(TestCase):
     '''
 
     @staticmethod
-    def modules_after(statement):
-        '''Which of numpy and scipy are loaded after running `statement` in a fresh python.'''
+    def modules_after(statement, names=('numpy', 'scipy')):
+        '''Which of `names` are loaded after running `statement` in a fresh python.'''
         script = (statement + '\n'
                   'import sys\n'
-                  'print(",".join(sorted(n for n in ("numpy", "scipy")'
-                  ' if n in sys.modules)))\n')
+                  'print(",".join(sorted(n for n in {}'
+                  ' if n in sys.modules)))\n'.format(tuple(names)))
         result = subprocess.run([sys.executable, '-I', '-c', script],
                                 capture_output=True, text=True, check=True)
         return result.stdout.strip()
@@ -130,6 +131,23 @@ class TestOptionalDependencies(TestCase):
         # The lazy attribute must actually deliver the module, not merely stay quiet.
         self.assertEqual(self.modules_after('from desr import NumericTranslator'),
                          'numpy')
+
+    GRAPHS = ('networkx', 'matplotlib')
+
+    def test_importing_desr_does_not_require_networkx_or_matplotlib(self):
+        self.assertEqual(self.modules_after('import desr', self.GRAPHS), '')
+
+    def test_reaching_for_the_graph_part_imports_networkx(self):
+        self.assertEqual(
+            self.modules_after('import desr.symbol_graph', self.GRAPHS), 'networkx')
+
+    def test_matplotlib_stays_unimported_until_something_is_drawn(self):
+        # Analysing a graph is the common case and needs no drawing library, so
+        # `draw_symbol_graph` imports matplotlib at the point of use rather than at the
+        # top of the module.
+        self.assertNotIn(
+            'matplotlib',
+            self.modules_after('import desr.symbol_graph', self.GRAPHS))
 
     def test_scipy_stays_unimported_until_a_solver_is_needed(self):
         # desr.numerics needs numpy to exist at all, but scipy only for recovering

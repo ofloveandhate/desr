@@ -681,6 +681,223 @@ class ODETranslator(object):
                              symbols_domain=symbols_domain,
                              hermite_multiplier=hermite_multiplier)
 
+    def dimensions_of(self, system=None):
+        '''
+        The structural dimension of every symbol, in **this** reduction's scaling.
+
+        :meth:`~desr.ode_system.ODESystem.dimensions_of` is where this lives and what it
+        means; the dimensions belong to the system, not to a reduction of it.  This passes
+        the scaling matrix the translator actually holds, which matters for a translator
+        built from a scaling other than the maximal one -- the paper's, say -- where the
+        directions are a different basis of the same group.
+
+        Returns:
+            dict: ``{symbol: dimension}``.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.dimensions_of()[sympy.Symbol('k_2')]
+        1/[t]
+        '''
+        system = self._system_or(system)
+        return system.dimensions_of(self.scaling_matrix)
+
+
+    def _measured_in(self, invariant, system):
+        """
+        The symbol an invariant is the value of, and the unit it is measured in.
+
+        An invariant is dimensionless, so it is some quantity divided by a unit.  When
+        that quantity is a single one of the caller's symbols, the invariant reads as
+        "`e`, measured in `x1`", which is shorter and clearer than its monomial.  Solved
+        as ``V_i a = exponents(symbol / invariant)`` over the integers: a solution says
+        the quotient is a monomial in the auxiliaries, which is what being a unit means,
+        and ``a`` says which monomial.
+
+        Returns:
+            tuple: ``(symbol, unit)``, or ``(None, None)`` when no single symbol works.
+            Hubert & Labahn 6.6 has one such invariant: with one auxiliary and two
+            invariants there are not enough units to go round, and the second is a
+            genuine combination.
+        """
+        symbols = list(system.symbols)
+        block = self.herm_mult_i
+        auxiliaries = self.column_names(system)[:self.r]
+        for candidate in symbols:
+            quotient = sympy.simplify(candidate / invariant)
+            powers = quotient.as_powers_dict()
+            exponents = sympy.Matrix([powers.get(s, 0) for s in symbols])
+            try:
+                solution, free = block.gauss_jordan_solve(exponents)
+            except ValueError:
+                continue
+            solution = solution.subs({parameter: 0 for parameter in free})
+            if not all(value.is_integer for value in solution):
+                continue
+            if block * solution == exponents:
+                unit = sympy.prod([name ** solution[index]
+                                   for index, name in enumerate(auxiliaries)])
+                return candidate, unit
+        return None, None
+
+    def unit_table(self, system=None):
+        """
+        One row per column of the multiplier: what it denotes, and what it is for.
+
+        Every symbol a reduction introduces is one of two things -- a **unit**, or the
+        **value** of one of the caller's quantities measured in those units.  The
+        auxiliaries are the units; the invariants are the values.  The table says which
+        is which and names the quantity each value belongs to.
+
+        Dimensions are the physical ones where any have been declared with
+        :meth:`~desr.ode_system.ODESystem.set_dimension`, and the structural ones
+        otherwise.
+
+        Args:
+            system (ODESystem, optional): Defaults to the system this translator was
+                built for.
+
+        Returns:
+            list of dict: in column order, with keys
+
+            ``symbol``
+                the reduced system's name for this column.
+            ``denotes``
+                the quantity, as a monomial in the original symbols.
+            ``dimension``
+                of that quantity; 1 for every invariant, and :const:`None` where the
+                declarations do not determine it.
+            ``role``
+                ``'unit'`` or ``'value'``.
+            ``of``
+                for a value, the original symbol it measures, or :const:`None` when the
+                invariant is a combination rather than one symbol's value.
+            ``measured_in``
+                for a value, the unit it is measured in, as a monomial in the
+                auxiliaries: ``y1`` is ``e`` measured in ``x1``, and ``y1 == e / x1``
+                says the whole of it.  :const:`None` alongside an ``of`` of
+                :const:`None`, and for a unit row.
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
+        ...                        'f': 'concentration', 'x': 'concentration'})
+        >>> table = ODETranslator.from_ode_system(enzyme).unit_table()
+        >>> for row in table[:2]:
+        ...     print(row['symbol'], row['denotes'], row['dimension'], row['role'])
+        x0 1/k_2_3 time unit
+        x1 k_2_3/k_0_1 concentration unit
+
+        The reduction coins three units of concentration, because the equations never
+        force the three branches to share a scale:
+
+        >>> sorted(str(row['dimension']) for row in table if row['role'] == 'unit')
+        ['concentration', 'concentration', 'concentration', 'time']
+
+        A value is its symbol divided by its unit, which is the sentence the two halves
+        of the table make together:
+
+        >>> for row in table[4:6]:
+        ...     print('{} = {} = {} / {}'.format(
+        ...         row['symbol'], row['denotes'], row['of'], row['measured_in']))
+        y0 = k_2_3*t = t / x0
+        y1 = e*k_0_1/k_2_3 = e / x1
+        """
+        system = self._system_or(system)
+        dimensions = (system.physical_dimensions_of(self.scaling_matrix)
+                      if system.physical_dimensions
+                      else system.dimensions_of(self.scaling_matrix))
+
+        names = self.column_names(system)
+        monomials = self.column_monomials()
+
+        rows = []
+        for index, name in enumerate(names):
+            monomial = monomials[index]
+            powers = monomial.as_powers_dict()
+            carried = [(dimensions[s], powers[s]) for s in system.symbols
+                       if powers.get(s, 0)]
+            if any(dimension is None for dimension, _ in carried):
+                # A symbol in this monomial has a dimension the declarations do not
+                # determine, so neither is this one determined.  A 1 here would read as
+                # "dimensionless", which is a claim nobody made.
+                dimension = None
+            else:
+                dimension = sympy.simplify(sympy.prod(
+                    [dimension ** power for dimension, power in carried]))
+            if index < self.r:
+                rows.append({'symbol': name, 'denotes': monomial,
+                             'dimension': dimension, 'role': 'unit',
+                             'of': None, 'measured_in': None})
+            else:
+                measures, unit = self._measured_in(monomial, system)
+                rows.append({'symbol': name, 'denotes': monomial,
+                             'dimension': dimension, 'role': 'value',
+                             'of': measures, 'measured_in': unit})
+        return rows
+
+    def units_and_dimensions(self, system=None):
+        """
+        How many units this reduction coins, and how many dimensions they measure.
+
+        A reduction coins one unit per scaling symmetry, so one per auxiliary.  Those
+        units need not measure different things.  The enzyme chain coins four, and three
+        of them are concentrations, because its equations never force the three branches
+        to share a scale.  That gap is a fact about the model, and it is why a reduction
+        reaches further than nondimensionalising by hand: by hand you pick one unit per
+        dimension, and the equations will let you pick more.
+
+        :meth:`unit_table` has the units themselves, one row each; this counts them.
+
+        Args:
+            system (ODESystem, optional): Defaults to the system this translator was
+                built for.
+
+        Returns:
+            dict: ``units``, the number of auxiliaries, and ``dimensions``, how many
+            independent physical dimensions those units measure.  ``dimensions`` is
+            :const:`None` until the declarations determine every symbol, since a count
+            drawn from a partial declaration would claim more than anyone said.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.units_and_dimensions()
+        {'units': 2, 'dimensions': None}
+
+        Michaelis-Menten coins one unit per dimension, so every scaling it admits is a
+        change of unit:
+
+        >>> system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        >>> translator.units_and_dimensions(system)
+        {'units': 2, 'dimensions': 2}
+
+        The enzyme chain coins two more units than it has dimensions:
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
+        ...                        'f': 'concentration', 'x': 'concentration'})
+        >>> ODETranslator.from_ode_system(enzyme).units_and_dimensions()
+        {'units': 4, 'dimensions': 2}
+        """
+        system = self._system_or(system)
+        physical = system.physical_dimensions_of(self.scaling_matrix)
+        if not physical or any(each is None for each in physical.values()):
+            return {'units': self.r, 'dimensions': None}
+
+        names = sorted({base for each in physical.values()
+                        for base in each.free_symbols}, key=str)
+        exponents = sympy.Matrix([
+            [each.as_powers_dict().get(name, 0) for name in names]
+            for each in physical.values()])
+        return {'units': self.r, 'dimensions': exponents.rank()}
+
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
                          normalise_parameters=True, identify_indep_var=True):
         '''
@@ -798,11 +1015,16 @@ class ODETranslator(object):
         A name for every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult`,
         in the same order as :meth:`column_monomials`.
 
-        The auxiliary columns are named from the naming scheme's ``auxiliaries`` pattern
-        even under the parameter scheme, which keeps none of them: the *columns* exist in
-        the multiplier whether or not the reduction retains them, and naming them is what
-        lets a column operation refer to one.  :meth:`auxiliary_names` is the other
-        question -- what the *reduced system* calls them -- and is empty there.
+        **Every** column is named, whatever the reduction does with it.  The auxiliary
+        columns are named from the naming scheme's ``auxiliaries`` pattern even under the
+        parameter scheme, which keeps none of them, and an invariant that a reduction
+        identifies with the independent variable is named here all the same: the *columns*
+        exist in the multiplier whether or not the reduction retains them, and naming them
+        is what lets a column operation refer to one.
+
+        :meth:`auxiliary_names` and :meth:`invariant_names` are the other question -- what
+        the *reduced system* calls them -- and are shorter wherever a reduction keeps
+        fewer symbols than the multiplier has columns.
 
         Args:
             system (ODESystem): The system being reduced.
@@ -824,7 +1046,47 @@ class ODETranslator(object):
             else GENERAL_SCHEME_NAMES)
         auxiliaries = _new_symbols(naming['auxiliaries'], self.herm_mult_i.shape[1],
                                    self._new_indices_start_at)
-        return tuple(auxiliaries) + self.invariant_names(system, scheme)
+        return tuple(auxiliaries) + self._invariant_names_for(
+            system, scheme, normalise_parameters=False, identify_indep_var=False)
+
+    def column_kinds(self, system=None, scheme=None):
+        '''
+        What kind of thing every column is, in the same order as :meth:`column_monomials`.
+
+        The third of the ``column_*`` family, and like the others it covers **every**
+        column whatever the reduction does with it -- a normalised auxiliary and an
+        invariant identified with the independent variable are both still columns.
+        :meth:`symbol_kinds` is the other question, keyed by the symbols a reduction kept,
+        and is shorter wherever it kept fewer.
+
+        An auxiliary column is reported as ``'auxiliary'``, as :meth:`symbol_kinds` does,
+        and for the same reason: which block of the multiplier a column came from is a fact
+        about the scaling.  Whether that auxiliary is a parameter or a dependent is the
+        orthogonal question, answered by whether its monomial moves.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            scheme (desr.ode_translation.ReductionScheme, optional): As for
+                :meth:`named_symbols`.
+
+        Returns:
+            tuple of str
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.column_names(system)
+        (x0, x1, kappa0, kappa1, tau, nu0, nu1)
+        >>> translator.column_kinds(system)
+        ('auxiliary', 'auxiliary', 'parameter', 'parameter', 'independent', 'dependent', 'dependent')
+        '''
+        names = self.column_names(system, scheme)
+        roles = self._symbol_kinds_for(system, scheme, include_aux_vars=True,
+                                       normalise_parameters=False,
+                                       identify_indep_var=False)
+        return tuple('auxiliary' if column < self.r else roles[name]
+                     for column, name in enumerate(names))
 
     def column_of(self, monomial_or_name, system=None, scheme=None):
         '''
@@ -2512,6 +2774,61 @@ class ODETranslator(object):
 
         return tuple(name for row, name in enumerate(names)
                      if any(entry < 0 for entry in inverse[row, :]))
+
+    def symbol_graph(self, system, direction='forward'):
+        '''
+        This reduction as a bipartite graph, original symbols to reduced ones.
+
+        The multiplier already **is** the weighted biadjacency matrix, so this names the
+        object rather than computing anything new.  See :mod:`desr.symbol_graph` for how to
+        read it, and :func:`desr.symbol_graph.draw_symbol_graph` for drawing it.
+
+        Read from the multiplier as it currently stands, so a :meth:`multiplier_add_columns`
+        changes the graph.  That is what makes it useful before translating: the graph is
+        what a column operation is chosen by looking at.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            direction (str): ``'forward'`` for the multiplier, original to reduced, or
+                ``'reverse'`` for its inverse.
+
+        Returns:
+            networkx.DiGraph: Nodes are ``(layer, symbol)`` pairs.
+
+        Needs :mod:`networkx`, which the rest of :mod:`desr` does not.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> graph = translator.symbol_graph(system)
+        >>> graph.nodes[('reduced', sympy.Symbol('kappa0'))]['monomial']
+        k_2/(e_0*k_1)
+        '''
+        from desr.symbol_graph import symbol_graph
+        return symbol_graph(self, system, direction=direction)
+
+    def draw_symbol_graph(self, system, direction='forward', **kwargs):
+        '''
+        Draw :meth:`symbol_graph`, for when the graph itself is not what is wanted.
+
+        A forwarder and nothing else, so that there is one place where the drawing's
+        defaults live.  Everything is documented on
+        :func:`desr.symbol_graph.draw_symbol_graph`, and `kwargs` goes straight to it.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            direction (str): As for :meth:`symbol_graph`.
+            **kwargs: Passed to :func:`desr.symbol_graph.draw_symbol_graph`.
+
+        Returns:
+            matplotlib.axes.Axes
+
+        Needs :mod:`networkx` and :mod:`matplotlib`, which the rest of :mod:`desr` does
+        not.
+        '''
+        from desr.symbol_graph import draw_symbol_graph
+        return draw_symbol_graph(self.symbol_graph(system, direction=direction), **kwargs)
 
     def _names_given_explicitly(self):
         '''
