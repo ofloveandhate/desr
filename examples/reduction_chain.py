@@ -69,27 +69,17 @@ def is_autonomous(system):
                    if variable != clock and rate is not None)
 
 
-def unused_parameters(system):
-    """Parameters that occur in no right-hand side -- what issue #37 was about."""
-    used = set()
-    for variable, rate in system.derivative_dict.items():
-        if rate is not None:
-            used |= rate.free_symbols
-    return [p for p in system.parameters if p not in used]
-
-
-
 def auxiliary_split(system):
     """
     The carried auxiliaries, split by what they cost you.
 
     An auxiliary built from the original parameters alone cannot vary, so it is a *unit*
-    still to be chosen -- set it to 1 once and it is gone.  One the scaling moves carries
-    dimension and has to be integrated, which is Hubert & Labahn's *quadrature*.  Counting
-    them together would say a reduction owes four integrals when it owes one.
+    the normalisation can set to 1, after which it is gone.  One the scaling moves
+    carries dimension and has to be integrated, which is Hubert & Labahn's *quadrature*.
+    Counting them together would say a reduction owes four integrals when it owes one.
 
     Returns:
-        tuple: ``(units to choose, quadratures)``.
+        tuple: ``(units, quadratures)``.
     """
     monomials, origin = system.named_symbols, system.original_system
     if not system.auxiliary_names or monomials is None or origin is None:
@@ -120,19 +110,12 @@ def summary_lines(system):
     # rather than four facts side by side.  What a reduction does is move symbols
     # between these three lines, and a reader can watch it happen along the chain.
     dependents = len(system.dependents)
-    parameters, idle = len(system.parameters), len(unused_parameters(system))
+    parameters = len(system.parameters)
     lines = [plural(len(system.symbols), 'symbol'),
              BULLET + '1 independent variable',
              BULLET + plural(dependents, 'dependent variable')]
-    if not parameters:
-        lines.append(BULLET + 'no parameters')
-    elif idle:
-        # On its own line: side by side the two numbers run past the box, and the second
-        # is the one worth stopping on.
-        lines.append(BULLET + plural(parameters, 'parameter'))
-        lines.append('{} of them in no equation'.format(idle))
-    else:
-        lines.append(BULLET + plural(parameters, 'parameter'))
+    lines.append(BULLET + (plural(parameters, 'parameter') if parameters
+                           else 'no parameters'))
 
     units, integrals = auxiliary_split(system)
     if units:
@@ -328,11 +311,9 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
             reads_as = '{}\\,{}'.format(expr_to_tex(quantity),
                                         expr_to_tex(per_unit))
 
-        # Where the monomial goes once the units are adopted, for every row by the one
-        # rule: substitute, and say so where anything changed.  `x0 |-> 1` and
-        # `y1 |-> e` are then the same statement, which is what they are -- the second
-        # is not an identification and the arrow does not claim one, any more than the
-        # first claims that 1/k_2_3 equals 1.
+        # Where the monomial goes under the normalisation.  An arrow means the
+        # normalisation reached this row, so the rows without one are the quadrature
+        # and the values measured in it -- nothing normalises a unit the scaling moves.
         #
         # Part of the same string, not a column of its own: set apart it reads as a
         # later step rather than as what that line of the table says.
@@ -472,11 +453,9 @@ def step_labels(normalised, identified):
     Returns:
         tuple: four labels, one line each.
     """
-    # "adopt", not "choose".  Nobody picks these: the reduction coins them out of the
-    # equations and then measures in them, and the only choice anyone made was to write
-    # the model down.
-    # No count: the table beside it lists them, and the arrow is for the step.
-    units = 'adopt units' if normalised else 'no units to adopt'
+    # Named for the system the step arrives at.  A label naming units would have to go
+    # on and explain that the system it produces has none.
+    units = 'normalise' if normalised else 'nothing to normalise'
     if identified:
         clock = 'identify ' + ', '.join(
             sorted('$' + expr_to_tex(image) + '$' for image in identified.values()))
@@ -621,10 +600,10 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
             # content of a change of coordinates, and without it the reduced column is a
             # row of names nobody can read.  The reverse graph says it the other way.
             #
-            # Not the normalisation, though: this seam is the change of coordinates, and
-            # the units are chosen at the next one.  Drawn here it would put a |-> 1 on
-            # the caller's own k_0_1, which reads as a claim about a rate constant and is
-            # not what happens.  The table says it, once, in the coordinates it acts in.
+            # Not the normalisation, though: this seam is the change of coordinates and
+            # the normalisation happens at the next one.  Drawn here it would put a
+            # |-> 1 on the caller's own k_0_1, which reads as a claim about a rate
+            # constant.  The table says it, in the coordinates it acts in.
             #
             # One key for the figure, under everything, drawn by the forward graph
             # because both graphs mark the same things the same way and a key repeated
@@ -695,9 +674,9 @@ SYSTEMS = [
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system(),
         {'t': 'time', 'e': 'concentration', 'f': 'concentration',
          'x': 'concentration'})),
-    # No parameters at all, so no units to choose: nothing normalises, and nothing is
-    # declared either, so the table falls back to the structural dimensions.  The figure
-    # has to stay honest about both.
+    # No parameters at all, so nothing normalises, and nothing is declared either, so
+    # the table falls back to the structural dimensions.  The figure has to stay honest
+    # about both.
     ('Hubert & Labahn 6.6', ODESystem.from_equations(
         ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
          'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])),
