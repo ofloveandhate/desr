@@ -1082,6 +1082,54 @@ class TestParameterValuesThroughTranslation(TestCase):
         self.assertNotIn(sympy.Symbol('x1'), reduced.parameter_values)
         self.assertIn(sympy.Symbol('y0'), reduced.parameter_values)
 
+    def test_the_parameter_scheme_records_the_units_it_chose(self):
+        # It normalises every auxiliary, so it has the most to record, not the least.
+        # Keeping none of the auxiliaries afterwards is a separate fact: what is recorded
+        # is which *original* symbols the choice pins, and those exist either way.
+        system = self.system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(ReductionScheme.PARAMETER, translator.scheme())
+
+        reduced = translator.translate(system)
+        self.assertEqual({sympy.Symbol('e_0'): sympy.Integer(1),
+                          sympy.Symbol('k_1'): sympy.Integer(1)},
+                         reduced.normalisations)
+        # And it keeps none of the auxiliaries, which is the fact that used to be
+        # confused with having nothing to record.
+        self.assertEqual((), reduced.auxiliary_names)
+
+    def test_every_reduction_records_what_its_translator_reports(self):
+        systems = {
+            'mm two variable': self.system(),
+            'predator-prey': ODESystem.from_equations(
+                ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                 'dp/dt = s*p*(1 - h*p / n)']),
+            'HL 6.6': ODESystem.from_equations(
+                ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                 'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']),
+            'HL 6.4': ODESystem.from_equations(
+                ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']),
+            'decay': ODESystem.from_equations(['dn/dt = -n/tc']),
+            'enzyme chain': ChemicalReactionNetwork.from_diagram(
+                'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system(),
+        }
+        for label, system in systems.items():
+            translator = ODETranslator.from_ode_system(system)
+            with self.subTest(system=label, scheme=str(translator.scheme())):
+                self.assertEqual(dict(translator.normalisations()),
+                                 dict(translator.translate(system).normalisations))
+
+    def test_declining_to_normalise_records_nothing(self):
+        # The other direction, so the test above cannot be satisfied by recording
+        # something unconditionally.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertTrue(translator.normalisations())
+        self.assertEqual(
+            {}, dict(translator.translate_general(
+                system, normalise_parameters=False).normalisations))
+
     def test_the_dependent_variable_scheme_propagates_too(self):
         system = ODESystem.from_equations(['dz1/dt = a*z1*(1+z1*z2)',
                                            'dz2/dt = z2*(1/t - z1*z2)'])
