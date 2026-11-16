@@ -583,7 +583,7 @@ def symbol_map_figure(system, title=None, size=None, font=6.5, steps=None,
             # Its name goes inside its box, where it reads as the table's heading rather
             # than as a second subtitle under the figure's own.
             draw_unit_table(ax, table, font + 0.5, heights,
-                            translator.normalisations(system), name,
+                            translator.normalisations(), name,
                             dimensions=dimensions_shown(system,
                                                         translator.scaling_matrix),
                             origins=origins)

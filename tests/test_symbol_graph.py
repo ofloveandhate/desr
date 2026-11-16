@@ -299,7 +299,7 @@ class TestWhatTheNodesCarry(TestCase):
         named = {symbol for (layer, symbol), data in self.graph.nodes(data=True)
                  if layer == ORIGINAL and data['must_not_be_zero']}
         self.assertEqual(named,
-                         set(self.translator.symbols_that_must_not_be_zero(self.system)))
+                         set(self.translator.symbols_that_must_not_be_zero()))
 
     def test_nothing_on_the_reduced_layer_is_flagged_going_forward(self):
         # Going forward only an original symbol can sit in a denominator, so the reduced
@@ -314,7 +314,7 @@ class TestWhatTheNodesCarry(TestCase):
                  if layer == REDUCED and data['must_not_be_zero']}
         self.assertEqual(
             named,
-            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)))
+            set(self.translator.reduced_symbols_that_must_not_be_zero()))
 
     def test_a_zero_initial_condition_is_not_something_the_reduction_divides_by(self):
         # The three-case reading, on the graph: c_0 has one edge, it is positive, and it
@@ -338,7 +338,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
     def test_the_parameter_scheme_normalises_them_going_out(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+        self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
         graph = symbol_graph(translator, system)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
@@ -466,7 +466,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.GENERAL)
+        self.assertEqual(translator.scheme(), ReductionScheme.GENERAL)
         graph = symbol_graph(translator, system)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
@@ -534,9 +534,9 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
             self.translator.column_of('c/e_0'))
 
     def test_a_column_operation_can_change_which_scheme_applies(self):
-        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.PARAMETER)
+        self.assertEqual(self.translator.scheme(), ReductionScheme.PARAMETER)
         self.move_the_clock_invariant()
-        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.GENERAL)
+        self.assertEqual(self.translator.scheme(), ReductionScheme.GENERAL)
 
     def test_the_graph_follows_the_multiplier_rather_than_what_was_translated(self):
         # Translate first, so anything that recorded a scheme would have recorded
@@ -652,7 +652,7 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
                                    'dp/dt = s*p*(1 - h*p / n)'])):
             system = ODESystem.from_equations(equations)
             translator = ODETranslator.from_ode_system(system)
-            self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+            self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
             graph = symbol_graph(translator, system)
             for _, data in graph.nodes(data=True):
                 if data['auxiliary']:
@@ -795,7 +795,7 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
         self.translator.multiplier_add_columns(
             self.translator.column_of('c/s_0'),
             self.translator.column_of('e_0/s_0'), power=-1)
-        self.graph = self.translator.symbol_graph(self.system)
+        self.graph = self.translator.symbol_graph()
 
     def test_the_size_the_page_quotes(self):
         self.assertEqual(
@@ -815,19 +815,19 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
         self.assertEqual(kappa4['value'], 0)
 
     def test_the_two_answers_the_page_quotes(self):
-        self.assertEqual(self.translator.symbols_that_must_not_be_zero(self.system),
+        self.assertEqual(self.translator.symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('s_0 e_0 k_1')))
         self.assertEqual(
-            self.translator.reduced_symbols_that_must_not_be_zero(self.system),
+            self.translator.reduced_symbols_that_must_not_be_zero(),
             tuple(sympy.symbols('x0 x1 kappa0')))
 
     def test_the_zero_returns_the_way_it_came(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         self.assertEqual(back.nodes[(ORIGINAL, sympy.Symbol('c_0'))]['monomial'],
                          sympy.sympify('kappa4*x1'))
 
     def test_two_auxiliaries_must_be_supplied_coming_back(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         supplied = [data['symbol'] for _, data in back.nodes(data=True)
                     if data['must_be_supplied']]
         self.assertEqual(sorted(map(str, supplied)), ['x0', 'x1'])
@@ -841,17 +841,17 @@ class TestTheTranslatorMethods(TestCase):
         self.translator = ODETranslator.from_ode_system(self.system)
 
     def test_the_method_gives_the_same_graph_as_the_function(self):
-        by_method = self.translator.symbol_graph(self.system)
+        by_method = self.translator.symbol_graph()
         by_function = symbol_graph(self.translator, self.system)
         self.assertEqual(_edges(by_method), _edges(by_function))
         self.assertEqual(set(by_method.nodes), set(by_function.nodes))
 
     def test_the_method_passes_the_direction_through(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         self.assertEqual(back.graph['direction'], 'reverse')
 
     def test_the_drawing_method_forwards_its_keywords(self):
         import matplotlib.pyplot
         _, ax = matplotlib.pyplot.subplots()
-        self.assertIs(self.translator.draw_symbol_graph(self.system, ax=ax), ax)
+        self.assertIs(self.translator.draw_symbol_graph(ax=ax), ax)
         matplotlib.pyplot.close('all')

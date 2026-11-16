@@ -1472,7 +1472,7 @@ class TestStructuralDimensions(TestCase):
         # dependent-variable scheme is chosen by.  So t has dimension 1.
         system = ODESystem.from_equations(self.HL64)
         self.assertEqual(1, system.dimensions_of()[sympy.Symbol('t')])
-        self.assertEqual(ODETranslator.from_ode_system(system).scheme(system),
+        self.assertEqual(ODETranslator.from_ode_system(system).scheme(),
                          ReductionScheme.DEP_VAR)
 
     def test_naming_physical_dimensions_would_change_none_of_this(self):

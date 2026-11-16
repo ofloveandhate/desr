@@ -219,16 +219,16 @@ class TestMonomialsVersusNames(TestCase):
 
     def test_monomials_are_expressions_and_names_are_symbols(self):
         monomials = list(self.translator.invariant_monomials())
-        names = self.translator.invariant_names(self.system)
+        names = self.translator.invariant_names()
         self.assertTrue(all(not m.is_Symbol for m in monomials[:3]))
         self.assertTrue(all(n.is_Symbol for n in names))
 
     def test_they_are_in_the_same_order_and_pair_up(self):
         monomials = list(self.translator.invariant_monomials())
-        names = self.translator.invariant_names(self.system)
+        names = self.translator.invariant_names()
         self.assertEqual(len(monomials), len(names))
         self.assertEqual(dict(zip(names, monomials)),
-                         self.translator.named_symbols(self.system))
+                         self.translator.named_symbols())
 
     def test_every_invariant_is_a_monomial(self):
         '''
@@ -255,8 +255,7 @@ class TestMonomialsVersusNames(TestCase):
 
     def test_the_parameter_scheme_names_no_auxiliaries(self):
         ''' It normalises them to 1 and keeps none, so there is nothing to name. '''
-        self.assertEqual((), self.translator.auxiliary_names(self.system,
-                                                             scheme='parameter'))
+        self.assertEqual((), self.translator.auxiliary_names(scheme='parameter'))
         # The monomials still exist -- they are a property of the multiplier, not of a
         # reduction that was run.
         self.assertEqual(3, len(self.translator.auxiliary_monomials()))
@@ -276,12 +275,12 @@ class TestMonomialsVersusNames(TestCase):
             with self.subTest(scheme=scheme):
                 if scheme == 'parameter':
                     reduced = self.translator.translate_parameter(self.system)
-                    expected = self.translator.invariant_names(self.system, scheme)
+                    expected = self.translator.invariant_names(scheme)
                 else:
                     reduced = self.translator.translate_general(self.system)
                     expected = ((reduced.independent_variable,)
-                                + self.translator.auxiliary_names(self.system, scheme)
-                                + self.translator.invariant_names(self.system, scheme))
+                                + self.translator.auxiliary_names(scheme)
+                                + self.translator.invariant_names(scheme))
                 self.assertEqual(tuple(reduced.symbols), tuple(expected))
 
 
@@ -437,7 +436,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
 
     def test_a_parameter_monomial_becomes_a_parameter(self):
         reduced = self.translator.translate_general(self.system)
-        named = self.translator.named_symbols(self.system, scheme='general')
+        named = self.translator.named_symbols(scheme='general')
         dynamic = set(self.system.variables)
         for symbol, monomial in named.items():
             if symbol == reduced.independent_variable:
@@ -493,7 +492,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
         reduced = translator.translate_general(system)
 
         conserved = sympify_expression('E*k_0_1/k_2_3')
-        named = translator.named_symbols(system, scheme='general')
+        named = translator.named_symbols(scheme='general')
         symbol = next(s for s, monomial in named.items() if monomial == conserved)
 
         self.assertIn(symbol, reduced.dependents)
@@ -530,7 +529,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
 
     def test_the_kinds_agree_under_the_parameter_scheme(self):
         reduced = self.translator.translate_parameter(self.system)
-        kinds = self.translator.symbol_kinds(self.system, scheme='parameter')
+        kinds = self.translator.symbol_kinds(scheme='parameter')
         self.assertEqual(set(reduced.parameters),
                          {s for s, kind in kinds.items() if kind == 'parameter'})
         self.assertEqual(set(reduced.dependents),
@@ -540,7 +539,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
 
     def test_the_auxiliaries_agree_under_the_general_scheme(self):
         reduced = self.translator.translate_general(self.system)
-        kinds = self.translator.symbol_kinds(self.system, scheme='general')
+        kinds = self.translator.symbol_kinds(scheme='general')
         self.assertEqual(set(reduced.auxiliary_names),
                          {s for s, kind in kinds.items() if kind == 'auxiliary'})
 
@@ -564,7 +563,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
                     reduced = self.translator.translate_parameter(self.system)
                 else:
                     reduced = self.translator.translate_general(self.system)
-                named = self.translator.named_symbols(self.system, scheme=scheme)
+                named = self.translator.named_symbols(scheme=scheme)
                 self.assertEqual(set(reduced.symbols), set(named))
 
 
@@ -587,19 +586,19 @@ class TestTheDependentVariableSchemesNames(TestCase):
         self.system = ODESystem.from_equations(self.EQUATIONS)
         self.translator = ODETranslator.from_ode_system(self.system)
         self.reduced = self.translator.translate(self.system)
-        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.DEP_VAR)
+        self.assertEqual(self.translator.scheme(), ReductionScheme.DEP_VAR)
 
     def test_the_names_match_the_reduced_systems_symbols(self):
-        named = self.translator.named_symbols(self.system)
+        named = self.translator.named_symbols()
         self.assertEqual(set(self.reduced.symbols), set(named))
 
     def test_there_is_one_invariant_fewer_than_the_multiplier_has_columns(self):
-        self.assertEqual(len(self.translator.invariant_names(self.system)),
+        self.assertEqual(len(self.translator.invariant_names()),
                          self.translator.herm_mult_n.shape[1] - 1)
 
     def test_no_name_stands_for_the_independent_variable(self):
         # The clock invariant is not among them: the scheme keeps the system's own `t`.
-        named = self.translator.named_symbols(self.system)
+        named = self.translator.named_symbols()
         clock = self.system.independent_variable
         standing_for_t = [symbol for symbol, monomial in named.items()
                           if monomial == clock and symbol != clock]
@@ -610,7 +609,7 @@ class TestTheDependentVariableSchemesNames(TestCase):
         # each monomial along the original equations and compare with the equation the
         # reduced system gives that name.
         rates = dict(zip(self.system.symbols, self.system.derivatives))
-        named = self.translator.named_symbols(self.system)
+        named = self.translator.named_symbols()
         clock = self.system.independent_variable
         for symbol, monomial in named.items():
             if symbol == clock:
@@ -655,7 +654,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # of V_i sits on parameter rows, which is Hubert & Labahn's block condition.
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+        self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
         for monomial in translator.auxiliary_monomials():
             with self.subTest(auxiliary=str(monomial)):
                 self.assertFalse(self.moves_in_time(monomial, system))
@@ -663,7 +662,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
     def test_so_the_reduction_keeps_no_auxiliaries(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.auxiliary_names(system), ())
+        self.assertEqual(translator.auxiliary_names(), ())
         self.assertEqual(translator.translate(system).auxiliary_names, ())
 
     def test_the_general_scheme_can_occupy_the_cell_that_was_empty(self):
@@ -671,7 +670,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # chain has exactly one among four.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.GENERAL)
+        self.assertEqual(translator.scheme(), ReductionScheme.GENERAL)
         moving = [monomial for monomial in translator.auxiliary_monomials()
                   if self.moves_in_time(monomial, system)]
         self.assertEqual(moving, [sympy.Symbol('x')])

@@ -157,12 +157,14 @@ class TestTheSystemMustBeTheOneTheTranslatorWasBuiltFor(TestCase):
             self.translator.translate(self.system)
         self.assertNotIn('built for the symbols', str(reordered.exception))
 
-    def test_scheme_refuses_too_rather_than_answering(self):
-        # `scheme` dispatches the whole reduction, and the naming and kind machinery route
-        # through it, so the refusal belongs there and not only in the translate methods.
+    def test_scheme_cannot_be_asked_about_another_system_at_all(self):
+        # Stronger than refusing: `scheme` reports on the system the translator holds
+        # and takes no argument, so there is no way to ask it about another one.  The
+        # refusal lives where a system is still passed, which is the translate family.
         other = ODESystem.from_equations(self.SAME_SIZE_BUT_DIFFERENT)
+        self.assertIsInstance(self.translator.scheme(), ReductionScheme)
         with self.assertRaises(ValueError):
-            self.translator.scheme(other)
+            self.translator.translate(other)
 
     def test_the_invariants_of_an_unfamiliar_system_were_not_invariant(self):
         # What the silence used to cost.  The reduction came back looking plausible, with
@@ -191,7 +193,16 @@ class TestTheSystemMustBeTheOneTheTranslatorWasBuiltFor(TestCase):
         unfamiliar = ODESystem.from_equations(['da/dt = a*(1 + a*b)',
                                                'db/dt = b*(1/t - a*b)'])
         self.assertEqual(len(unfamiliar.symbols), 3)
-        self.assertIsInstance(translator.scheme(unfamiliar), ReductionScheme)
+
+        # Holding no system, it cannot report on one, and says so.
+        with self.assertRaises(ValueError) as caught:
+            translator.scheme()
+        self.assertIn('from_ode_system', str(caught.exception))
+
+        # Handed one to reduce, it binds that system for the reduction and leaves
+        # itself alone: asking it to reduce something is not being told what it is for.
+        self.assertTrue(translator.translate(unfamiliar).is_reduced)
+        self.assertIsNone(translator.system)
 
 
 class TestColumnLookup(TestCase):
@@ -225,7 +236,7 @@ class TestColumnLookup(TestCase):
         self.assertEqual(self.translator.herm_mult.cols, len(names))
         for column, name in enumerate(names):
             with self.subTest(column=column):
-                self.assertEqual(column, self.translator.column_of(name, self.system))
+                self.assertEqual(column, self.translator.column_of(name))
 
     def test_the_auxiliary_columns_come_first(self):
         ''' V_i then V_n, which is the multiplier's own column order. '''
@@ -238,7 +249,7 @@ class TestColumnLookup(TestCase):
         columns exist in the multiplier, and naming them is what lets an operation refer
         to one.
         '''
-        self.assertEqual((), self.translator.auxiliary_names(self.system))
+        self.assertEqual((), self.translator.auxiliary_names())
         names = self.translator.column_names()
         self.assertEqual(self.translator.r,
                          len([n for n in names if str(n).startswith('x')]))
@@ -247,10 +258,17 @@ class TestColumnLookup(TestCase):
         ''' The monomial is what the mathematics points at; it resolves on its own. '''
         self.assertEqual(4, self.translator.column_of('e_0*k_1*t'))
 
-    def test_a_name_lookup_without_a_system_is_refused_rather_than_guessed(self):
-        with self.assertRaises(ValueError):
-            self.translator.column_of('tau')
-        self.assertEqual(4, self.translator.column_of('tau', self.system))
+    def test_a_name_lookup_uses_the_system_the_translator_holds(self):
+        # A name only means something under a naming scheme, which needs a system.  A
+        # translator built from a system has one, so the lookup works and cannot be
+        # asked to guess against a different one.
+        self.assertEqual(4, self.translator.column_of('tau'))
+
+        bare = ODETranslator(self.translator.scaling_matrix)
+        self.assertIsNone(bare.system)
+        with self.assertRaises(ValueError) as caught:
+            bare.column_of('tau')
+        self.assertIn('from_ode_system', str(caught.exception))
 
     def test_an_unknown_column_says_what_the_columns_are(self):
         with self.assertRaises(ValueError) as caught:
@@ -321,12 +339,12 @@ class TestInvariantClassification(TestCase):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         self.assertEqual((sympy.sympify('d/K'), sympy.sympify('h*r/k'),
                           sympy.sympify('h*s/k')),
-                         translator.parameter_invariants(self.prey_predator))
+                         translator.parameter_invariants())
 
     def test_an_invariant_touching_a_dependent_row_is_a_dependent(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         self.assertEqual((sympy.sympify('n/K'), sympy.sympify('h*p/K')),
-                         translator.dependent_invariants(self.prey_predator))
+                         translator.dependent_invariants())
 
     def test_there_are_as_many_dependent_invariants_as_dependents(self):
         '''
@@ -335,22 +353,22 @@ class TestInvariantClassification(TestCase):
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
         self.assertEqual(self.prey_predator.num_dependents,
-                         len(translator.dependent_invariants(self.prey_predator)))
+                         len(translator.dependent_invariants()))
 
     def test_the_kinds_partition_the_invariants(self):
         for system in (self.prey_predator, self.hl66):
             with self.subTest(system=repr(system).splitlines()[1]):
                 translator = ODETranslator.from_ode_system(system)
-                groups = [translator.parameter_invariants(system),
-                          translator.dependent_invariants(system)]
-                groups.append(translator.indep_var_invariants(system))
+                groups = [translator.parameter_invariants(),
+                          translator.dependent_invariants()]
+                groups.append(translator.indep_var_invariants())
                 found = [invariant for group in groups for invariant in group]
                 self.assertEqual(len(translator.invariant_monomials()), len(found))
                 self.assertEqual(set(translator.invariant_monomials()), set(found))
 
     def test_a_system_with_no_parameters_has_no_parameter_invariants(self):
         translator = ODETranslator.from_ode_system(self.hl66)
-        self.assertEqual((), translator.parameter_invariants(self.hl66))
+        self.assertEqual((), translator.parameter_invariants())
 
     def test_an_entangled_clock_is_reported_as_empty(self):
         '''
@@ -359,12 +377,12 @@ class TestInvariantClassification(TestCase):
         better than handing back one that also moves.
         '''
         translator = ODETranslator.from_ode_system(self.hl66)
-        self.assertEqual((), translator.indep_var_invariants(self.hl66))
+        self.assertEqual((), translator.indep_var_invariants())
 
     def test_the_clock_is_found_when_there_is_one(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         self.assertEqual((sympy.sympify('k*t/h'),),
-                         translator.indep_var_invariants(self.prey_predator))
+                         translator.indep_var_invariants())
 
     def test_every_clock_invariant_is_reported_not_just_the_first(self):
         '''
@@ -377,7 +395,7 @@ class TestInvariantClassification(TestCase):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         translator.multiplier_add_columns(translator.r + 0, translator.r + 3, 1)
         self.assertEqual((sympy.sympify('d*k*t/(K*h)'), sympy.sympify('k*t/h')),
-                         translator.indep_var_invariants(self.prey_predator))
+                         translator.indep_var_invariants())
 
     def test_the_counting_law_holds_exactly_for_the_parameter_scheme(self):
         '''
@@ -390,12 +408,12 @@ class TestInvariantClassification(TestCase):
         for system in (self.prey_predator, self.hl66, catalyst):
             with self.subTest(system=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
-                law = (len(translator.parameter_invariants(system))
+                law = (len(translator.parameter_invariants())
                        == system.num_parameters - translator.r
-                       and len(translator.indep_var_invariants(system)) == 1
-                       and len(translator.dependent_invariants(system))
+                       and len(translator.indep_var_invariants()) == 1
+                       and len(translator.dependent_invariants())
                        == system.num_dependents)
-                self.assertEqual(translator.scheme(system) == 'parameter', law)
+                self.assertEqual(translator.scheme() == 'parameter', law)
 
     def test_a_catalyst_invariant_is_conserved_and_still_a_dependent(self):
         '''
@@ -413,8 +431,8 @@ class TestInvariantClassification(TestCase):
         # sympify_expression, not sympy.sympify: E is Exp1 to the latter.
         conserved = sympify_expression('E*k_0_1/k_2_3')
         self.assertIn(conserved, list(translator.invariant_monomials()))
-        self.assertIn(conserved, translator.dependent_invariants(system))
-        self.assertNotIn(conserved, translator.parameter_invariants(system))
+        self.assertIn(conserved, translator.dependent_invariants())
+        self.assertNotIn(conserved, translator.parameter_invariants())
 
         # And its rate really is zero, so the rate could not have told us.  Paired through
         # the reduced system's own record of what its symbols mean, rather than by slicing
@@ -430,8 +448,8 @@ class TestInvariantClassification(TestCase):
         join without reconstruction.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        meanings = translator.named_symbols(self.prey_predator)
-        kinds = translator.symbol_kinds(self.prey_predator)
+        meanings = translator.named_symbols()
+        kinds = translator.symbol_kinds()
         self.assertEqual(list(meanings), list(kinds))
         self.assertEqual({'kappa0': ('d/K', 'parameter'),
                           'kappa1': ('h*r/k', 'parameter'),
@@ -451,7 +469,7 @@ class TestInvariantClassification(TestCase):
                     reduced = translator.translate_parameter(self.prey_predator)
                 else:
                     reduced = translator.translate_general(self.prey_predator)
-                meanings = translator.named_symbols(self.prey_predator, scheme=scheme)
+                meanings = translator.named_symbols(scheme=scheme)
                 self.assertEqual(tuple(reduced.symbols), tuple(meanings))
 
     def test_exactly_one_variable_is_the_one_to_integrate_against(self):
@@ -465,7 +483,7 @@ class TestInvariantClassification(TestCase):
                     continue  # the parameter scheme does not apply to HL 6.6
                 with self.subTest(scheme=scheme, variables=tuple(map(str, system.symbols))):
                     translator = ODETranslator.from_ode_system(system)
-                    kinds = translator.symbol_kinds(system, scheme=scheme)
+                    kinds = translator.symbol_kinds(scheme=scheme)
                     clocks = [name for name, kind in kinds.items() if kind == 'independent']
                     self.assertEqual(1, len(clocks))
                     if scheme == 'general':
@@ -483,7 +501,7 @@ class TestInvariantClassification(TestCase):
         and the sense in which that scheme is this one with both steps taken.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        clock, = translator.indep_var_invariants(self.prey_predator)
+        clock, = translator.indep_var_invariants()
         self.assertEqual(sympify_expression('k*t/h'), clock)
 
         reductions = (
@@ -561,7 +579,7 @@ class TestInvariantClassification(TestCase):
         self.assertEqual(translator.r, len(auxiliaries))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, auxiliaries)))
         # And the parameter scheme makes none.
-        kinds = translator.symbol_kinds(self.prey_predator, scheme='parameter')
+        kinds = translator.symbol_kinds(scheme='parameter')
         self.assertNotIn('auxiliary', kinds.values())
 
     def test_a_surviving_auxiliary_is_always_one_that_moves(self):
@@ -586,9 +604,9 @@ class TestInvariantClassification(TestCase):
     def test_dropping_the_auxiliaries_drops_them_from_both_maps(self):
         translator = ODETranslator.from_ode_system(self.prey_predator)
         reduced = translator.translate_general(self.prey_predator, include_aux_vars=False)
-        meanings = translator.named_symbols(self.prey_predator, scheme='general',
+        meanings = translator.named_symbols(scheme='general',
                                               include_aux_vars=False)
-        kinds = translator.symbol_kinds(self.prey_predator, scheme='general',
+        kinds = translator.symbol_kinds(scheme='general',
                                           include_aux_vars=False)
         self.assertEqual(tuple(reduced.symbols), tuple(meanings))
         self.assertNotIn('auxiliary', kinds.values())
@@ -597,7 +615,7 @@ class TestInvariantClassification(TestCase):
         translator = ODETranslator.from_ode_system(self.hl66)
         self.assertEqual({'t': 't', 'x0': 't*z1**2', 'y0': 't*z1**3', 'y1': 'z1**2*z2/t'},
                          {str(name): str(monomial) for name, monomial
-                          in translator.named_symbols(self.hl66).items()})
+                          in translator.named_symbols().items()})
 
     def test_the_scheme_may_be_said_rather_than_inferred(self):
         '''
@@ -605,8 +623,8 @@ class TestInvariantClassification(TestCase):
         system `translate` would have given to the parameter scheme must be able to say so.
         '''
         translator = ODETranslator.from_ode_system(self.prey_predator)
-        inferred = translator.named_symbols(self.prey_predator)
-        general = translator.named_symbols(self.prey_predator, scheme='general')
+        inferred = translator.named_symbols()
+        general = translator.named_symbols(scheme='general')
         self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
                          tuple(str(n) for n in inferred))
         self.assertEqual(('t', 'y0', 'y1', 'y2', 'y4', 'y5'),
@@ -781,7 +799,7 @@ class TestSymbolsThatMustNotBeZero(TestCase):
     def test_the_system_may_be_passed_instead_of_relying_on_the_domain(self):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.symbols_that_must_not_be_zero(system),
+        self.assertEqual(translator.symbols_that_must_not_be_zero(),
                          translator.symbols_that_must_not_be_zero())
 
     def test_the_order_is_the_systems_order(self):
@@ -875,10 +893,10 @@ class TestBothDirections(TestCase):
     def test_the_two_directions_give_different_answers(self):
         self.assertNotEqual(
             set(self.translator.symbols_that_must_not_be_zero()),
-            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)))
+            set(self.translator.reduced_symbols_that_must_not_be_zero()))
 
     def test_the_reverse_answer_is_over_the_reduced_symbols(self):
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
         self.assertEqual(reverse, tuple(sympy.symbols('x0 x1')))
 
     def test_the_round_trip_recovers_every_original_symbol(self):
@@ -901,7 +919,7 @@ class TestBothDirections(TestCase):
         self.assertTrue(set(forward) <= set(self.system.symbols))
 
     def test_no_original_symbol_appears_in_the_reverse_answer(self):
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
         self.assertEqual(set(reverse) & set(self.system.symbols), set())
 
     def test_the_reverse_answer_is_exactly_the_denominators_of_the_recovery(self):
@@ -917,12 +935,12 @@ class TestBothDirections(TestCase):
             _, denominator = sympy.fraction(sympy.together(expression))
             in_a_denominator |= denominator.free_symbols
         self.assertEqual(
-            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)),
+            set(self.translator.reduced_symbols_that_must_not_be_zero()),
             in_a_denominator)
 
     def test_the_reverse_answer_reads_against_the_column_names(self):
         names = list(self.translator.column_names())
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
         positions = [names.index(name) for name in reverse]
         self.assertEqual(positions, sorted(positions))
 
@@ -932,7 +950,7 @@ class TestBothDirections(TestCase):
         # first r column names are the auxiliary columns, which exist whether or not the
         # scheme keeps them -- `auxiliary_names` is empty here for that reason.
         names = list(self.translator.column_names())
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
+        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
         self.assertEqual(set(reverse), set(names[:self.translator.r]))
 
     def test_a_reduction_can_be_sound_forward_and_unrecoverable_backward(self):
@@ -947,7 +965,7 @@ class TestBothDirections(TestCase):
         self.assertNotIn(sympy.Symbol('k_m1'),
                          self.translator.symbols_that_must_not_be_zero())
         self.assertIn(sympy.Symbol('kappa1'),
-                      self.translator.reduced_symbols_that_must_not_be_zero(self.system))
+                      self.translator.reduced_symbols_that_must_not_be_zero())
 
         # And the recovery of k_2 is where it sits.
         names = list(self.translator.column_names())
@@ -964,7 +982,7 @@ class TestBothDirections(TestCase):
         self.assertNotIn(sympy.Symbol('k_2'),
                          self.translator.symbols_that_must_not_be_zero())
         self.assertNotIn(sympy.Symbol('kappa0'),
-                         self.translator.reduced_symbols_that_must_not_be_zero(self.system))
+                         self.translator.reduced_symbols_that_must_not_be_zero())
         self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
                          sympy.Integer(0))
 
@@ -1057,7 +1075,7 @@ class TestParameterValuesThroughTranslation(TestCase):
                                            'dz2/dt = z2*(1/t - z1*z2)'])
         system.update_parameter_values({'a': 7})
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.DEP_VAR)
+        self.assertEqual(translator.scheme(), ReductionScheme.DEP_VAR)
         reduced = translator.translate_dep_var(system)
         self.assertEqual(reduced.parameter_values[sympy.Symbol('y0')],
                          sympy.Integer(7))
@@ -1074,7 +1092,7 @@ class TestParameterValuesThroughTranslation(TestCase):
                               translator.translate_general)]:
             with self.subTest(scheme=name):
                 reduced = reduce(system)
-                named = translator.named_symbols(system, name)
+                named = translator.named_symbols(name)
                 expected = {symbol for symbol in reduced.parameters
                             if system.value_of(named[symbol]) is not None}
                 self.assertEqual(set(reduced.parameter_values), expected)
@@ -1405,7 +1423,7 @@ class TestMurraySixTwenty(TestCase):
         return clock, epsilon, complexed
 
     def test_the_invariants_before_any_operation(self):
-        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+        named = dict(zip(map(str, self.translator.invariant_names()),
                          self.translator.invariant_monomials()))
         self.assertEqual(named['c0'], sympify_expression('e_0/s0'))
         self.assertEqual(named['c1'], sympify_expression('k_2/(k_1*s0)'))
@@ -1414,7 +1432,7 @@ class TestMurraySixTwenty(TestCase):
 
     def test_the_two_operations_give_murrays_groups(self):
         self.murrays_groups()
-        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+        named = dict(zip(map(str, self.translator.invariant_names()),
                          self.translator.invariant_monomials()))
         self.assertEqual(named['tau'], sympify_expression('e_0*k_1*t'))
         self.assertEqual(named['u'], sympify_expression('s/s0'))
@@ -1424,7 +1442,7 @@ class TestMurraySixTwenty(TestCase):
         # The order of the c_i follows the variable order, so the mapping is read off
         # rather than remembered.  This is the assertion the example lacked.
         self.murrays_groups()
-        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+        named = dict(zip(map(str, self.translator.invariant_names()),
                          self.translator.invariant_monomials()))
         self.assertEqual(named['c0'], sympify_expression('e_0/s0'))      # epsilon
         self.assertEqual(named['c1'], sympify_expression('k_2/(k_1*s0)'))  # lambda
@@ -1438,7 +1456,7 @@ class TestMurraySixTwenty(TestCase):
         reduced = self.translator.translate(self.system)
         self.assertEqual(len(reduced.constraints), 1)
         renamed = reduced.subs(dict(zip(
-            self.translator.invariant_names(self.system),
+            self.translator.invariant_names(),
             ['epsilon', 'L', 'K - L', 'K'])), subs_constraints=True)
         self.assertEqual(renamed.constraints, [])
         self.assertEqual(set(map(str, renamed.parameters)), {'K', 'L', 'epsilon'})
@@ -1448,7 +1466,7 @@ class TestMurraySixTwenty(TestCase):
         self.murrays_groups()
         reduced = self.translator.translate(self.system)
         renamed = reduced.subs(dict(zip(
-            self.translator.invariant_names(self.system),
+            self.translator.invariant_names(),
             ['K', 'K - L', 'L', 'epsilon'])), subs_constraints=True)
         self.assertNotEqual(renamed.constraints, [])
 
@@ -1456,7 +1474,7 @@ class TestMurraySixTwenty(TestCase):
         self.murrays_groups()
         reduced = self.translator.translate(self.system)
         renamed = reduced.subs(dict(zip(
-            self.translator.invariant_names(self.system),
+            self.translator.invariant_names(),
             ['epsilon', 'L', 'K - L', 'K'])), subs_constraints=True)
         u, v, K, L, epsilon = sympy.symbols('u v K L epsilon')
         derivatives = renamed.derivative_dict
@@ -1593,7 +1611,7 @@ class TestFourVariableWithZeroInitialConditions(TestCase):
             + list(self.system.dependents))
 
     def test_the_parameter_scheme_still_applies(self):
-        self.assertEqual(self.translator.scheme(self.system),
+        self.assertEqual(self.translator.scheme(),
                          ReductionScheme.PARAMETER)
 
     def test_the_reduction_divides_by_the_front_of_the_order_only(self):
@@ -1607,7 +1625,7 @@ class TestFourVariableWithZeroInitialConditions(TestCase):
                 self.assertNotIn(symbol, must_not_be_zero)
 
     def test_the_clock_matches_the_two_variable_section(self):
-        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+        named = dict(zip(map(str, self.translator.invariant_names()),
                          self.translator.invariant_monomials()))
         self.assertEqual(named['tau'], sympify_expression('S_0*k_1*t'))
 
@@ -1762,7 +1780,7 @@ class TestMurraySixThirteenAsThePageDoesIt(TestCase):
                          tuple(sympy.symbols('s_0 k_1')))
 
     def test_murrays_groups(self):
-        named = dict(zip(map(str, self.translator.invariant_names(self.system)),
+        named = dict(zip(map(str, self.translator.invariant_names()),
                          self.translator.invariant_monomials()))
         self.assertEqual(named['tau'], sympify_expression('e_0*k_1*t'))
         self.assertEqual(named['u'], sympify_expression('s/s_0'))
@@ -1819,7 +1837,7 @@ class TestTheTranslatorRemembersItsSystem(TestCase):
     def test_every_entry_point_takes_the_remembered_system(self):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), translator.scheme())
+        self.assertEqual(translator.scheme(), translator.scheme())
         self.assertEqual(translator.translate_parameter(system),
                          translator.translate_parameter())
         self.assertEqual(translator.translate_general(system),
@@ -1838,6 +1856,42 @@ class TestTheTranslatorRemembersItsSystem(TestCase):
 
         system.update_parameter_values({'K': 4})
         self.assertEqual({}, translator.system.parameter_values)
+
+    def test_dimensions_have_to_be_declared_before_the_translator_is_built(self):
+        '''
+        The case the rule is felt in.  Declaring a physical dimension changes no matrix
+        and no reduction, so it is tempting to do it afterwards -- but the translator
+        reports on the system it holds, and that one was never told.
+        '''
+        equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+        late = ODESystem.from_equations(equations)
+        translator = ODETranslator.from_ode_system(late)
+        late.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        self.assertEqual({'units': 2, 'dimensions': None},
+                         translator.num_units_and_dimensions())
+
+        early = ODESystem.from_equations(equations)
+        early.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+        self.assertEqual({'units': 2, 'dimensions': 2},
+                         ODETranslator.from_ode_system(
+                             early).num_units_and_dimensions())
+
+    def test_the_reduction_itself_is_the_same_either_way(self):
+        # Why declaring late is a reporting mistake and not a mathematical one: the
+        # dimensions are an overlay, and the matrices do not depend on them.
+        equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        plain = ODESystem.from_equations(equations)
+        declared = ODESystem.from_equations(equations)
+        declared.set_dimensions({'t': 'time', 'e_0': 'concentration'})
+
+        first = ODETranslator.from_ode_system(plain)
+        second = ODETranslator.from_ode_system(declared)
+        self.assertEqual(first.scaling_matrix, second.scaling_matrix)
+        self.assertEqual(first.herm_mult, second.herm_mult)
+        self.assertEqual(first.translate(), second.translate())
 
     def test_a_translator_with_no_system_says_so(self):
         '''
@@ -2035,7 +2089,7 @@ class TestNamingTheColumnsWhenTheClockIsKept(TestCase):
                 translator = ODETranslator.from_ode_system(system)
                 fixed = translator.scaling_matrix[
                     :, system.independent_variable_index].is_zero_matrix
-                self.assertEqual(expected, translator.scheme(system))
+                self.assertEqual(expected, translator.scheme())
                 self.assertEqual(expected == ReductionScheme.DEP_VAR, fixed)
 
     def test_there_is_a_name_for_every_column(self):

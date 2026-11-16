@@ -293,7 +293,7 @@ back, which is the end that is kept.
     (S_0, k_1, k_2, k_m1, E_0, C_0, P_0, t, C, E, P, S)
 
     >>> translator = ODETranslator.from_ode_system(system)
-    >>> translator.scheme(system)
+    >>> translator.scheme()
     ReductionScheme.PARAMETER
 
 The reduction divides by these symbols, so none of them may be zero.  Neither :math:`C_0`

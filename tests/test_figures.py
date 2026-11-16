@@ -103,7 +103,7 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(ReductionScheme.DEP_VAR, translator.scheme(system))
+        self.assertEqual(ReductionScheme.DEP_VAR, translator.scheme())
         self.assertEqual(6.5, round(flowchart_figure(system).get_size_inches()[0], 2))
         self.assertIsNotNone(symbol_map_figure(system))
 

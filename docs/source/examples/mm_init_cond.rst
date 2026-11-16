@@ -198,7 +198,7 @@ original symbols on one side, the reduced ones on the other, and an edge carryin
 exponent with which its source appears in its target.  So the reduction can be drawn as
 well as printed, and the zero can be followed through it.
 
-    >>> graph = translator.symbol_graph(system)
+    >>> graph = translator.symbol_graph()
     >>> graph.number_of_nodes(), graph.number_of_edges()
     (20, 22)
 
@@ -217,16 +217,16 @@ The symbols the reduction *does* divide by are those with an edge into an auxili
 is set to 1, or a negative edge into an invariant.  Coming back is a different question
 over the other set of symbols, and gets a different answer:
 
-    >>> translator.symbols_that_must_not_be_zero(system)
+    >>> translator.symbols_that_must_not_be_zero()
     (s_0, e_0, k_1)
-    >>> translator.reduced_symbols_that_must_not_be_zero(system)
+    >>> translator.reduced_symbols_that_must_not_be_zero()
     (x0, x1, kappa0)
 
 The zero returns the way it came.  Every node says what it equals in terms of the other
 side, so the reverse graph gives :math:`c_0` as a monomial in the reduced symbols, with
 :math:`\kappa_4` a factor of it:
 
-    >>> back = translator.symbol_graph(system, direction='reverse')
+    >>> back = translator.symbol_graph(direction='reverse')
     >>> back.nodes[('original', sympy.Symbol('c_0'))]['monomial']
     kappa4*x1
 
@@ -263,9 +263,9 @@ hold.
                                       translator.column_of('e_0/s_0'), power=-1)
 
     figure, (going_out, coming_back) = plt.subplots(1, 2, figsize=(16, 9))
-    translator.draw_symbol_graph(system, ax=going_out, legend=False, font_size=12)
+    translator.draw_symbol_graph(ax=going_out, legend=False, font_size=12)
     going_out.set_title('forward', fontsize=14)
-    translator.draw_symbol_graph(system, direction='reverse', ax=coming_back,
+    translator.draw_symbol_graph(direction='reverse', ax=coming_back,
                                  font_size=12)
     coming_back.set_title('reverse', fontsize=14)
     figure.tight_layout()

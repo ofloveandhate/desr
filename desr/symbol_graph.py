@@ -285,15 +285,15 @@ def symbol_graph(translator, system, direction=FORWARD):
     #
     # The reduction adopts those symbols as its units -- `s_0 |-> 1` is "measure
     # concentration in units of s_0", which is why `u = s/s_0` has no `s_0` left in it.
-    sent_to_one = set(translator.normalisations(system))
+    sent_to_one = set(translator.normalisations())
 
     # Note that this, `column_names` and `reduced_symbols_that_must_not_be_zero` are all
     # asked afresh, and none of them is told a scheme.  See the class docstring's note on
     # why there is no `scheme` argument.
 
     divides_by = {
-        ORIGINAL: set(translator.symbols_that_must_not_be_zero(system)),
-        REDUCED: set(translator.reduced_symbols_that_must_not_be_zero(system)),
+        ORIGINAL: set(translator.symbols_that_must_not_be_zero()),
+        REDUCED: set(translator.reduced_symbols_that_must_not_be_zero()),
     }
 
     graph = networkx.DiGraph()
