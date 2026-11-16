@@ -65,7 +65,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
     def test_the_forward_edges_are_the_multiplier_entry_for_entry(self):
         graph = symbol_graph(self.translator, self.system)
         originals = list(self.translator.symbols_domain)
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         multiplier = self.translator.herm_mult
 
         expected = {}
@@ -83,7 +83,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
     def test_the_reverse_edges_are_the_inverse_entry_for_entry(self):
         graph = symbol_graph(self.translator, self.system, direction='reverse')
         originals = list(self.translator.symbols_domain)
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         inverse = self.translator.inv_herm_mult
 
         # The inverse is indexed [reduced, original], so the reduced symbol is the row.
@@ -155,7 +155,7 @@ class TestTheTwoLayersDoNotMerge(TestCase):
                            'dependents': ['s', 'c']})
 
     def test_the_two_layers_really_do_share_symbols(self):
-        shared = set(self.translator.column_names(self.system)) & set(self.system.symbols)
+        shared = set(self.translator.column_names()) & set(self.system.symbols)
         self.assertEqual(shared, {sympy.Symbol('t'), sympy.Symbol('s'),
                                   sympy.Symbol('c')})
 
@@ -192,7 +192,7 @@ class TestWhatTheNodesCarry(TestCase):
         # other layer, so whichever direction is drawn, the arrows point at nodes that
         # name themselves.  Compared against the public method rather than against a
         # second reading of the inverse multiplier.
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         recoveries = self.translator.reverse_translate_parameter(names)
         for symbol, recovery in zip(self.translator.symbols_domain, recoveries):
             with self.subTest(symbol=str(symbol)):
@@ -205,7 +205,7 @@ class TestWhatTheNodesCarry(TestCase):
         # node data alone.
         substitution = {self.graph.nodes[(REDUCED, name)]['symbol']:
                         self.graph.nodes[(REDUCED, name)]['monomial']
-                        for name in self.translator.column_names(self.system)}
+                        for name in self.translator.column_names()}
         for symbol in self.translator.symbols_domain:
             with self.subTest(symbol=str(symbol)):
                 coming_back = self.graph.nodes[(ORIGINAL, symbol)]['monomial']
@@ -213,13 +213,13 @@ class TestWhatTheNodesCarry(TestCase):
                     sympy.simplify(coming_back.subs(substitution) - symbol), 0)
 
     def test_the_monomials_are_the_columns(self):
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         for name, monomial in zip(names, self.translator.forward_monomials()):
             with self.subTest(column=name):
                 self.assertEqual(self.graph.nodes[(REDUCED, name)]['monomial'], monomial)
 
     def test_the_first_r_columns_are_the_auxiliaries(self):
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         flags = [self.graph.nodes[(REDUCED, name)]['auxiliary'] for name in names]
         self.assertEqual(flags, [True] * self.translator.r
                          + [False] * (self.translator.n - self.translator.r))

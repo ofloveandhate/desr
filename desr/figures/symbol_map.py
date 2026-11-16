@@ -560,7 +560,7 @@ def symbol_map_figure(system, title=None, size=None, font=6.5, steps=None,
     origins = {symbol: place[1] for (layer, symbol), place in places.items()
                if layer == ORIGINAL}
 
-    table = translator.unit_table(system)
+    table = translator.unit_table()
     normalised_symbols = {symbol for symbol, _, _, _
                           in normalise_pairs(translator, system, reduced, normalised)}
     identified = {symbol: image for symbol, image, _, _

@@ -277,7 +277,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     # reduction can have some such auxiliaries and some that move.  The parameter scheme is
     # the case where every one of them is, which is why asking per column covers it too
     # without a special case.
-    normalised_monomials = set(translator.parameter_auxiliaries(system))
+    normalised_monomials = set(translator.parameter_auxiliaries())
 
     # Which of the caller's own symbols that spends.  Asked of `normalisations`, which is
     # what the reduction records as having done, so the figure cannot disagree with it

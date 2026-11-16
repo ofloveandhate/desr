@@ -221,7 +221,7 @@ class TestColumnLookup(TestCase):
                 self.assertEqual(column, self.translator.column_of(monomial))
 
     def test_column_names_is_indexed_the_same_way(self):
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         self.assertEqual(self.translator.herm_mult.cols, len(names))
         for column, name in enumerate(names):
             with self.subTest(column=column):
@@ -229,7 +229,7 @@ class TestColumnLookup(TestCase):
 
     def test_the_auxiliary_columns_come_first(self):
         ''' V_i then V_n, which is the multiplier's own column order. '''
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         self.assertEqual(('x0', 'x1'), tuple(map(str, names[:self.translator.r])))
 
     def test_auxiliary_columns_are_named_even_under_the_parameter_scheme(self):
@@ -239,7 +239,7 @@ class TestColumnLookup(TestCase):
         to one.
         '''
         self.assertEqual((), self.translator.auxiliary_names(self.system))
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         self.assertEqual(self.translator.r,
                          len([n for n in names if str(n).startswith('x')]))
 
@@ -545,7 +545,7 @@ class TestInvariantClassification(TestCase):
                 translator = ODETranslator.from_ode_system(system)
                 n = len(system.symbols)
                 self.assertEqual(
-                    normalised, len(translator.parameter_auxiliaries(system)))
+                    normalised, len(translator.parameter_auxiliaries()))
                 reduced = translator.translate_general(system)
                 self.assertEqual(n + 1 - normalised - identified,
                                  len(reduced.symbols))
@@ -889,7 +889,7 @@ class TestBothDirections(TestCase):
         # statement about denominators can do on its own.
         forward = list(self.translator.auxiliary_monomials()) \
             + list(self.translator.invariant_monomials())
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         recovered = self.translator.reverse_translate_parameter(names)
 
         substitution = dict(zip(names, forward))
@@ -910,7 +910,7 @@ class TestBothDirections(TestCase):
         # from `reverse_translate_parameter` and `sympy.fraction` rather than by indexing
         # the inverse multiplier here, so that the oracle cannot reproduce whatever the
         # method under test believes about which axis is which.
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         recovered = self.translator.reverse_translate_parameter(names)
         in_a_denominator = set()
         for expression in recovered:
@@ -921,7 +921,7 @@ class TestBothDirections(TestCase):
             in_a_denominator)
 
     def test_the_reverse_answer_reads_against_the_column_names(self):
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
         positions = [names.index(name) for name in reverse]
         self.assertEqual(positions, sorted(positions))
@@ -931,7 +931,7 @@ class TestBothDirections(TestCase):
         # parameter scheme sets the auxiliaries to 1, so none of them can be zero.  The
         # first r column names are the auxiliary columns, which exist whether or not the
         # scheme keeps them -- `auxiliary_names` is empty here for that reason.
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         reverse = self.translator.reduced_symbols_that_must_not_be_zero(self.system)
         self.assertEqual(set(reverse), set(names[:self.translator.r]))
 
@@ -950,7 +950,7 @@ class TestBothDirections(TestCase):
                       self.translator.reduced_symbols_that_must_not_be_zero(self.system))
 
         # And the recovery of k_2 is where it sits.
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         recovered = self.translator.reverse_translate_parameter(names)
         k_2 = recovered[list(self.translator.symbols_domain).index(sympy.Symbol('k_2'))]
         _, denominator = sympy.fraction(sympy.together(k_2))
@@ -1892,12 +1892,12 @@ class TestUnitTable(TestCase):
         return system
 
     def table(self, system):
-        return ODETranslator.from_ode_system(system).unit_table(system)
+        return ODETranslator.from_ode_system(system).unit_table()
 
     def test_the_units_are_the_auxiliaries_and_the_values_the_invariants(self):
         system = self.enzyme()
         translator = ODETranslator.from_ode_system(system)
-        table = translator.unit_table(system)
+        table = translator.unit_table()
 
         self.assertEqual(len(system.symbols), len(table))
         roles = [row['role'] for row in table]
@@ -1934,7 +1934,7 @@ class TestUnitTable(TestCase):
         self.assertEqual(3, sum(row['dimension'] == concentration for row in units))
         self.assertEqual(
             {'units': 4, 'dimensions': 2},
-            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+            ODETranslator.from_ode_system(system).units_and_dimensions())
 
     def test_a_value_names_the_symbol_it_measures(self):
         system = self.enzyme()
@@ -1990,14 +1990,14 @@ class TestUnitTable(TestCase):
         self.assertIsNone(dimensions['x1'])
         self.assertEqual(
             {'units': 4, 'dimensions': None},
-            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+            ODETranslator.from_ode_system(system).units_and_dimensions())
 
     def test_every_scaling_michaelis_menten_admits_is_a_change_of_unit(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
         self.assertEqual(
             {'units': 2, 'dimensions': 2},
-            ODETranslator.from_ode_system(system).units_and_dimensions(system))
+            ODETranslator.from_ode_system(system).units_and_dimensions())
 
     def test_declaring_dimensions_changes_no_row_but_the_dimension(self):
         # Physical dimensions are an overlay.  The symbols, what they denote and their

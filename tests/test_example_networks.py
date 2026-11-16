@@ -86,7 +86,7 @@ class TestTheExampleReactionNetworks(TestCase):
         for label, system in self.systems():
             with self.subTest(network=label):
                 translator = ODETranslator.from_ode_system(system)
-                forward = dict(zip(translator.column_names(system),
+                forward = dict(zip(translator.column_names(),
                                    translator.forward_monomials()))
                 recovered = [
                     sympy.simplify(monomial.subs(forward, simultaneous=True))
