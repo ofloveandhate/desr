@@ -25,24 +25,6 @@ Both need the ``graphs`` extra::
 which brings matplotlib and networkx.  ``import desr`` needs neither.
 
 
-Nothing in either figure computes
------------------------------------
-
-Every matrix, monomial, dimension, name and substitution on either page comes from a
-getter.  Neither drawing derives anything of its own, and neither carries narrative
-written for one particular model.
-
-That is the point of them rather than a stylistic preference.  A figure that works
-things out for itself is only as true as the figure's own arithmetic, and it is true
-only for the system it was drawn for.  A figure that is a pure consumer of the library
-is as right as the library is, for every system — including one `desr` has never seen,
-which is the case you care about if you are drawing your own model.
-
-It also means the figures are a test of the interface.  Each time one needed a quantity
-the library could not supply, the answer was to add the getter rather than to compute
-it in the drawing; several methods exist because a figure asked for them.
-
-
 The flowchart
 ---------------
 
