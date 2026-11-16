@@ -1,8 +1,8 @@
 Numerical solution and reverse translation
 ========================================================
 
-The nondimensionalization algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original.
-That is, having solved a nondimensionalized system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalization.  
+The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original.
+That is, having solved a nondimensionalised system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalisation.  
 
 Let's demonstrate using the Michaelis-Menten equations: we solve the *reduced* system
 numerically, and recover the solution of the *original* one, then check the two agree.
@@ -56,7 +56,7 @@ Five constants have become three -- revealing that there are :math:`r = 2` scali
     >>> translator.r
     2
 
-The number of scaling symmetries is also the number of parameters we must provide later, when reverse translating from nondimensionalized to the original symbols. 
+The number of scaling symmetries is also the number of parameters we must provide later, when reverse translating from nondimensionalised to the original symbols. 
 
 For programming convenience, let's give the variables names we can use below.
 
@@ -205,7 +205,7 @@ The reduced system on the left and the original on the right are the same
 curves on rescaled axes, which is what the commuting square above says they must be.  The
 circles are the recovered solution sitting on the directly computed one.
 
-.. plot:: _examples/michaelis_menten_numeric.py
+.. plot:: examples/scripts/michaelis_menten_numeric.py
 
 The right-hand panel is worth dwelling on.  The disagreement between the two routes
 never exceeds :math:`10^{-11}`, two orders of magnitude below the tolerance the integrator

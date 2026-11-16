@@ -111,7 +111,7 @@ These don't match those from Murray, but they are very close.   We'll recover it
 The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
 among them.
 
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, k_1)
 
 Just for curiosity, here's what we get if we translate the system at this point:
@@ -165,7 +165,7 @@ Optionally, see the invariants and substitutions
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, c_0/s_0, e_0*k_1*t, s/s_0, c/e_0]])
 
-We have substitutions to make.  Note that many get normalized to :math:`1`.
+We have substitutions to make.  Note that many get normalised to :math:`1`.
 
     >>> translator.translate_parameter_substitutions(system)
     {s_0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, K_m: kappa3, c_0: kappa4, t: tau/kappa0, s: u, c: kappa0*v}
@@ -198,7 +198,7 @@ original symbols on one side, the reduced ones on the other, and an edge carryin
 exponent with which its source appears in its target.  So the reduction can be drawn as
 well as printed, and the zero can be followed through it.
 
-    >>> graph = translator.symbol_graph(system)
+    >>> graph = translator.symbol_graph()
     >>> graph.number_of_nodes(), graph.number_of_edges()
     (20, 22)
 
@@ -217,16 +217,16 @@ The symbols the reduction *does* divide by are those with an edge into an auxili
 is set to 1, or a negative edge into an invariant.  Coming back is a different question
 over the other set of symbols, and gets a different answer:
 
-    >>> translator.symbols_that_must_not_be_zero(system)
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, e_0, k_1)
-    >>> translator.reduced_symbols_that_must_not_be_zero(system)
+    >>> translator.reverse_symbols_that_must_not_be_zero()
     (x0, x1, kappa0)
 
 The zero returns the way it came.  Every node says what it equals in terms of the other
 side, so the reverse graph gives :math:`c_0` as a monomial in the reduced symbols, with
 :math:`\kappa_4` a factor of it:
 
-    >>> back = translator.symbol_graph(system, direction='reverse')
+    >>> back = translator.symbol_graph(direction='reverse')
     >>> back.nodes[('original', sympy.Symbol('c_0'))]['monomial']
     kappa4*x1
 
@@ -235,7 +235,52 @@ Drawing it is one further call --
 the translator, or :func:`desr.symbol_graph.draw_symbol_graph` on a graph you already
 hold.
 
-.. plot:: _examples/michaelis_menten_graph.py
+.. plot::
+    :include-source:
+
+    import matplotlib.pyplot as plt
+    from desr import ODESystem, ODETranslator
+
+    system = ODESystem.from_tex(
+        r'\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\'
+        '\n'
+        r'\frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c')
+    system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
+    system.update_initial_conditions(['s(0) = s_0', 'c(0) = 0'])
+    system.reorder_variables(
+        ['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
+
+    translator = ODETranslator.from_ode_system(
+        system,
+        naming_scheme={'parameters': 'kappa', 'independent': 'tau',
+                       'dependents': ['u', 'v']})
+
+    # The same two column operations the narrative makes above, so the figure is of
+    # the reduction this page arrives at rather than the one desr reaches first.
+    translator.multiplier_add_columns(translator.column_of('k_1*s_0*t'),
+                                      translator.column_of('e_0/s_0'))
+    translator.multiplier_add_columns(translator.column_of('c/s_0'),
+                                      translator.column_of('e_0/s_0'), power=-1)
+
+    figure, (going_out, coming_back) = plt.subplots(1, 2, figsize=(16, 9))
+    translator.draw_symbol_graph(ax=going_out, legend=False, font_size=12)
+    going_out.set_title('forward', fontsize=14)
+    translator.draw_symbol_graph(direction='reverse', ax=coming_back,
+                                 font_size=12)
+    coming_back.set_title('reverse', fontsize=14)
+    figure.tight_layout()
+
+What the figure says about this system, which is a page of prose otherwise:
+
+- the reduction divides by :math:`s_0`, :math:`e_0` and :math:`k_1` -- the heavy
+  borders -- and does not divide by :math:`c_0`, which is why a zero initial condition
+  survives it;
+- :math:`c_0` has a single edge, positive, into an invariant rather than an auxiliary,
+  so that invariant is simply zero: :math:`\kappa_4 = c_0/s_0 = 0`;
+- coming back, :math:`c_0 = \kappa_4 x_1`, so the zero returns the way it came;
+- the two auxiliaries are hatched.  Going out they are normalised to 1, which is how
+  :math:`s_0` and :math:`k_1` are absorbed; coming back they are the two values a
+  reverse translation has to be told.
 
 The source layer is on the left in both panels, so the reduced column ends the first and
 begins the second at the same heights, and the round trip

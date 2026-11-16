@@ -4,7 +4,7 @@ The exponent graph.
 The graph is a reading of the Hermite multiplier, so most of these compare it against the
 multiplier and against the methods that answer the same questions in other words.  The
 pair that matter most are the two that would have caught the orientation bug in
-`reduced_symbols_that_must_not_be_zero`: the edges must agree with the matrix entry by
+`reverse_symbols_that_must_not_be_zero`: the edges must agree with the matrix entry by
 entry, and composing the two directions must give the identity.
 '''
 from unittest import TestCase
@@ -65,7 +65,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
     def test_the_forward_edges_are_the_multiplier_entry_for_entry(self):
         graph = symbol_graph(self.translator, self.system)
         originals = list(self.translator.symbols_domain)
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         multiplier = self.translator.herm_mult
 
         expected = {}
@@ -83,7 +83,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
     def test_the_reverse_edges_are_the_inverse_entry_for_entry(self):
         graph = symbol_graph(self.translator, self.system, direction='reverse')
         originals = list(self.translator.symbols_domain)
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         inverse = self.translator.inv_herm_mult
 
         # The inverse is indexed [reduced, original], so the reduced symbol is the row.
@@ -155,7 +155,7 @@ class TestTheTwoLayersDoNotMerge(TestCase):
                            'dependents': ['s', 'c']})
 
     def test_the_two_layers_really_do_share_symbols(self):
-        shared = set(self.translator.column_names(self.system)) & set(self.system.symbols)
+        shared = set(self.translator.column_names()) & set(self.system.symbols)
         self.assertEqual(shared, {sympy.Symbol('t'), sympy.Symbol('s'),
                                   sympy.Symbol('c')})
 
@@ -192,7 +192,7 @@ class TestWhatTheNodesCarry(TestCase):
         # other layer, so whichever direction is drawn, the arrows point at nodes that
         # name themselves.  Compared against the public method rather than against a
         # second reading of the inverse multiplier.
-        names = self.translator.column_names(self.system)
+        names = self.translator.column_names()
         recoveries = self.translator.reverse_translate_parameter(names)
         for symbol, recovery in zip(self.translator.symbols_domain, recoveries):
             with self.subTest(symbol=str(symbol)):
@@ -205,7 +205,7 @@ class TestWhatTheNodesCarry(TestCase):
         # node data alone.
         substitution = {self.graph.nodes[(REDUCED, name)]['symbol']:
                         self.graph.nodes[(REDUCED, name)]['monomial']
-                        for name in self.translator.column_names(self.system)}
+                        for name in self.translator.column_names()}
         for symbol in self.translator.symbols_domain:
             with self.subTest(symbol=str(symbol)):
                 coming_back = self.graph.nodes[(ORIGINAL, symbol)]['monomial']
@@ -213,13 +213,13 @@ class TestWhatTheNodesCarry(TestCase):
                     sympy.simplify(coming_back.subs(substitution) - symbol), 0)
 
     def test_the_monomials_are_the_columns(self):
-        names = list(self.translator.column_names(self.system))
-        for name, monomial in zip(names, self.translator.column_monomials()):
+        names = list(self.translator.column_names())
+        for name, monomial in zip(names, self.translator.forward_monomials()):
             with self.subTest(column=name):
                 self.assertEqual(self.graph.nodes[(REDUCED, name)]['monomial'], monomial)
 
     def test_the_first_r_columns_are_the_auxiliaries(self):
-        names = list(self.translator.column_names(self.system))
+        names = list(self.translator.column_names())
         flags = [self.graph.nodes[(REDUCED, name)]['auxiliary'] for name in names]
         self.assertEqual(flags, [True] * self.translator.r
                          + [False] * (self.translator.n - self.translator.r))
@@ -250,10 +250,12 @@ class TestWhatTheNodesCarry(TestCase):
 
         # And the reduced system agrees that there is one clock.  It agrees more strongly
         # than it used to: `y0` is not a second dependent any more, because the reduction
-        # identifies it *with* `t` -- so the reduced system's own clock is what `y0`
-        # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.
+        # identifies it *with* the clock -- so the reduced system's own clock is what `y0`
+        # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.  Which
+        # is why it is called `tau` here too: `t` would be a name for `k_2_3*t`.
         reduced = translator.translate(system)
-        self.assertEqual(reduced.independent_variable, sympy.Symbol('t'))
+        self.assertEqual(reduced.independent_variable, sympy.Symbol('tau'))
+        self.assertNotIn(system.independent_variable, reduced.symbols)
         self.assertNotIn(sympy.Symbol('y0'), reduced.symbols)
         self.assertEqual(sympy.sympify('k_2_3*t'),
                          reduced.named_symbols[reduced.independent_variable])
@@ -299,7 +301,7 @@ class TestWhatTheNodesCarry(TestCase):
         named = {symbol for (layer, symbol), data in self.graph.nodes(data=True)
                  if layer == ORIGINAL and data['must_not_be_zero']}
         self.assertEqual(named,
-                         set(self.translator.symbols_that_must_not_be_zero(self.system)))
+                         set(self.translator.forward_symbols_that_must_not_be_zero()))
 
     def test_nothing_on_the_reduced_layer_is_flagged_going_forward(self):
         # Going forward only an original symbol can sit in a denominator, so the reduced
@@ -314,7 +316,7 @@ class TestWhatTheNodesCarry(TestCase):
                  if layer == REDUCED and data['must_not_be_zero']}
         self.assertEqual(
             named,
-            set(self.translator.reduced_symbols_that_must_not_be_zero(self.system)))
+            set(self.translator.reverse_symbols_that_must_not_be_zero()))
 
     def test_a_zero_initial_condition_is_not_something_the_reduction_divides_by(self):
         # The three-case reading, on the graph: c_0 has one edge, it is positive, and it
@@ -338,7 +340,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
     def test_the_parameter_scheme_normalises_them_going_out(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+        self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
         graph = symbol_graph(translator, system)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
@@ -466,7 +468,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.scheme(system), ReductionScheme.GENERAL)
+        self.assertEqual(translator.scheme(), ReductionScheme.GENERAL)
         graph = symbol_graph(translator, system)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
@@ -534,9 +536,9 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
             self.translator.column_of('c/e_0'))
 
     def test_a_column_operation_can_change_which_scheme_applies(self):
-        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.PARAMETER)
+        self.assertEqual(self.translator.scheme(), ReductionScheme.PARAMETER)
         self.move_the_clock_invariant()
-        self.assertEqual(self.translator.scheme(self.system), ReductionScheme.GENERAL)
+        self.assertEqual(self.translator.scheme(), ReductionScheme.GENERAL)
 
     def test_the_graph_follows_the_multiplier_rather_than_what_was_translated(self):
         # Translate first, so anything that recorded a scheme would have recorded
@@ -652,7 +654,7 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
                                    'dp/dt = s*p*(1 - h*p / n)'])):
             system = ODESystem.from_equations(equations)
             translator = ODETranslator.from_ode_system(system)
-            self.assertEqual(translator.scheme(system), ReductionScheme.PARAMETER)
+            self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
             graph = symbol_graph(translator, system)
             for _, data in graph.nodes(data=True):
                 if data['auxiliary']:
@@ -795,7 +797,7 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
         self.translator.multiplier_add_columns(
             self.translator.column_of('c/s_0'),
             self.translator.column_of('e_0/s_0'), power=-1)
-        self.graph = self.translator.symbol_graph(self.system)
+        self.graph = self.translator.symbol_graph()
 
     def test_the_size_the_page_quotes(self):
         self.assertEqual(
@@ -815,19 +817,19 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
         self.assertEqual(kappa4['value'], 0)
 
     def test_the_two_answers_the_page_quotes(self):
-        self.assertEqual(self.translator.symbols_that_must_not_be_zero(self.system),
+        self.assertEqual(self.translator.forward_symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('s_0 e_0 k_1')))
         self.assertEqual(
-            self.translator.reduced_symbols_that_must_not_be_zero(self.system),
+            self.translator.reverse_symbols_that_must_not_be_zero(),
             tuple(sympy.symbols('x0 x1 kappa0')))
 
     def test_the_zero_returns_the_way_it_came(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         self.assertEqual(back.nodes[(ORIGINAL, sympy.Symbol('c_0'))]['monomial'],
                          sympy.sympify('kappa4*x1'))
 
     def test_two_auxiliaries_must_be_supplied_coming_back(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         supplied = [data['symbol'] for _, data in back.nodes(data=True)
                     if data['must_be_supplied']]
         self.assertEqual(sorted(map(str, supplied)), ['x0', 'x1'])
@@ -841,17 +843,17 @@ class TestTheTranslatorMethods(TestCase):
         self.translator = ODETranslator.from_ode_system(self.system)
 
     def test_the_method_gives_the_same_graph_as_the_function(self):
-        by_method = self.translator.symbol_graph(self.system)
+        by_method = self.translator.symbol_graph()
         by_function = symbol_graph(self.translator, self.system)
         self.assertEqual(_edges(by_method), _edges(by_function))
         self.assertEqual(set(by_method.nodes), set(by_function.nodes))
 
     def test_the_method_passes_the_direction_through(self):
-        back = self.translator.symbol_graph(self.system, direction='reverse')
+        back = self.translator.symbol_graph(direction='reverse')
         self.assertEqual(back.graph['direction'], 'reverse')
 
     def test_the_drawing_method_forwards_its_keywords(self):
         import matplotlib.pyplot
         _, ax = matplotlib.pyplot.subplots()
-        self.assertIs(self.translator.draw_symbol_graph(self.system, ax=ax), ax)
+        self.assertIs(self.translator.draw_symbol_graph(ax=ax), ax)
         matplotlib.pyplot.close('all')

@@ -83,8 +83,11 @@ class TestODESystemScaling(TestCase):
 
         ## By default y0 is identified with t -- its monomial is t itself -- so the
         ## equation dy0/dt = y0/t becomes dt/dt = 1, which the system already has.
+        ## The clock is called tau once that identification is made: it now denotes y0's
+        ## monomial rather than the system's own t, and the two are different quantities
+        ## wherever y0 is not t itself.
         default = translator.translate_general(system)
-        self.assertEqual(('t', 'x0', 'y1'), tuple(map(str, default.symbols)))
+        self.assertEqual(('tau', 'x0', 'y1'), tuple(map(str, default.symbols)))
 
         ## Test reverse translating
         t_var, c1_var, c2_var = sympy.var('t c1 c2')
@@ -1058,7 +1061,7 @@ class TestZeroInitialConditionsThroughAReduction(TestCase):
         # end, so a zero-valued initial condition is out of harm's way by default.
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        must_not_be_zero = translator.symbols_that_must_not_be_zero()
+        must_not_be_zero = translator.forward_symbols_that_must_not_be_zero()
         self.assertNotIn(sympy.Symbol('C_0'), must_not_be_zero)
         self.assertNotIn(sympy.Symbol('P_0'), must_not_be_zero)
 
@@ -1292,12 +1295,16 @@ class TestScalingSymmetries(TestCase):
         # the matrix it came from.  A derivative dv/dt scales by the weight of v less
         # the weight of t, so substituting the symmetry into a right-hand side gives
         # that power of the factor times what was there.
-        factor = sympy.Symbol('lamda')
         for label, system in self.systems():
             matrix = system.maximal_scaling_matrix()
             symbols = list(system.symbols)
             clock = symbols.index(system.indep_var)
             for row, symmetry in enumerate(system.scaling_symmetries()):
+                # Taken from the images rather than assumed, so the test says nothing
+                # about what the factor is called.
+                appearing = set().union(*[image.free_symbols
+                                          for image in symmetry.values()])
+                factor, = appearing - set(system.symbols)
                 for variable, derivative in system.derivative_dict.items():
                     if variable == system.indep_var:
                         continue
@@ -1321,16 +1328,35 @@ class TestScalingSymmetries(TestCase):
         # changing the unit of time does and what [t] names that direction after.
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         time, concentration = system.scaling_symmetries()
-        factor = sympy.Symbol('lamda')
-        self.assertEqual(factor * sympy.Symbol('t'), time[sympy.Symbol('t')])
-        self.assertEqual(sympy.Symbol('k_2') / factor, time[sympy.Symbol('k_2')])
-        self.assertEqual(factor * sympy.Symbol('s'),
+        first, second = sympy.Symbol('lamda_1'), sympy.Symbol('lamda_2')
+        self.assertEqual(first * sympy.Symbol('t'), time[sympy.Symbol('t')])
+        self.assertEqual(sympy.Symbol('k_2') / first, time[sympy.Symbol('k_2')])
+        self.assertEqual(second * sympy.Symbol('s'),
                          concentration[sympy.Symbol('s')])
+
+    def test_several_scalings_get_a_factor_each(self):
+        # The rows are independent one-parameter groups.  One name across all of them
+        # would read as a single group acting several times.
+        system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
+        factors = []
+        for symmetry in system.scaling_symmetries():
+            appearing = set().union(*[image.free_symbols
+                                      for image in symmetry.values()])
+            factors.append((appearing - set(system.symbols)).pop())
+        self.assertEqual(len(factors), len(set(factors)))
+
+    def test_one_scaling_keeps_the_bare_name(self):
+        system = ODESystem.from_equations(
+            ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+             'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        symmetry, = system.scaling_symmetries()
+        self.assertEqual(sympy.Symbol('z1') / sympy.Symbol('lamda'),
+                         symmetry[sympy.Symbol('z1')])
 
     def test_the_factor_can_be_renamed(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         symmetry, _ = system.scaling_symmetries(factor='mu')
-        self.assertEqual(sympy.Symbol('mu') * sympy.Symbol('t'),
+        self.assertEqual(sympy.Symbol('mu_1') * sympy.Symbol('t'),
                          symmetry[sympy.Symbol('t')])
 
     def test_the_rows_line_up_with_the_dimension_names(self):
@@ -1449,7 +1475,7 @@ class TestStructuralDimensions(TestCase):
         # dependent-variable scheme is chosen by.  So t has dimension 1.
         system = ODESystem.from_equations(self.HL64)
         self.assertEqual(1, system.dimensions_of()[sympy.Symbol('t')])
-        self.assertEqual(ODETranslator.from_ode_system(system).scheme(system),
+        self.assertEqual(ODETranslator.from_ode_system(system).scheme(),
                          ReductionScheme.DEP_VAR)
 
     def test_naming_physical_dimensions_would_change_none_of_this(self):
@@ -1616,3 +1642,383 @@ class TestPhysicalDimensions(TestCase):
         self.assertEqual(before.inv_herm_mult, after.inv_herm_mult)
         self.assertEqual(before.r, after.r)
         self.assertEqual(before.translate(), after.translate())
+
+
+class TestADimensionallyConsistentChangeOfVariables(TestCase):
+    '''
+    A change of variables that keeps the units straight leaves the number of scaling
+    symmetries alone.  One that does not can raise it, and the extra symmetry is an
+    artefact of the substitution rather than a property of the model.
+
+    ``dx/dt = (a + b) x + b`` with ``c = a + b`` is the smallest case.  Writing ``c``
+    in place of ``a + b`` and saying nothing else loses the fact that ``b`` and ``c``
+    are added together, so desr is free to scale them separately.
+    '''
+
+    AS_WRITTEN = r'\frac{dx}{dt} &= (a + b) x + b'
+    SUBSTITUTED = r'\frac{dx}{dt} &= (c) x + b'
+
+    def count(self, system):
+        return ODETranslator.from_ode_system(system).num_scaling_symmetries
+
+    def test_the_system_as_written_has_one(self):
+        self.assertEqual(1, self.count(ODESystem.from_tex(self.AS_WRITTEN)))
+
+    def test_substituting_silently_invents_a_second(self):
+        # The reduction is larger, and wrong: nothing in the model says b and c scale
+        # independently, only the substitution's silence does.
+        self.assertEqual(2, self.count(ODESystem.from_tex(self.SUBSTITUTED)))
+
+    def test_requiring_the_same_unit_puts_it_back(self):
+        system = ODESystem.from_tex(self.SUBSTITUTED)
+        system.require_same_unit({'c': 'b'})
+        self.assertEqual(1, self.count(system))
+        self.assertEqual(ODESystem.from_tex(self.AS_WRITTEN).maximal_scaling_matrix(),
+                         system.maximal_scaling_matrix())
+
+    def test_so_does_carrying_the_constraint(self):
+        # Letting desr make the substitution keeps the relation, so the count holds
+        # even though the system now has a symbol more.
+        system = ODESystem.from_tex(self.AS_WRITTEN)
+        system.add_constraint('c', 'a+b')
+        self.assertEqual(1, self.count(system))
+        self.assertEqual(len(ODESystem.from_tex(self.AS_WRITTEN).symbols) + 1,
+                         len(system.symbols))
+
+    def test_the_reduction_is_smaller_when_the_symmetry_is_real(self):
+        # What the invented symmetry buys, and why it is worth catching: it removes a
+        # symbol the model still depends on.
+        honest = ODESystem.from_tex(self.AS_WRITTEN)
+        naive = ODESystem.from_tex(self.SUBSTITUTED)
+        honest_reduced = ODETranslator.from_ode_system(honest).translate(honest)
+        naive_reduced = ODETranslator.from_ode_system(naive).translate(naive)
+        self.assertEqual(3, len(honest_reduced.symbols))
+        self.assertEqual(2, len(naive_reduced.symbols))
+
+
+class TestDimensionlessExpressions(TestCase):
+    '''
+    The quantities a scaling has to leave alone, which is what the exponent matrix is
+    built from.  The claim that has to hold for every system, not only the tidy ones:
+    their terms are its columns, all of them.
+    '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+
+        with_initial = ODESystem.from_equations(self.EQUATIONS)
+        with_initial.update_initial_conditions({'s': 's_0'})
+
+        with_two_initial = ODESystem.from_equations(self.EQUATIONS)
+        with_two_initial.update_initial_conditions({'s': 's_0', 'c': 'c_0'})
+
+        with_constraint = ODESystem.from_equations(self.EQUATIONS)
+        with_constraint.add_constraint(sympy.Symbol('k_2'), sympy.Symbol('k_m1'))
+
+        conserved = ODESystem.from_equations(
+            ['dn/dt = n*(r - k*p)', 'dp/dt = p*(k*n - d)', 'dw/dt = 0'])
+
+        return (('plain', ODESystem.from_equations(self.EQUATIONS)),
+                ('one initial condition', with_initial),
+                ('two initial conditions', with_two_initial),
+                ('a constraint', with_constraint),
+                ('a conserved variable', conserved),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
+                ('HL 6.4', ODESystem.from_equations(
+                    ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])))
+
+    def test_their_terms_are_the_exponent_matrix_s_columns(self):
+        # The whole claim.  A figure or a reader that works through these has worked
+        # through everything the scaling matrix was computed from, with nothing left
+        # over in the matrix that they never saw.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                terms = sum(len(sympy.Add.make_args(row['expression']))
+                            for row in system.dimensionless_expressions())
+                self.assertEqual(system.exponent_matrix().shape[1], terms)
+
+    def test_every_scaling_leaves_each_of_them_alone(self):
+        # Why they are the right quantities: the scaling matrix annihilates every
+        # term of every one of these, which is what it was solved for.
+        for label, system in self.systems():
+            scaling = system.maximal_scaling_matrix()
+            symbols = list(system.symbols)
+            for row in system.dimensionless_expressions():
+                for term in sympy.Add.make_args(row['expression']):
+                    with self.subTest(system=label, term=str(term)):
+                        powers = term.as_powers_dict()
+                        weights = scaling * sympy.Matrix(
+                            [powers.get(symbol, 0) for symbol in symbols])
+                        self.assertTrue(weights.is_zero_matrix)
+
+    def test_an_initial_condition_is_reported_and_counted(self):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        before = len(system.dimensionless_expressions())
+        system.update_initial_conditions({'s': 's_0'})
+        rows = system.dimensionless_expressions()
+
+        self.assertEqual(before + 1, len(rows))
+        self.assertEqual('initial condition', rows[-1]['kind'])
+        self.assertEqual(sympy.Symbol('s'), rows[-1]['of'])
+        self.assertEqual(sympy.Symbol('s') / sympy.Symbol('s_0'),
+                         rows[-1]['expression'])
+
+    def test_the_equations_come_first(self):
+        # The order is the column order of the exponent matrix, and the equations are
+        # the first block of it.
+        system = ODESystem.from_equations(self.EQUATIONS)
+        system.update_initial_conditions({'s': 's_0'})
+        kinds = [row['kind'] for row in system.dimensionless_expressions()]
+        self.assertEqual(['equation', 'equation', 'initial condition'], kinds)
+
+
+class TestDimensionOfAMonomial(TestCase):
+    '''
+    ``[x]`` is read as the dimension of `x`, and that reading is defined for any
+    monomial in the system's symbols, not only for the :math:`r` that name directions.
+    '''
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        return (('Michaelis-Menten', ODESystem.from_equations(
+                    ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
+                ('HL 6.6', ODESystem.from_equations(
+                    ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                     'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])))
+
+    @staticmethod
+    def by_hand(monomial, system):
+        '''The dimension worked out from the symbols' own dimensions, independently.'''
+        dimensions = system.dimensions_of()
+        powers = monomial.as_powers_dict()
+        return sympy.simplify(sympy.prod(
+            [dimensions[symbol] ** powers.get(symbol, 0)
+             for symbol in system.symbols]))
+
+    def test_it_agrees_with_multiplying_the_symbols_dimensions(self):
+        for label, system in self.systems():
+            translator = ODETranslator.from_ode_system(system)
+            for monomial in list(translator.forward_monomials()) + list(system.symbols):
+                with self.subTest(system=label, monomial=str(monomial)):
+                    self.assertEqual(self.by_hand(monomial, system),
+                                     system.dimension_of(monomial))
+
+    def test_every_invariant_is_dimensionless(self):
+        for label, system in self.systems():
+            translator = ODETranslator.from_ode_system(system)
+            for invariant in translator.invariant_monomials():
+                with self.subTest(system=label, invariant=str(invariant)):
+                    self.assertEqual(1, system.dimension_of(invariant))
+
+    def test_a_symbol_agrees_with_dimensions_of(self):
+        for label, system in self.systems():
+            dimensions = system.dimensions_of()
+            for symbol in system.symbols:
+                with self.subTest(system=label, symbol=str(symbol)):
+                    self.assertEqual(dimensions[symbol], system.dimension_of(symbol))
+
+    def test_a_bracket_means_something_for_a_symbol_that_names_nothing(self):
+        # The point of the reading.  [c] is not one of the names -- the direction is
+        # named [e_0] -- and [c] still means a dimension, the same one.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        names, _ = system.dimension_matrix()
+        self.assertNotIn(sympy.Symbol('[c]'), names)
+        self.assertEqual(sympy.Symbol('[e_0]'), system.dimension_of(sympy.Symbol('c')))
+
+    def test_a_sum_is_not_a_monomial(self):
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        with self.assertRaises(ValueError):
+            system.dimension_of(sympy.Symbol('c') + sympy.Symbol('s'))
+
+
+class TestDimensionMatrix(TestCase):
+    '''
+    :meth:`~desr.ode_system.ODESystem.dimension_matrix` says the same thing as
+    :meth:`~desr.ode_system.ODESystem.dimensions_of`, in a shape a reader can read a
+    column of.
+    '''
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+        return (('Michaelis-Menten', ODESystem.from_equations(
+                    ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])),
+                ('prey-predator', ODESystem.from_equations(
+                    ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                     'dp/dt = s*p*(1 - h*p / n)'])),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
+                ('HL 6.6', ODESystem.from_equations(
+                    ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                     'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])),
+                ('HL 6.4', ODESystem.from_equations(
+                    ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])))
+
+    def test_a_column_is_that_symbol_s_dimension(self):
+        # The whole claim.  Read a column down the names and the monomial that comes
+        # out is what dimensions_of says, for every symbol of every system.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                names, matrix = system.dimension_matrix()
+                dimensions = system.dimensions_of()
+                for column, symbol in enumerate(system.symbols):
+                    monomial = sympy.prod([name ** matrix[row, column]
+                                           for row, name in enumerate(names)])
+                    self.assertEqual(dimensions[symbol], sympy.simplify(monomial),
+                                     'column {} is not {}'.format(column, symbol))
+
+    def test_it_is_the_scaling_matrix_up_to_row_signs(self):
+        # Negating a row replaces lamda by 1/lamda, so this is the same scaling read
+        # the other way up -- not a different matrix.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                scaling = system.maximal_scaling_matrix()
+                _, matrix = system.dimension_matrix()
+                self.assertEqual(scaling.shape, matrix.shape)
+                for row in range(scaling.shape[0]):
+                    theirs, ours = list(scaling[row, :]), list(matrix[row, :])
+                    self.assertIn(ours, (theirs, [-entry for entry in theirs]),
+                                  'row {} is not +/- the scaling row'.format(row))
+
+    def test_it_annihilates_the_exponent_matrix_too(self):
+        # A negated row is still a scaling the system does not feel.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                _, matrix = system.dimension_matrix()
+                self.assertTrue(
+                    (matrix * system.exponent_matrix()).is_zero_matrix)
+
+    def test_hl_6_6_negates_its_row(self):
+        # The case the convention exists for: z1 is the only symbol at weight +/-1
+        # and it sits at -1, so the scaling matrix read as dimensions would have every
+        # exponent backwards.
+        system = ODESystem.from_equations(
+            ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+             'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        self.assertEqual(sympy.Matrix([[3, -1, 5]]), system.maximal_scaling_matrix())
+        names, matrix = system.dimension_matrix()
+        self.assertEqual([sympy.Symbol('[z1]')], names)
+        self.assertEqual(sympy.Matrix([[-3, 1, -5]]), matrix)
+
+    def test_michaelis_menten_needs_no_negation(self):
+        # Where every name sits at +1 the two matrices agree, which is why reading a
+        # scaling matrix as dimensions usually seems to work.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        _, matrix = system.dimension_matrix()
+        self.assertEqual(system.maximal_scaling_matrix(), matrix)
+
+    def test_equal_columns_are_exactly_equal_dimensions(self):
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                _, matrix = system.dimension_matrix()
+                dimensions = system.dimensions_of()
+                symbols = list(system.symbols)
+                for left in range(len(symbols)):
+                    for right in range(left + 1, len(symbols)):
+                        same_column = (list(matrix[:, left])
+                                       == list(matrix[:, right]))
+                        same_dimension = (dimensions[symbols[left]]
+                                          == dimensions[symbols[right]])
+                        self.assertEqual(same_column, same_dimension,
+                                         '{} and {}'.format(symbols[left],
+                                                            symbols[right]))
+
+    def test_which_way_up_a_row_ends_follows_the_naming_choice(self):
+        # Michaelis-Menten's first direction holds t at +1 and both k_2 and k_m1 at
+        # -1, so three symbols could name it and the sign is not forced by the
+        # mathematics.  dimensions_of settles it, preferring +1, and the matrix
+        # follows that -- it adds no choice of its own.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        scaling = system.maximal_scaling_matrix()
+        alone_at_one = [symbol for column, symbol in enumerate(system.symbols)
+                        if abs(scaling[0, column]) == 1 and scaling[1, column] == 0]
+        self.assertEqual([sympy.Symbol('k_2'), sympy.Symbol('k_m1'),
+                          sympy.Symbol('t')], alone_at_one)
+
+        names, _ = system.dimension_matrix()
+        self.assertEqual(sympy.Symbol('[t]'), names[0])
+        self.assertIn(sympy.Symbol('[t]'),
+                      system.dimensions_of()[sympy.Symbol('k_2')].free_symbols)
+
+    def test_the_clock_names_its_direction_even_sitting_at_minus_one(self):
+        # Where the two rules disagree.  This direction holds e_0 at +1 and t at -1,
+        # so preferring +1 would name it [e_0]; the independent variable is preferred
+        # ahead of that, and the row is negated to put the clock at +1.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        self.assertEqual((sympy.Symbol('e_0'), sympy.Symbol('k_1'),
+                          sympy.Symbol('k_2'), sympy.Symbol('k_m1'),
+                          sympy.Symbol('t'), sympy.Symbol('c'), sympy.Symbol('s')),
+                         system.symbols)
+        crafted = sympy.Matrix([[1, 0, 0, 0, -1, 0, 0]])
+
+        names, matrix = system.dimension_matrix(crafted)
+        self.assertEqual([sympy.Symbol('[t]')], names)
+        self.assertEqual(sympy.Matrix([[-1, 0, 0, 0, 1, 0, 0]]), matrix)
+
+        dimensions = system.dimensions_of(crafted)
+        self.assertEqual(sympy.Symbol('[t]'), dimensions[sympy.Symbol('t')])
+        self.assertEqual(1 / sympy.Symbol('[t]'), dimensions[sympy.Symbol('e_0')])
+
+    def test_a_direction_the_clock_does_not_reach_falls_back_to_plus_one(self):
+        # Michaelis-Menten's second direction has t at weight 0, so the clock is no
+        # candidate and the +1 rule picks the first of e_0, c, s.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        names, _ = system.dimension_matrix()
+        self.assertEqual([sympy.Symbol('[t]'), sympy.Symbol('[e_0]')], names)
+
+    def test_a_direction_no_symbol_can_name_falls_back(self):
+        # A row is primitive, but primitive does not mean it holds a +/-1: (2, 3)
+        # holds neither, and then no symbol of the system has that dimension to be
+        # named after.  The label counts from one, as the scaling factors do.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        crafted = sympy.Matrix([[2, 3, 0, 0, 0, 0, 0]])
+
+        names, matrix = system.dimension_matrix(crafted)
+        self.assertEqual([sympy.Symbol('[dimension_1]')], names)
+        # Nothing is negated: there is no naming symbol whose sign could ask for it.
+        self.assertEqual(crafted, matrix)
+
+        dimensions = system.dimensions_of(crafted)
+        label = sympy.Symbol('[dimension_1]')
+        self.assertEqual(label ** 2, dimensions[sympy.Symbol('e_0')])
+        self.assertEqual(label ** 3, dimensions[sympy.Symbol('k_1')])
+        # And no symbol of the system has the bare dimension, which is the whole
+        # reason the direction had to be labelled rather than named.
+        self.assertNotIn(label, dimensions.values())
+
+    def test_it_takes_the_scaling_it_is_given(self):
+        # As dimensions_of does, so a reduction that uses something other than the
+        # maximal scaling gets dimensions that match it.
+        system = ODESystem.from_equations(
+            ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+             'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        one_row = system.maximal_scaling_matrix()[0, :]
+        names, matrix = system.dimension_matrix(one_row)
+        self.assertEqual(1, matrix.shape[0])
+        self.assertEqual(len(names), matrix.shape[0])
+        dimensions = system.dimensions_of(one_row)
+        for column, symbol in enumerate(system.symbols):
+            monomial = sympy.prod([name ** matrix[row, column]
+                                   for row, name in enumerate(names)])
+            self.assertEqual(dimensions[symbol], sympy.simplify(monomial))

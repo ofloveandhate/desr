@@ -47,13 +47,15 @@ Run with::
     python examples/reduction_chain.py
 """
 
+import matplotlib
 import matplotlib.pyplot as plt
 import sympy
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from matplotlib.transforms import Bbox
 
-from desr import ODESystem, ODETranslator
-from desr.chemical_reaction_network import ChemicalReactionNetwork
+from desr.figures._palette import (FONT_RC, INERT, PLAIN, QUIET, UNIT_COLOUR,
+                                   VALUE_COLOUR)
+from desr.ode_translation import ODETranslator
 from desr.symbol_graph import (symbol_graph, draw_symbol_graph, node_positions,
                                ORIGINAL, REDUCED)
 # expr_to_tex rather than sympy.latex: desr writes a negative subscript `k_m1`, and
@@ -135,7 +137,7 @@ def normalise_pairs(translator, system, reduced, normalised):
 
     An auxiliary built from the original parameters alone cannot vary, so it can be set
     to 1 once and for all.  That is a choice of units, not an assumption, which is why
-    the arrow is a |-> and never an =.
+    the arrow is a ``|->`` and never an ``=``.
     """
     import sympy
 
@@ -199,20 +201,11 @@ def identify_pairs(translator, system, reduced, normalised, final):
 
 
 
-#: The whole figure's colour, in one place, so that a colour means one thing wherever it
-#: appears.  Colour names a **kind of symbol** and nothing else: **rust** the
-#: auxiliaries, which are the units, and **blue** the invariants, which are the values.
-#:
-#: Not the steps.  An arrow is grey, because the two middle ones do not divide the way
-#: the colours do -- adopting units touches every rust symbol, while identifying the
-#: clock touches one blue one and makes it the independent variable, which is the one
-#: thing blue does not mean.
-#:
-#: Black is for what is neither kind -- an expression, a dimension, a count.  Grey
-#: labels the figure rather than saying anything about the system, and the palest grey
-#: is a step that does nothing.
-UNIT_COLOUR, VALUE_COLOUR = '#8a4500', '#1f5c86'
-PLAIN, QUIET, INERT = 'black', '#555555', '#aaaaaa'
+#: An arrow here is grey rather than coloured, because the two middle steps do not
+#: divide the way the symbols do: normalising touches every rust symbol, while
+#: identifying the clock touches one blue one and makes it the independent variable,
+#: which is the one thing blue does not mean.  The palest grey is a step that does
+#: nothing.  See :mod:`desr.figures._palette` for the rest.
 
 
 def dimensions_shown(system, scaling_matrix):
@@ -301,8 +294,8 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
         # table, the other by dividing -- and a reduction desr has never met factors the
         # same way or not at all.
         quantity = row['of'] if not unit else None
-        per_unit = (sympy.simplify(row['denotes'] / quantity)
-                    if quantity is not None else 1)
+        per_unit = (1 / row['unit_monomial']
+                    if row['unit_monomial'] is not None else 1)
         if quantity is None or per_unit == 1:
             reads_as = expr_to_tex(row['denotes'])
         else:
@@ -317,7 +310,7 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
         #
         # Part of the same string, not a column of its own: set apart it reads as a
         # later step rather than as what that line of the table says.
-        after = sympy.simplify(row['denotes'].subs(normalisations, simultaneous=True))
+        after = row['adopted']
         if after != row['denotes']:
             reads_as += '\\;\\;\\mapsto\\;' + expr_to_tex(after)
 
@@ -378,9 +371,10 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
     # a column position any of them share.
     headed = Bbox.union([artist.get_window_extent(renderer) for artist in drawn])
     headed = headed.transformed(ax.transData.inverted())
+    # Size alone, no weight: Computer Modern ships no bold face, so asking for one gets
+    # the roman back with a warning.  The flowchart's panel headings are set the same way.
     drawn.append(ax.text((headed.x0 + headed.x1) / 2, headed.y1 + 0.06, title,
-                         fontsize=font + 1.5, weight='bold', ha='center',
-                         va='bottom'))
+                         fontsize=font + 1.5, ha='center', va='bottom'))
 
     _tight_box(ax, drawn, renderer)
     return ax
@@ -425,7 +419,7 @@ def _system_box(figure, rect, title, system, font, note=None):
                                 transform=ax.transAxes, facecolor='#f6f5f2',
                                 edgecolor=INERT, linewidth=0.7, zorder=0,
                                 clip_on=False))
-    ax.text(0.5, 0.95, title, fontsize=font + 1, weight='bold', ha='center',
+    ax.text(0.5, 0.95, title, fontsize=font + 1, ha='center',
             va='top', transform=ax.transAxes)
     lines = summary_lines(system)
     step = 0.66 / max(len(lines), 1)
@@ -457,8 +451,13 @@ def step_labels(normalised, identified):
     # on and explain that the system it produces has none.
     units = 'normalise' if normalised else 'nothing to normalise'
     if identified:
+        # The images, deduplicated: the step merges every symbol it touches into the one
+        # clock, so naming that clock once is what the step does.  Several symbols reach
+        # it whenever the reduced clock is renamed -- the system's own `t` goes there
+        # alongside the invariant that is now the same quantity -- and listing one name
+        # per source would print it twice.
         clock = 'identify ' + ', '.join(
-            sorted('$' + expr_to_tex(image) + '$' for image in identified.values()))
+            sorted({'$' + expr_to_tex(image) + '$' for image in identified.values()}))
     else:
         clock = 'no clock to identify'
     return ('forward', units, clock, 'reverse')
@@ -491,7 +490,8 @@ WIDTH_IN = 10.8
 ROW_IN, MIN_ROWS = 0.42, 3
 
 
-def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None):
+def symbol_map_figure(system, title=None, size=None, font=6.5, steps=None,
+                      notes=None):
     """
     Draw the whole round trip for `system`.
 
@@ -522,6 +522,22 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
 
     Returns:
         matplotlib.figure.Figure
+    """
+    # Every artist resolves its font when it is made, so the whole figure is drawn inside
+    # the context rather than only created in it.  The drawing is a function of its own
+    # so that the context wraps it without indenting a hundred lines under a `with`.
+    with matplotlib.rc_context(FONT_RC):
+        return _draw_symbol_map(system, title, size, font, steps, notes)
+
+
+def _draw_symbol_map(system, title, size, font, steps, notes):
+    """
+    The body of :func:`symbol_map_figure`, called with the figure font in force.
+
+    Args: as :func:`symbol_map_figure`, all of them positional, since nothing but that
+        function calls this.
+
+    :rtype: matplotlib.figure.Figure
     """
     notes = dict(notes or {})
     translator = ODETranslator.from_ode_system(system)
@@ -568,7 +584,7 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
     origins = {symbol: place[1] for (layer, symbol), place in places.items()
                if layer == ORIGINAL}
 
-    table = translator.unit_table(system)
+    table = translator.unit_table()
     normalised_symbols = {symbol for symbol, _, _, _
                           in normalise_pairs(translator, system, reduced, normalised)}
     identified = {symbol: image for symbol, image, _, _
@@ -577,7 +593,7 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
     # The forward graph spans the first seam and the reverse graph the last.  The table
     # spans both middle seams, because choosing the units is what makes the clock
     # identifiable: the two steps are one table read downwards, not two panels.
-    panels = [('forward', 0, 1), ('dimensions, units, and normalization', 1, 3),
+    panels = [('forward', 0, 1), ('dimensions, units, and normalisation', 1, 3),
               ('reverse', 3, 4)]
     for name, start, end in panels:
         centre = (box_centre[start] + box_centre[end]) / 2
@@ -591,7 +607,7 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
             # Its name goes inside its box, where it reads as the table's heading rather
             # than as a second subtitle under the figure's own.
             draw_unit_table(ax, table, font + 0.5, heights,
-                            translator.normalisations(system), name,
+                            translator.normalisations(), name,
                             dimensions=dimensions_shown(system,
                                                         translator.scaling_matrix),
                             origins=origins)
@@ -647,56 +663,3 @@ def chain_figure(system, title=None, size=None, font=6.5, steps=None, notes=None
     return figure
 
 
-def declared(system, dimensions):
-    """
-    A system with its physical dimensions named.
-
-    Naming them changes no matrix and no reduction; it changes what the table can say.
-    Undeclared, the enzyme chain's three species sit in three structural dimensions and
-    the table writes them ``[e]``, ``[f]``, ``[x]``.  Declared, all three are
-    concentration, and the table shows one dimension carrying three units -- which is
-    the fact about the model, and the one a reader asks about.
-    """
-    system.set_dimensions(dimensions)
-    return system
-
-
-SYSTEMS = [
-    ('Michaelis-Menten, two variable', declared(ODESystem.from_equations(
-        ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
-         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']),
-        {'t': 'time', 'e_0': 'concentration'})),
-    ('predator-prey', declared(ODESystem.from_equations(
-        ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']),
-        {'t': 'time', 'n': 'prey', 'p': 'predators'})),
-    ('enzyme chain, a reaction network', declared(
-        ChemicalReactionNetwork.from_diagram(
-            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system(),
-        {'t': 'time', 'e': 'concentration', 'f': 'concentration',
-         'x': 'concentration'})),
-    # No parameters at all, so nothing normalises, and nothing is declared either, so
-    # the table falls back to the structural dimensions.  The figure has to stay honest
-    # about both.
-    ('Hubert & Labahn 6.6', ODESystem.from_equations(
-        ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
-         'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])),
-]
-
-_label, _system = SYSTEMS[2]
-figure = chain_figure(_system, _label)
-
-
-if __name__ == '__main__':
-    for label, each in SYSTEMS:
-        translator = ODETranslator.from_ode_system(each)
-        final = translator.translate_general(each)
-        counts = translator.units_and_dimensions(each)
-        units = '{} unit{}'.format(counts['units'],
-                                   '' if counts['units'] == 1 else 's')
-        measuring = ('measuring {} dimensions'.format(counts['dimensions'])
-                     if counts['dimensions'] is not None
-                     else 'dimensions undeclared')
-        print('{:<34} {} -> {} symbols, {}, {}'.format(
-            label, len(each.symbols), len(final.symbols), units, measuring))
-        chain_figure(each, label)
-    plt.show()

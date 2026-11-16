@@ -150,7 +150,7 @@ class NumericTranslator(object):
     '''
 
     def __init__(self, reduced):
-        if reduced.column_monomials is None or reduced.original_system is None:
+        if reduced.forward_monomials is None or reduced.original_system is None:
             raise ValueError(
                 'This reduced system carries no record of how it was made, so there is '
                 'nothing to translate against.  A system that `translate` produced carries '
@@ -170,7 +170,7 @@ class NumericTranslator(object):
         else:
             self._acted = list(self.system.symbols)
 
-        monomials = list(reduced.column_monomials)
+        monomials = list(reduced.forward_monomials)
         # Each monomial's exponent vector over the original symbols *is* its column of the
         # multiplier, so the record reconstructs the matrices exactly -- with no translator
         # that could have moved on in the meantime.
@@ -336,9 +336,9 @@ class NumericTranslator(object):
         ordered = list(found) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var and values.get(self.reduced.independent_variable) is not None:
-            # Under these schemes the reduced system keeps the original independent
-            # variable, so take it as given rather than reconstructing it -- the monomial
-            # would agree, but only to the accuracy of everything that went into it.
+            # `_shares_indep_var` says the reduced clock denotes the original one, so take
+            # it as given rather than reconstructing it -- the monomial would agree, but
+            # only to the accuracy of everything that went into it.
             result[self.system.independent_variable] = values[self.reduced.independent_variable]
 
         if not result:
@@ -617,7 +617,7 @@ class NumericTranslator(object):
                 self._growth_rates = [sympy.Integer(0)] * self.r
             else:
                 moving = set(self.system.dependents) | {self.system.independent_variable}
-                monomials = list(self.reduced.column_monomials)[:self.r]
+                monomials = list(self.reduced.forward_monomials)[:self.r]
                 carrier, named = None, []
                 rates = []
                 for column, name in enumerate(self._auxiliaries):
@@ -655,7 +655,7 @@ class NumericTranslator(object):
         The same system reduced by the same multiplier, keeping every auxiliary.
 
         Needed only for an auxiliary that both moves and was dropped, whose equation is the
-        one thing :attr:`~desr.ode_system.ODESystem.column_monomials` cannot supply: a
+        one thing :attr:`~desr.ode_system.ODESystem.forward_monomials` cannot supply: a
         monomial says what a symbol *is*, not how it changes, and for everything else that
         is enough because a monomial in the parameters alone provably does not change.
 

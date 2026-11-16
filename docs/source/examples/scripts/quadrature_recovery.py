@@ -8,7 +8,7 @@ along the invariants, and the original system is reconstructed from the result.
 
 Run with::
 
-    python examples/quadrature_recovery.py
+    python docs/source/examples/scripts/quadrature_recovery.py
 """
 
 import matplotlib.pyplot as plt

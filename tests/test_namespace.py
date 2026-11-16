@@ -86,9 +86,9 @@ class TestPublicNames(TestCase):
         self.assertIs(ReductionScheme, same)
 
     def test_submodules_are_reachable_as_attributes(self):
-        for name in ('chemical_reaction_network', 'matrix_normal_forms', 'numerics',
-                     'ode_system', 'ode_translation', 'symbol_graph', 'sympy_helper',
-                     'tex_tools'):
+        for name in ('chemical_reaction_network', 'figures', 'matrix_normal_forms',
+                     'numerics', 'ode_system', 'ode_translation', 'symbol_graph',
+                     'sympy_helper', 'tex_tools'):
             with self.subTest(module=name):
                 self.assertTrue(hasattr(desr, name))
 
@@ -148,6 +148,15 @@ class TestOptionalDependencies(TestCase):
         self.assertNotIn(
             'matplotlib',
             self.modules_after('import desr.symbol_graph', self.GRAPHS))
+
+    def test_the_figures_are_behind_the_same_door(self):
+        # Drawing a figure needs both, and `import desr` needs neither.  A figure is
+        # the one place matplotlib is wanted at import time, since the module is
+        # nothing but drawing.
+        self.assertEqual(self.modules_after('import desr', self.GRAPHS), '')
+        drawn = self.modules_after('import desr.figures', self.GRAPHS)
+        self.assertIn('matplotlib', drawn)
+        self.assertIn('networkx', drawn)
 
     def test_scipy_stays_unimported_until_a_solver_is_needed(self):
         # desr.numerics needs numpy to exist at all, but scipy only for recovering

@@ -115,7 +115,7 @@ can be set to 1 once and discarded:
 The reduced system keeps no auxiliaries at all, which is why there are no names for them
 to have:
 
-    >>> translator.auxiliary_names(system)
+    >>> translator.auxiliary_names()
     ()
 
 
@@ -136,7 +136,7 @@ Its four auxiliaries do not agree with each other.  Three are monomials in rate 
 the fourth is a chemical species:
 
     >>> transl = ODETranslator.from_ode_system(enzyme)
-    >>> transl.scheme(enzyme)
+    >>> transl.scheme()
     ReductionScheme.GENERAL
     >>> transl.auxiliary_monomials()
     Matrix([[1/k_2_3, k_2_3/k_0_1, k_2_3/k_4_5, x]])
@@ -243,7 +243,7 @@ node attributes -- ``kind`` for the first and ``auxiliary`` for the second -- an
 hatched square is an auxiliary that is a constant and a hatched circle is one that must be
 integrated.  There is a worked figure in :doc:`examples/mm_init_cond`.
 
-    >>> graph = transl.symbol_graph(enzyme)
+    >>> graph = transl.symbol_graph()
     >>> sorted((str(data['symbol']), data['kind'])
     ...        for _, data in graph.nodes(data=True) if data['auxiliary'])
     [('x0', 'parameter'), ('x1', 'parameter'), ('x2', 'parameter'), ('x3', 'dependent')]

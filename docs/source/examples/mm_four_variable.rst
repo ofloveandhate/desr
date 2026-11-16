@@ -144,18 +144,20 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
 For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
 
 Now, this transformation doesn't satisfy the conditions of the parameter reduction scheme, so if we try to reduce it
-:meth:`~desr.ode_translation.ODETranslator.translate` will use the dependent reduction scheme implemented in
-:meth:`~desr.ode_translation.ODETranslator.translate_dep_var`.
+:meth:`~desr.ode_translation.ODETranslator.translate` will fall through to the general reduction scheme implemented in
+:meth:`~desr.ode_translation.ODETranslator.translate_general`.  The scaling moves :math:`t`
+-- the invariant below is :math:`k_2 t`, not :math:`t` -- so the dependent-variable scheme,
+which applies only when the clock is left alone, does not fit either.
 
     >>> max_scal2.invariant_monomials()
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate(original_system)
-    dt/dt = 1
-    dy0/dt = -y0 - y0*y4/y1 + y3*y5
-    dy1/dt = y0*y1/y4
-    dy3/dt = y0 + y0*y4/y1 - y3*y5
-    dy4/dt = y0
-    dy5/dt = y0*y4/y1 - y3*y5
+    dtau/dtau = 1
+    dy0/dtau = -y0 - y0*y4/y1 + y3*y5
+    dy1/dtau = y0*y1/y4
+    dy3/dtau = y0 + y0*y4/y1 - y3*y5
+    dy4/dtau = y0
+    dy5/dtau = y0*y4/y1 - y3*y5
 
 The reduced system is autonomous and has no parameters at all.  Two things got it there,
 and both can be turned off.
@@ -173,6 +175,14 @@ reduced system already carries, and its equation :code:`dy2/dt = y2/t` reads
 :math:`\frac{dt}{dt} = 1` -- which the system already has.  So the two are one quantity
 under two names, one of them is kept, and every :math:`1/t` cancels.  That is what makes
 the result autonomous.
+
+The one that is kept is called :code:`tau`, because it is :math:`k_2 t` and not :math:`t`.
+Pinning :math:`k_2` to 1 is a choice of time unit, so the reduced system's clock counts in
+that unit; :attr:`~desr.ode_system.ODESystem.named_symbols` says which quantity each
+reduced symbol stands for, and the clock is in there with the rest.
+
+    >>> max_scal2.translate(original_system).named_symbols
+    {tau: k_2*t, y0: C*k_1/k_2, y1: P*k_1/k_m1, y3: E*k_1/k_2, y4: P*k_1/k_2, y5: S*k_1/k_2}
 
 The remaining variables :code:`(y0, y1, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
@@ -293,14 +303,14 @@ back, which is the end that is kept.
     (S_0, k_1, k_2, k_m1, E_0, C_0, P_0, t, C, E, P, S)
 
     >>> translator = ODETranslator.from_ode_system(system)
-    >>> translator.scheme(system)
+    >>> translator.scheme()
     ReductionScheme.PARAMETER
 
 The reduction divides by these symbols, so none of them may be zero.  Neither :math:`C_0`
 nor :math:`P_0` is among them: each appears only in a numerator, so the invariant holding
 it is zero.
 
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (S_0, k_1)
 
     >>> translator.invariant_monomials()

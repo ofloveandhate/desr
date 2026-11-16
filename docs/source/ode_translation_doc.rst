@@ -77,7 +77,7 @@ Finding a column to operate on
 .. automethod:: desr.ode_translation.ODETranslator.column_of
     :noindex:
 
-.. automethod:: desr.ode_translation.ODETranslator.column_monomials
+.. automethod:: desr.ode_translation.ODETranslator.forward_monomials
     :noindex:
 
 .. automethod:: desr.ode_translation.ODETranslator.column_names

@@ -9,7 +9,7 @@ of the integrator, which is the point: the translation itself is exact.
 
 Run with::
 
-    python examples/michaelis_menten_numeric.py
+    python docs/source/examples/scripts/michaelis_menten_numeric.py
 """
 
 import matplotlib.pyplot as plt

@@ -46,6 +46,27 @@ desr.numerics module
     :undoc-members:
     :show-inheritance:
 
+desr.symbol_graph module
+------------------------
+
+.. automodule:: desr.symbol_graph
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+desr.figures module
+-------------------
+
+.. automodule:: desr.figures.flowchart
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. automodule:: desr.figures.symbol_map
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 desr.sympy_helper module
 ------------------------
 

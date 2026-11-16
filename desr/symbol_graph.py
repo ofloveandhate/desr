@@ -11,7 +11,7 @@ the exponent with which its source appears in its target.  Reading it:
 
 - the **sign** of an edge is numerator versus denominator.  A negative edge into an
   invariant means that invariant divides by that symbol;
-- :meth:`~desr.ode_translation.ODETranslator.symbols_that_must_not_be_zero` is an edge
+- :meth:`~desr.ode_translation.ODETranslator.forward_symbols_that_must_not_be_zero` is an edge
   filter: a symbol qualifies when it has any edge into an auxiliary, which the reduction
   sets to 1, or a negative edge into an invariant.  A *positive* edge into an invariant and
   nothing into an auxiliary is the harmless case, where the invariant is simply zero, and is
@@ -45,8 +45,9 @@ from desr.tex_tools import display_tex, expr_to_tex
 
 #: The two vertex layers.  A node is a ``(layer, symbol)`` pair, because the two layers can
 #: contain the *same* sympy symbol -- a naming scheme may reuse the original letters, and
-#: the general and dependent-variable schemes keep the system's own clock -- and bare
-#: symbols as nodes would silently merge those vertices.
+#: the general and dependent-variable schemes keep the system's own clock wherever the
+#: reduced clock still denotes it -- and bare symbols as nodes would silently merge those
+#: vertices.
 ORIGINAL = 'original'
 REDUCED = 'reduced'
 
@@ -84,39 +85,7 @@ def _original_kinds(system):
     return kinds
 
 
-def _auxiliary_kind(monomial, system):
-    '''
-    Whether an auxiliary sits still or has to be integrated.
-
-    Hubert & Labahn's auxiliary system is :math:`dx/dt = x \\star F(y^{W_\\partial})
-    \\cdot V_i`, and they call it a quadrature: given the reduced system's solution, each
-    auxiliary follows by one integration.  Its integrand is
-    :math:`(z^{-1} \\star dz/dt) \\cdot V_i` -- the logarithmic derivatives of the original
-    symbols, combined by a column of :math:`V_i` -- and a **parameter contributes zero to
-    it**, having no derivative.
-
-    So an auxiliary that is a monomial in the parameters alone has
-    :math:`d(\\log x)/dt = 0`: it is constant, and recovering the original system needs a
-    *constant of integration* rather than an integral.  That is the whole of why the
-    parameter scheme can normalise its auxiliaries to 1 and drop them: its block form puts
-    every column of :math:`V_i` on parameter rows, so every one of them is such a monomial.
-    The paper states the conclusion -- constants there, quadratures in general -- without
-    walking this step.
-
-    Read per auxiliary rather than per scheme, which is finer than the paper needs to be
-    and is what a reduction like the enzyme chain's calls for: three of its auxiliaries are
-    monomials in rate constants and sit still, while the fourth is a species and moves.
-
-    Returns:
-        str: ``'parameter'`` where the quadrature is trivial, ``'dependent'`` where it is
-        not.  The independent variable counts as something that moves, since a monomial
-        containing it is not constant either.
-    '''
-    moving = set(system.variables) | {system.independent_variable}
-    return 'dependent' if monomial.free_symbols & moving else 'parameter'
-
-
-def _reduced_kinds(translator, system, monomials):
+def _reduced_kinds(translator, system):
     '''
     What each column is, in column order.
 
@@ -134,38 +103,13 @@ def _reduced_kinds(translator, system, monomials):
     does, and under the parameter scheme it does not report them at all.  Being an
     auxiliary is orthogonal to being a parameter or a dependent -- the reduced system says
     so itself, listing the enzyme chain's ``x0``, ``x1`` and ``x2`` among its parameters --
-    so the two are carried separately here and :func:`_auxiliary_kind` decides the second.
+    so the two are carried separately here and
+    :meth:`~desr.ode_translation.ODETranslator.auxiliary_kinds` decides the second.
     '''
-    roles = translator.column_kinds(system)
-    return [_auxiliary_kind(monomials[column], system) if column < translator.r
-            else role
+    roles = translator.kinds_per_column()
+    auxiliaries = translator.auxiliary_kinds()
+    return [auxiliaries[column] if column < translator.r else role
             for column, role in enumerate(roles)]
-
-
-def _propagated_values(monomials, names, values):
-    '''
-    The values the known original ones force on the reduced symbols.
-
-    One substitution is enough, and is **complete** rather than best-effort: no reduced
-    symbol is a monomial in the other reduced symbols, because the columns of the
-    multiplier are multiplicatively independent -- the multiplier is invertible -- so there
-    is no redundancy on the reduced side to iterate over.
-
-    A monomial need not have all of its symbols known to have a known value.  A zero in a
-    numerator settles it whatever the rest are, which is the case that matters: `c_0 / s_0`
-    is zero for every `s_0` once `c_0` is.  A zero in a *denominator* settles nothing, and
-    is excluded by its value being non-finite rather than by inspecting the exponents --
-    though a reduction that divides by a known zero is refused before it gets here.
-    '''
-    if not values:
-        return {}
-
-    propagated = {}
-    for name, monomial in zip(names, monomials):
-        substituted = monomial.subs(values)
-        if substituted.is_number and substituted.is_finite:
-            propagated[name] = substituted
-    return propagated
 
 
 def symbol_graph(translator, system, direction=FORWARD):
@@ -273,7 +217,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     >>> sorted(str(symbol) for (layer, symbol), data in graph.nodes(data=True)
     ...        if layer == 'original' and data['must_not_be_zero'])
     ['e_0', 'k_1']
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (e_0, k_1)
 
     An edge is one exponent, and the invariant it points into is the monomial it belongs
@@ -309,21 +253,24 @@ def symbol_graph(translator, system, direction=FORWARD):
     direction = _resolved_direction(direction)
 
     originals = list(translator.symbols_domain)
-    names = list(translator.column_names(system))
-    monomials = list(translator.column_monomials())
+    # One name per column.  Under the dependent-variable scheme the scaling leaves the
+    # clock alone, so the reduction keeps it rather than coining a name for it, and
+    # `column_names` is a name short of the columns it would be read against.
+    names = list(translator.names_per_column())
+    monomials = list(translator.forward_monomials())
 
     original_kinds = _original_kinds(system)
-    reduced_kinds = _reduced_kinds(translator, system, monomials)
+    reduced_kinds = _reduced_kinds(translator, system)
 
     # What each original symbol equals in terms of the reduced ones, the mirror of
-    # `column_monomials`.  Taken from `reverse_translate_parameter` -- which is
+    # `forward_monomials`.  Taken from `reverse_translate_parameter` -- which is
     # `scale_action(variables, inv_herm_mult)` and nothing else, so it applies whatever
     # scheme runs -- rather than indexing the inverse again here.  One place decides that
     # orientation, and it is the one that was always right.
     recoveries = list(translator.reverse_translate_parameter(names))
 
     original_values = dict(system.parameter_values)
-    reduced_values = _propagated_values(monomials, names, original_values)
+    reduced_values = translator.propagated_parameter_values()
 
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is
@@ -331,7 +278,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     # reduction can have some such auxiliaries and some that move.  The parameter scheme is
     # the case where every one of them is, which is why asking per column covers it too
     # without a special case.
-    normalised_monomials = set(translator.parameter_auxiliaries(system))
+    normalised_monomials = set(translator.parameter_auxiliaries())
 
     # Which of the caller's own symbols that spends.  Asked of `normalisations`, which is
     # what the reduction records as having done, so the figure cannot disagree with it
@@ -339,15 +286,15 @@ def symbol_graph(translator, system, direction=FORWARD):
     #
     # The reduction adopts those symbols as its units -- `s_0 |-> 1` is "measure
     # concentration in units of s_0", which is why `u = s/s_0` has no `s_0` left in it.
-    sent_to_one = set(translator.normalisations(system))
+    sent_to_one = set(translator.normalisations())
 
-    # Note that this, `column_names` and `reduced_symbols_that_must_not_be_zero` are all
+    # Note that this, `column_names` and `reverse_symbols_that_must_not_be_zero` are all
     # asked afresh, and none of them is told a scheme.  See the class docstring's note on
     # why there is no `scheme` argument.
 
     divides_by = {
-        ORIGINAL: set(translator.symbols_that_must_not_be_zero(system)),
-        REDUCED: set(translator.reduced_symbols_that_must_not_be_zero(system)),
+        ORIGINAL: set(translator.forward_symbols_that_must_not_be_zero()),
+        REDUCED: set(translator.reverse_symbols_that_must_not_be_zero()),
     }
 
     graph = networkx.DiGraph()
