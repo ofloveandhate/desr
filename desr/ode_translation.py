@@ -72,9 +72,18 @@ PARAMETER_SCHEME_NAMES = {'parameters': 'kappa', 'independent': 'tau', 'dependen
 #: Defaults for the general and dependent-variable schemes: Hubert & Labahn's notation, where
 #: the auxiliaries are :math:`x` and the invariants :math:`y`, so that output can be compared
 #: with the paper directly.  `independent` is :const:`None`, meaning the independent variable
-#: keeps the name it already has.
+#: keeps the name it already has -- which these schemes do whenever the reduced clock still
+#: denotes the original one.  Where it does not, the name comes from
+#: :data:`RESCALED_CLOCK_NAME` instead; see :meth:`ODETranslator._clock_name_for`.
 GENERAL_SCHEME_NAMES = {'parameters': 'kappa', 'independent': None, 'dependents': 'y',
                         'auxiliaries': 'x'}
+
+#: What a reduction calls its clock when that clock is a rescaled time rather than the
+#: system's own.  It is the parameter scheme's name for the same thing, which is why
+#: :data:`PARAMETER_SCHEME_NAMES` spells it out rather than reading it from here: that
+#: scheme always rescales, and a constant shared between the two would make the general
+#: scheme's conditional name look like the unconditional one.
+RESCALED_CLOCK_NAME = 'tau'
 
 
 def _normalise_naming_scheme(naming_scheme):
@@ -267,10 +276,11 @@ def _rename_indep_var(system, new_name):
     '''
     Rename a reduced system's independent variable, or leave it alone if `new_name` is None.
 
-    The general and dependent-variable schemes keep the original clock, so their default is
-    to leave the name as it is.  A caller who sets `independent` is asking for it to be
-    renamed, and gets that -- it is only a relabelling, since under those schemes the clock
-    is the system's own independent variable either way.
+    The name is chosen by :meth:`ODETranslator._clock_name_for`, which gives :const:`None`
+    -- keep the clock as it is -- for every reduction whose clock still denotes the
+    system's own independent variable, and :data:`RESCALED_CLOCK_NAME` for one that has
+    identified an invariant with it and so integrates against a rescaled time.  A caller
+    who sets `independent` overrides both.
 
     Args:
         system (ODESystem): The reduced system.
@@ -368,8 +378,10 @@ class ODETranslator(object):
             optional; one left out takes the default for whichever reduction scheme runs.
 
             - `'independent'`: the new name of the independent (time) variable.  The general
-              and dependent-variable schemes keep the system's own clock, so their default is
-              to leave the name alone; setting this renames it.
+              and dependent-variable schemes keep the system's own clock wherever the reduced
+              clock still denotes it, so their default is to leave the name alone; where an
+              invariant has been identified with it they name it :data:`RESCALED_CLOCK_NAME`,
+              as the parameter scheme always does.  Setting this overrides both.
             - `'dependents'`: either a pattern, to which indices are appended, or an explicit
               list of names.  A list must have exactly as many entries as the reduction
               produces, which is the number of dependent variables under the parameter
@@ -477,6 +489,55 @@ class ODETranslator(object):
         resolved = dict(defaults)
         resolved.update(self._naming_scheme)
         return resolved
+
+    def _clock_name_for(self, identified):
+        '''
+        What a reduction calls its independent variable, given the columns it identified
+        with the clock.
+
+        The reduced system keeps the name `t` only where the reduced clock still denotes
+        `t`.  That holds whenever no invariant has been identified with it: the reduced
+        system then carries the original independent variable as a variable of its own,
+        and a clock invariant such as :math:`k_{23} t` stands beside it under its own
+        name.  It is the identification that makes the two one quantity, and from that
+        point `t` is a spelling for :math:`k_{23} t` -- a rescaled time, which takes
+        :data:`RESCALED_CLOCK_NAME`.
+
+        The dependent-variable scheme never identifies anything, so it always keeps the
+        clock; the general scheme keeps it whenever nothing was folded in, which includes
+        every reduction that normalises nothing, every one run with
+        ``identify_indep_var=False``, and systems such as Hubert & Labahn 6.6 whose clock
+        invariants all involve a dependent variable.  The parameter scheme does not come
+        through here: it rescales unconditionally and says so in
+        :data:`PARAMETER_SCHEME_NAMES`.
+
+        A caller who set `independent` gets what they set, including an explicit
+        :const:`None` to keep the system's own clock whatever it comes to denote.
+
+        Args:
+            identified (iter): The invariant columns identified with the independent
+                variable, as :meth:`_dropped_columns` reports them.
+
+        Returns:
+            The name to give the reduced clock, or :const:`None` to leave it alone.
+        '''
+        if 'independent' in self._naming_scheme:
+            return self._naming_scheme['independent']
+        return RESCALED_CLOCK_NAME if identified else None
+
+    def _reduced_clock(self, system, identified):
+        '''
+        The symbol the reduced system's independent variable has, as
+        :meth:`_clock_name_for` decides it.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            identified (iter): As for :meth:`_clock_name_for`.
+
+        :rtype: sympy.Symbol
+        '''
+        name = self._clock_name_for(identified)
+        return system.independent_variable if name is None else to_symbol(name)
 
     def __repr__(self):
         return 'A=\n{}\nV=\n{}\nW=\n{}'.format(self.scaling_matrix.__repr__(),
@@ -2244,7 +2305,10 @@ class ODETranslator(object):
                                 identify_indep_var=identify_indep_var),
                             original_system=system.copy(),
                             forward_monomials=aux_monomials + inv_monomials)
-        reduced = _rename_indep_var(reduced, scheme['independent'])
+        # This scheme identifies nothing with the clock -- its multiplier is written in the
+        # symbols other than the independent variable, so none of its invariants can turn
+        # out to be one -- and so it keeps the system's own clock unless told otherwise.
+        reduced = _rename_indep_var(reduced, self._clock_name_for(()))
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
                                               ReductionScheme.DEP_VAR))
@@ -2276,6 +2340,13 @@ class ODETranslator(object):
         the system already has.  The two names become one, which is what removes the
         general scheme's :math:`+1`.
 
+        The surviving name is :data:`RESCALED_CLOCK_NAME`, not the system's own.  What the
+        reduced system integrates against is now :math:`k_{23} t`, and calling that
+        :math:`t` would make the clock the one symbol this reduction reports wrongly.  A
+        reduction that identifies nothing -- normalising nothing, told not to identify, or
+        a system such as Hubert & Labahn 6.6 whose clock invariants all involve a dependent
+        variable -- keeps :math:`t`, because there :math:`t` still means :math:`t`.
+
         Args:
             system (ODESystem): System to reduce.
             include_aux_vars (bool): Whether to keep the auxiliary variables.  With
@@ -2293,13 +2364,14 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
 
         All three auxiliaries are monomials in the original parameters, so all three are
-        normalised, and the clock invariant is then identified with `t`.  What is left is
-        autonomous, and its equations use every parameter it reports:
+        normalised, and the clock invariant `k*t/h` is then identified with the clock.
+        What is left is autonomous, its equations use every parameter it reports, and it
+        is integrated against `tau`, which is what `k*t/h` is now called:
 
         >>> translator.translate_general(system=system)
-        dt/dt = 1
-        dy4/dt = -y1*y4**2 + y1*y4 - y4*y5/(y0 + y4)
-        dy5/dt = y2*y5 - y2*y5**2/y4
+        dtau/dtau = 1
+        dy4/dtau = -y1*y4**2 + y1*y4 - y4*y5/(y0 + y4)
+        dy5/dtau = y2*y5 - y2*y5**2/y4
         parameters: y0, y1, y2
 
         The units that were chosen are recorded, in the caller's own symbols:
@@ -2308,7 +2380,8 @@ class ODETranslator(object):
         {K: 1, h: 1, k: 1}
 
         That is the parameter scheme's reduction wearing the general scheme's names, which
-        is what it means for a system to be parameter-compatible:
+        is what it means for a system to be parameter-compatible.  The clock is the one
+        name the two schemes share, because the two reductions rescale time the same way:
 
         >>> translator.translate_parameter(system=system)
         dtau/dtau = 1
@@ -2460,7 +2533,7 @@ class ODETranslator(object):
                                 normalise_parameters, identify_indep_var),
                             original_system=system.copy(),
                             forward_monomials=aux_monomials + inv_monomials)
-        reduced = _rename_indep_var(reduced, scheme['independent'])
+        reduced = _rename_indep_var(reduced, self._clock_name_for(identified_columns))
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
                                               ReductionScheme.GENERAL,
@@ -3171,9 +3244,13 @@ class ODETranslator(object):
         wrote out is their decision, and reusing the original letters is a real thing to
         want: Hubert & Labahn write their reduced predator-prey system in the same `n` and
         `p`, and ``naming_scheme={'dependents': ['n', 'p']}`` is how to reproduce that.  So
-        an explicit entry of the naming scheme is exempt, as is the independent variable,
-        whose entry is always a literal name rather than a pattern -- which is also what
-        lets the general and dependent-variable schemes keep the system's own clock.
+        an explicit entry of the naming scheme is exempt.
+
+        The independent variable is exempt too, and the test for it is the thing this
+        whole check is about: the clock is skipped only when the reduced system's clock
+        *is* the original one, which is what :meth:`_clock_name_for` arranges by leaving
+        the name alone exactly then.  A reduction whose clock denotes something else has
+        renamed it by that point, so there is no shared spelling here to forgive.
 
         Raises:
             ValueError: naming the clashing symbols and the way out.
@@ -3781,7 +3858,7 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.symbol_kinds(scheme='general')
-        {t: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
+        {tau: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
         >>> translator.translate_general(
         ...     system, normalise_parameters=False).symbol_kinds
         {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
@@ -3800,7 +3877,9 @@ class ODETranslator(object):
         - ``'independent'`` -- the variable to integrate against.  There is always exactly
           one.  Under the parameter scheme it is the rescaled clock, :math:`\\tau`; under
           the general and dependent-variable schemes the reduction keeps the original
-          independent variable, so it is :math:`t` itself.
+          independent variable, so it is :math:`t` itself -- unless the general scheme
+          identified an invariant with it, when it is a rescaled clock too and is named
+          :math:`\\tau` for the same reason.
         - ``'dependent'``   -- a variable of the reduced system with an equation.
         - ``'parameter'``   -- an invariant that is a monomial in the original parameters
           alone, so it does not change.
@@ -3844,15 +3923,17 @@ class ODETranslator(object):
         {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
 
         By default all three are normalised, and `y3` -- the rescaled clock -- is
-        identified with `t`, so neither is a symbol of the reduced system any more:
+        identified with the clock, so neither `y3` nor `t` is a symbol of the reduced
+        system any more.  What it integrates against is `y3`'s quantity, under the name a
+        rescaled clock gets:
 
         >>> translator._symbol_kinds_for(system, scheme='general')
-        {t: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
+        {tau: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
 
         Which is what the reduced system turns out to have:
 
         >>> translator.translate_general(system).symbols
-        (t, y0, y1, y2, y4, y5)
+        (tau, y0, y1, y2, y4, y5)
 
         Hubert & Labahn 6.6 has no invariant that is a rescaled clock alone -- both involve
         a dependent variable -- but the reduction still integrates against `t`:
@@ -4167,7 +4248,9 @@ class ODETranslator(object):
         Returns:
             dict: Reduced variable to the monomial it denotes, in the reduced system's
                 variable order.  Under the general and dependent-variable schemes the
-                original independent variable is kept, and maps to itself.
+                original independent variable is kept, and maps to itself, unless an
+                invariant has been identified with it -- then the clock is
+                :data:`RESCALED_CLOCK_NAME` and maps to that invariant.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
@@ -4191,13 +4274,13 @@ class ODETranslator(object):
         ...                               identify_indep_var=False)
         {t: t, x0: h/k, x1: K, x2: K/h, y0: d/K, y1: h*r/k, y2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
 
-        By default `t` does **not** map to itself.  The clock invariant `k*t/h` has been
-        identified with it, so the reduced system's clock *is* that rescaled clock, exactly
-        as the parameter scheme's `tau` is -- and saying `t: t` here would make the one
-        symbol whose meaning changed the one this map got wrong:
+        By default there is no `t` at all.  The clock invariant `k*t/h` has been identified
+        with the clock, so the reduced system's clock *is* that rescaled clock, exactly as
+        the parameter scheme's `tau` is -- and it carries that name, since `t: k*t/h` would
+        make the one symbol whose meaning changed the one this map spells wrongly:
 
         >>> translator._named_symbols_for(system, scheme='general')
-        {t: k*t/h, y0: d/K, y1: h*r/k, y2: h*s/k, y4: n/K, y5: h*p/K}
+        {tau: k*t/h, y0: d/K, y1: h*r/k, y2: h*s/k, y4: n/K, y5: h*p/K}
         '''
         if scheme is None:
             scheme = self.scheme()
@@ -4250,7 +4333,8 @@ class ODETranslator(object):
             else:
                 indep_monomial = system.independent_variable
 
-            names = ([system.independent_variable] + auxiliary_names + invariant_names)
+            names = ([self._reduced_clock(system, identified)]
+                     + auxiliary_names + invariant_names)
             monomials = ([indep_monomial] + auxiliary_monomials + invariant_monomials)
 
         if len(names) != len(monomials):

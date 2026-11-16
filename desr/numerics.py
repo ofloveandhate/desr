@@ -336,9 +336,9 @@ class NumericTranslator(object):
         ordered = list(found) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var and values.get(self.reduced.independent_variable) is not None:
-            # Under these schemes the reduced system keeps the original independent
-            # variable, so take it as given rather than reconstructing it -- the monomial
-            # would agree, but only to the accuracy of everything that went into it.
+            # `_shares_indep_var` says the reduced clock denotes the original one, so take
+            # it as given rather than reconstructing it -- the monomial would agree, but
+            # only to the accuracy of everything that went into it.
             result[self.system.independent_variable] = values[self.reduced.independent_variable]
 
         if not result:

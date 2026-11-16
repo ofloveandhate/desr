@@ -448,8 +448,13 @@ def step_labels(normalised, identified):
     # on and explain that the system it produces has none.
     units = 'normalise' if normalised else 'nothing to normalise'
     if identified:
+        # The images, deduplicated: the step merges every symbol it touches into the one
+        # clock, so naming that clock once is what the step does.  Several symbols reach
+        # it whenever the reduced clock is renamed -- the system's own `t` goes there
+        # alongside the invariant that is now the same quantity -- and listing one name
+        # per source would print it twice.
         clock = 'identify ' + ', '.join(
-            sorted('$' + expr_to_tex(image) + '$' for image in identified.values()))
+            sorted({'$' + expr_to_tex(image) + '$' for image in identified.values()}))
     else:
         clock = 'no clock to identify'
     return ('forward', units, clock, 'reverse')

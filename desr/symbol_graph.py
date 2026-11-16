@@ -45,8 +45,9 @@ from desr.tex_tools import display_tex, expr_to_tex
 
 #: The two vertex layers.  A node is a ``(layer, symbol)`` pair, because the two layers can
 #: contain the *same* sympy symbol -- a naming scheme may reuse the original letters, and
-#: the general and dependent-variable schemes keep the system's own clock -- and bare
-#: symbols as nodes would silently merge those vertices.
+#: the general and dependent-variable schemes keep the system's own clock wherever the
+#: reduced clock still denotes it -- and bare symbols as nodes would silently merge those
+#: vertices.
 ORIGINAL = 'original'
 REDUCED = 'reduced'
 

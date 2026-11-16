@@ -487,7 +487,15 @@ class TestInvariantClassification(TestCase):
                     clocks = [name for name, kind in kinds.items() if kind == 'independent']
                     self.assertEqual(1, len(clocks))
                     if scheme == 'general':
-                        self.assertEqual(system.indep_var, clocks[0])
+                        # Whichever symbol the reduced system integrates against: the
+                        # system's own `t` where the clock comes through the reduction
+                        # meaning `t`, and `tau` where an invariant was identified with
+                        # it and it means that invariant instead.  Checked against the
+                        # reduction rather than spelled out, so that the report and the
+                        # reduction cannot drift apart.
+                        self.assertEqual(
+                            translator.translate_general(system).independent_variable,
+                            clocks[0])
 
     def test_a_rescaled_clock_is_a_dependent_until_it_is_identified(self):
         '''
@@ -627,8 +635,12 @@ class TestInvariantClassification(TestCase):
         general = translator.named_symbols(scheme='general')
         self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
                          tuple(str(n) for n in inferred))
-        self.assertEqual(('t', 'y0', 'y1', 'y2', 'y4', 'y5'),
+        # `tau` under both schemes, and the same monomial under both: the general scheme
+        # identifies the clock invariant `k*t/h` with its clock, which is the quantity the
+        # parameter scheme's `tau` already was.
+        self.assertEqual(('tau', 'y0', 'y1', 'y2', 'y4', 'y5'),
                          tuple(str(n) for n in general))
+        self.assertEqual(inferred[sympy.Symbol('tau')], general[sympy.Symbol('tau')])
         faithful = translator.translate_general(
             self.prey_predator, normalise_parameters=False,
             identify_indep_var=False).named_symbols
@@ -2133,3 +2145,111 @@ class TestNamingTheColumnsWhenTheClockIsKept(TestCase):
                          substitutions[system.independent_variable])
         self.assertEqual(system.independent_variable,
                          translator.translate(system).independent_variable)
+
+
+class TestWhatTheReducedClockDenotes(TestCase):
+    '''
+    A reduced system keeps the name `t` exactly when its clock still denotes `t`.
+
+    Under the dependent-variable scheme the scaling leaves the independent variable
+    alone, so `t` is invariant as it stands and the reduced clock is the original one,
+    always.  Under the general scheme an invariant that becomes `t` once the
+    normalisation is applied is identified with the clock; from that point the reduced
+    clock denotes that invariant -- `k_2_3*t` for the enzyme chain -- and it is called
+    `tau`, as the parameter scheme's rescaled clock already is.
+
+    Not every general reduction identifies one, so this is not a rule about schemes.
+    Hubert & Labahn 6.6 identifies nothing, because both its clock invariants involve a
+    dependent variable, and it keeps `t`.
+
+    Pinned here because the two systems are separate namespaces and :mod:`desr.numerics`
+    maps between them by name, so a spelling that means two quantities is a wrong number
+    and not only a misleading figure.
+    '''
+
+    #: Hubert & Labahn 6.4: the scaling fixes the clock.
+    DEP_VAR = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    #: The same shape of system carrying parameters, still with the clock fixed.
+    DEP_VAR_WITH_PARAMETERS = ['dz1/dt = a*z1*(1+z1*z2)',
+                               'dz2/dt = b*z2*(1/t - z1*z2)']
+
+    @staticmethod
+    def denotation(reduced):
+        ''' What the reduced system says its own clock stands for. '''
+        return reduced.named_symbols[reduced.independent_variable]
+
+    def test_the_dependent_variable_clock_denotes_t_whatever_else_normalises(self):
+        for label, equations in (('HL 6.4', self.DEP_VAR),
+                                 ('with parameters', self.DEP_VAR_WITH_PARAMETERS)):
+            system = ODESystem.from_equations(equations)
+            translator = ODETranslator.from_ode_system(system)
+            self.assertEqual(ReductionScheme.DEP_VAR, translator.scheme())
+            for normalise in (False, True):
+                with self.subTest(system=label, normalise_parameters=normalise):
+                    reduced = translator.translate_dep_var(
+                        normalise_parameters=normalise)
+                    self.assertEqual(system.independent_variable,
+                                     reduced.independent_variable)
+                    self.assertEqual(system.independent_variable,
+                                     self.denotation(reduced))
+
+    def test_the_general_clock_denotes_whatever_was_identified_with_it(self):
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(ReductionScheme.GENERAL, translator.scheme())
+
+        t = system.independent_variable
+        k_2_3 = sympy.Symbol('k_2_3')
+
+        # Nothing is normalised, so no invariant becomes the clock: the reduced system
+        # carries the original t, and k_2_3*t stands beside it as an invariant of its own.
+        untouched = translator.translate_general(normalise_parameters=False)
+        self.assertEqual({}, dict(untouched.normalisations))
+        self.assertEqual(t, self.denotation(untouched))
+        self.assertIn(k_2_3 * t, set(untouched.named_symbols.values()))
+
+        # Normalising k_2_3 to 1 turns that invariant into t, which the reduced system
+        # already has, so the two are identified and the clock means k_2_3*t.
+        normalised = translator.translate_general(normalise_parameters=True)
+        self.assertEqual(sympy.Integer(1), normalised.normalisations[k_2_3])
+        self.assertEqual(k_2_3 * t, self.denotation(normalised))
+
+        # Two quantities, two spellings.  The clock that denotes `t` keeps the name, and
+        # the one that does not is named for what it is -- a rescaled time.
+        self.assertEqual(t, untouched.independent_variable)
+        self.assertEqual(sympy.Symbol('tau'), normalised.independent_variable)
+        self.assertNotIn(t, normalised.symbols)
+
+    def test_a_general_reduction_that_identifies_nothing_keeps_the_clock(self):
+        # The case that makes this a rule about what the clock denotes rather than a rule
+        # about schemes.  HL 6.6 is reduced by the general scheme and normalises its one
+        # auxiliary, but neither invariant becomes `t` -- both involve a dependent
+        # variable -- so nothing is identified with the clock and the clock is still `t`.
+        system = ODESystem.from_equations(
+            ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+             'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(ReductionScheme.GENERAL, translator.scheme())
+        self.assertEqual((), translator.indep_var_invariants())
+
+        reduced = translator.translate(system)
+        self.assertEqual(system.independent_variable, reduced.independent_variable)
+        self.assertEqual(system.independent_variable, self.denotation(reduced))
+
+    def test_an_explicit_name_is_honoured_either_way(self):
+        # The naming scheme still wins, in both directions: a caller may name the clock
+        # whatever they like, and an explicit None asks for the system's own clock to be
+        # kept whatever it comes to denote.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        for asked, expected in (({'independent': 'T'}, 'T'),
+                                ({'independent': None}, 't')):
+            with self.subTest(naming_scheme=asked):
+                translator = ODETranslator.from_ode_system(system, naming_scheme=asked)
+                reduced = translator.translate(system)
+                self.assertEqual(sympy.Symbol(expected),
+                                 reduced.independent_variable)
+                self.assertEqual(sympy.Symbol('k_2_3') * system.independent_variable,
+                                 self.denotation(reduced))

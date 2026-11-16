@@ -250,10 +250,12 @@ class TestWhatTheNodesCarry(TestCase):
 
         # And the reduced system agrees that there is one clock.  It agrees more strongly
         # than it used to: `y0` is not a second dependent any more, because the reduction
-        # identifies it *with* `t` -- so the reduced system's own clock is what `y0`
-        # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.
+        # identifies it *with* the clock -- so the reduced system's own clock is what `y0`
+        # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.  Which
+        # is why it is called `tau` here too: `t` would be a name for `k_2_3*t`.
         reduced = translator.translate(system)
-        self.assertEqual(reduced.independent_variable, sympy.Symbol('t'))
+        self.assertEqual(reduced.independent_variable, sympy.Symbol('tau'))
+        self.assertNotIn(system.independent_variable, reduced.symbols)
         self.assertNotIn(sympy.Symbol('y0'), reduced.symbols)
         self.assertEqual(sympy.sympify('k_2_3*t'),
                          reduced.named_symbols[reduced.independent_variable])
