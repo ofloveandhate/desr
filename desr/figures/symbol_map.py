@@ -137,7 +137,7 @@ def normalise_pairs(translator, system, reduced, normalised):
 
     An auxiliary built from the original parameters alone cannot vary, so it can be set
     to 1 once and for all.  That is a choice of units, not an assumption, which is why
-    the arrow is a |-> and never an =.
+    the arrow is a ``|->`` and never an ``=``.
     """
     import sympy
 
@@ -593,7 +593,7 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     # The forward graph spans the first seam and the reverse graph the last.  The table
     # spans both middle seams, because choosing the units is what makes the clock
     # identifiable: the two steps are one table read downwards, not two panels.
-    panels = [('forward', 0, 1), ('dimensions, units, and normalization', 1, 3),
+    panels = [('forward', 0, 1), ('dimensions, units, and normalisation', 1, 3),
               ('reverse', 3, 4)]
     for name, start, end in panels:
         centre = (box_centre[start] + box_centre[end]) / 2

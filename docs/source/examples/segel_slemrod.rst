@@ -54,7 +54,7 @@ the Michaelis constant
 
     >>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalize by them.
+Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
@@ -126,7 +126,7 @@ The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), an
 
     >>> system.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalize by them.
+Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
 

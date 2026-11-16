@@ -67,7 +67,7 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
     >>> system = ODESystem.from_equations(eqns)
     >>> system.reorder_variables(['t', 'z1', 'z2'])
 
-And nondimensionalize.
+And nondimensionalise.
 
     >>> translator = ODETranslator.from_ode_system(system)
     >>> translator.invariant_monomials()
@@ -283,7 +283,7 @@ Plotting the numerical results:
 
 .. plot:: examples/scripts/quadrature_recovery.py
 
-The left depicts the numerical solution of the nondimensionalized system, sans auxiliary variables.  
+The left depicts the numerical solution of the nondimensionalised system, sans auxiliary variables.  
 The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what
 :meth:`~desr.numerics.NumericTranslator.recover_auxiliaries` produces by integrating their
 equations along the invariants.  The circles are this example's exact values.  

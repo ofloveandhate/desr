@@ -165,7 +165,7 @@ Optionally, see the invariants and substitutions
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, c_0/s_0, e_0*k_1*t, s/s_0, c/e_0]])
 
-We have substitutions to make.  Note that many get normalized to :math:`1`.
+We have substitutions to make.  Note that many get normalised to :math:`1`.
 
     >>> translator.translate_parameter_substitutions(system)
     {s_0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, K_m: kappa3, c_0: kappa4, t: tau/kappa0, s: u, c: kappa0*v}

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`desr` (Differential Equation Symmetry Reduction) is a Python library for reducing the number of parameters in dynamical systems by finding scaling symmetries. It implements algorithms from Hubert & Labahn (2013). The primary use case is nondimensionalization of ODE systems.
+`desr` (Differential Equation Symmetry Reduction) is a Python library for reducing the number of parameters in dynamical systems by finding scaling symmetries. It implements algorithms from Hubert & Labahn (2013). The primary use case is nondimensionalisation of ODE systems.
 
 ## Commands
 
@@ -61,7 +61,7 @@ Represents a system of ODEs as parallel tuples of `variables` and `derivatives`.
 - `ODESystem.from_dict(deriv_dict)` — construct from `{symbol: derivative_expr}` dict
 - `exponent_matrix()` — build the exponent (power) matrix used by the scaling algorithm
 - `maximal_scaling_matrix()` — compute the scaling matrix `A` from the system
-- `reorder_variables(order)` — variable order affects which parameters get normalized out
+- `reorder_variables(order)` — variable order affects which parameters get normalised out
 - `update_initial_conditions(...)`, `add_constraint(lhs, rhs)` — enrich the system before reduction
 
 **`desr/ode_translation.py` — `ODETranslator`**
@@ -69,7 +69,7 @@ The reduction engine. Holds a `scaling_matrix` (rows = scaling dimensions, colum
 - `ODETranslator.from_ode_system(system)` — auto-construct from a system
 - `translate(system)` — produce the reduced `ODESystem`
 - `invariants()` — the scaling-invariant monomials (the new variables)
-- `auxiliaries()` — the auxiliary variables that get normalized to 1
+- `auxiliaries()` — the auxiliary variables that get normalised to 1
 - `multiplier_add_columns(i, j, alpha)` — manually adjust which invariants are chosen
 - `translate_parameter_substitutions(system)` — get substitution rules for original parameters
 
@@ -87,7 +87,7 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
 
 ### Key design notes
 
-- Variables are ordered; the order matters because the last variables tend to be "normalized out" (set to 1) during reduction. Use `reorder_variables()` to control this.
+- Variables are ordered; the order matters because the last variables tend to be "normalised out" (set to 1) during reduction. Use `reorder_variables()` to control this.
 - **Parameters versus dependent variables.** A variable with no equation is a *parameter*
   (`system.parameters`); it is stored as `None` in `system.derivatives`. A variable with an
   equation is a *dependent variable* (`system.dependent_variables`), and that includes a
