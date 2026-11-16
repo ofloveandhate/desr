@@ -761,9 +761,9 @@ def flowchart_panels(system, font):
     new = [_tex(name) for name in names]
     r = translator.r
 
-    steps = system.scaling_derivation()
-    K, H, U = steps['exponent_matrix'], steps['hermite_form'], steps['multiplier']
-    picked, A = steps['selected'], steps['scaling_matrix']
+    K = system.exponent_matrix()
+    H, U = system.exponent_matrix_hnf()
+    picked, A = system.scaling_symmetry_rows(), system.maximal_scaling_matrix()
     zero_rows = range(H.shape[0] - picked.shape[0], H.shape[0])
     V, W = translator.herm_mult, translator.inv_herm_mult
 

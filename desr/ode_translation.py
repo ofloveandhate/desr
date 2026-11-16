@@ -524,6 +524,22 @@ class ODETranslator(object):
         return self._scaling_matrix.shape[0]
 
     @property
+    def num_scaling_symmetries(self):
+        '''
+        :attr:`r`, spelled for reading rather than for writing on a blackboard.
+
+        The papers call it :math:`r` and so does :attr:`r`; this is the same number
+        under a name that says what it counts.
+
+        Returns:
+            int: the number of scaling symmetries, which is the number of rows of
+            :attr:`scaling_matrix` and the number of auxiliaries the reduction coins.
+            It is what :attr:`~desr.ode_system.ODESystem.num_scaling_symmetries`
+            reports of a system this translator has reduced.
+        '''
+        return self.r
+
+    @property
     def n(self):
         '''
         Returns:
@@ -3368,9 +3384,12 @@ class ODETranslator(object):
         '''
         return _parameter_columns(self.herm_mult_i, self._dynamic_rows(system))
 
-    def reduced_values(self, system=None, values=None):
+    def propagated_parameter_values(self, system=None):
         '''
-        The values the original symbols' known values force on the reduced ones.
+        The values the system's known parameter values force on the reduced symbols.
+
+        Parameter values are the only values a system carries as numbers, so they are
+        the only thing there is to propagate, and the name says so.
 
         One substitution is enough, and is **complete** rather than best-effort: no
         reduced symbol is a monomial in the other reduced symbols, because the columns
@@ -3386,8 +3405,6 @@ class ODETranslator(object):
 
         Args:
             system (ODESystem, optional): The system being reduced.
-            values (dict, optional): ``{original symbol: value}``.  Defaults to the
-                system's own :attr:`~desr.ode_system.ODESystem.parameter_values`.
 
         Returns:
             dict: ``{reduced symbol: value}``, holding only those it settles.
@@ -3397,19 +3414,18 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> system.update_parameter_values({'k_2': 0})
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.reduced_values(system)
+        >>> translator.propagated_parameter_values(system)
         {kappa0: 0}
 
         Nothing known forces nothing:
 
         >>> plain = ODESystem.from_equations(equations)
-        >>> ODETranslator.from_ode_system(plain).reduced_values(plain)
+        >>> ODETranslator.from_ode_system(plain).propagated_parameter_values(plain)
         {}
         '''
         if system is None:
             system = self.system
-        if values is None:
-            values = dict(system.parameter_values)
+        values = dict(system.parameter_values)
         if not values:
             return {}
 

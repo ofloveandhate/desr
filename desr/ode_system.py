@@ -2386,58 +2386,67 @@ class ODESystem(object):
                 for symbol, derivative in self.derivative_dict.items()
                 if derivative is not None and symbol != self.independent_variable}
 
-    def scaling_derivation(self):
+    def exponent_matrix_hnf(self):
         '''
-        The matrices :meth:`maximal_scaling_matrix` passes through on its way to
-        :math:`A`.
+        The row Hermite normal form of :meth:`exponent_matrix`, and its multiplier.
 
-        The scaling matrix is the left null space of :meth:`exponent_matrix`, found by
-        row Hermite normal form: :math:`U K = H`, the zero rows at the bottom of
-        :math:`H` say which combinations of :math:`K`'s rows vanish, and those
-        combinations are the matching rows of :math:`U`.  Those rows are then put in
-        row Hermite normal form themselves, so that the answer does not depend on how
-        the elimination ran, and that is :math:`A`.
+        :math:`U K = H`.  The zero rows at the bottom of :math:`H` say which
+        combinations of :math:`K`'s rows vanish, and :meth:`scaling_symmetry_rows` is
+        the matching rows of :math:`U` -- the combinations themselves.
 
         Returns:
-            dict: with keys ``exponent_matrix``, ``hermite_form``, ``multiplier``,
-            ``selected`` and ``scaling_matrix``.
+            tuple: ``(hermite_form, multiplier)``, as :func:`hnf_row` gives them.
 
         >>> system = ODESystem.from_equations(
         ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        >>> steps = system.scaling_derivation()
-        >>> steps['selected']
+        >>> hermite_form, multiplier = system.exponent_matrix_hnf()
+        >>> multiplier * system.exponent_matrix() == hermite_form
+        True
+
+        Its last two rows are zero, which is how many scalings the system has:
+
+        >>> hermite_form[-2:, :].is_zero_matrix
+        True
+        '''
+        return hnf_row(self.exponent_matrix())
+
+    def scaling_symmetry_rows(self):
+        '''
+        The rows of :meth:`exponent_matrix_hnf`'s multiplier that annihilate the exponent
+        matrix: a basis of the scalings, before it is made canonical.
+
+        :meth:`maximal_scaling_matrix` is these rows put in row Hermite normal form,
+        so that the answer does not depend on how the elimination ran.  They are not
+        the same numbers, and the step between them is a real one.
+
+        Returns:
+            sympy.Matrix: one row per scaling action.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> system.scaling_symmetry_rows()
         Matrix([
         [1, 0, 1, 1, -1, 1, 1],
         [0, 1, 1, 1, -1, 0, 0]])
 
-        The selected rows are not the answer; they are put in row Hermite normal form
-        first, and the numbers change:
+        Canonicalising them changes the numbers, and gives the scaling matrix:
 
-        >>> steps['scaling_matrix']
+        >>> system.maximal_scaling_matrix()
         Matrix([
         [0, -1, -1, -1, 1, 0, 0],
         [1, -1,  0,  0, 0, 1, 1]])
-        >>> steps['scaling_matrix'] == system.maximal_scaling_matrix()
-        True
 
         Both annihilate the exponent matrix, which is what makes them scalings:
 
-        >>> (steps['selected'] * steps['exponent_matrix']).is_zero_matrix
+        >>> (system.scaling_symmetry_rows() * system.exponent_matrix()).is_zero_matrix
         True
         '''
-        exponent_matrix = self.exponent_matrix()
-        hermite_form, multiplier = hnf_row(exponent_matrix)
-
+        hermite_form, multiplier = self.exponent_matrix_hnf()
         zero_rows = sum(1 for row in hermite_form.tolist()
                         if all(entry == 0 for entry in row))
-        selected = multiplier[multiplier.shape[0] - zero_rows:, :]
-
-        return {'exponent_matrix': exponent_matrix,
-                'hermite_form': hermite_form,
-                'multiplier': multiplier,
-                'selected': selected,
-                'scaling_matrix': self.maximal_scaling_matrix()}
+        return multiplier[multiplier.shape[0] - zero_rows:, :]
 
     def symbols_by_dimension(self, scaling_matrix=None):
         '''

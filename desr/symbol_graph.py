@@ -266,7 +266,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     recoveries = list(translator.reverse_translate_parameter(names))
 
     original_values = dict(system.parameter_values)
-    reduced_values = translator.reduced_values(system)
+    reduced_values = translator.propagated_parameter_values(system)
 
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is
