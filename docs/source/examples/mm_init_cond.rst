@@ -111,7 +111,7 @@ These don't match those from Murray, but they are very close.   We'll recover it
 The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
 among them.
 
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, k_1)
 
 Just for curiosity, here's what we get if we translate the system at this point:
@@ -217,9 +217,9 @@ The symbols the reduction *does* divide by are those with an edge into an auxili
 is set to 1, or a negative edge into an invariant.  Coming back is a different question
 over the other set of symbols, and gets a different answer:
 
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, e_0, k_1)
-    >>> translator.reduced_symbols_that_must_not_be_zero()
+    >>> translator.reverse_symbols_that_must_not_be_zero()
     (x0, x1, kappa0)
 
 The zero returns the way it came.  Every node says what it equals in terms of the other

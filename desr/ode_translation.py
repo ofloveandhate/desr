@@ -3025,10 +3025,14 @@ class ODETranslator(object):
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
         return variables
 
-    def symbols_that_must_not_be_zero(self):
+    def forward_symbols_that_must_not_be_zero(self):
         '''
         The original symbols that this reduction divides by, and so which must not be zero
         for it to mean anything.
+
+        The companion of :meth:`reverse_symbols_that_must_not_be_zero`, named for the
+        direction it is about: going forward, from the caller's own symbols into the
+        reduction's.
 
         A report, not a request: it is read off the multiplier as it currently stands, so a
         :meth:`multiplier_add_columns` changes the answer.  The
@@ -3074,7 +3078,7 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.auxiliary_monomials()
         Matrix([[1/(e_0*k_1), e_0]])
-        >>> translator.symbols_that_must_not_be_zero()
+        >>> translator.forward_symbols_that_must_not_be_zero()
         (e_0, k_1)
 
         Move them towards the back and the reduction scales by something else.  ``e_0``
@@ -3087,7 +3091,7 @@ class ODETranslator(object):
         >>> moved = ODETranslator.from_ode_system(system)
         >>> moved.auxiliary_monomials()
         Matrix([[1/k_2, k_2/k_1]])
-        >>> moved.symbols_that_must_not_be_zero()
+        >>> moved.forward_symbols_that_must_not_be_zero()
         (k_2, k_1)
         >>> moved.invariant_monomials()
         Matrix([[k_m1/k_2, e_0*k_1/k_2, k_2*t, c*k_1/k_2, k_1*s/k_2]])
@@ -3104,18 +3108,27 @@ class ODETranslator(object):
                 must_not_be_zero.append(symbol)
         return tuple(must_not_be_zero)
 
-    def reduced_symbols_that_must_not_be_zero(self, scheme=None):
+    def reverse_symbols_that_must_not_be_zero(self, scheme=None):
         '''
-        The *reduced* symbols that recovering the original ones divides by, and so which
-        must not be zero for the reverse translation to mean anything.
+        The symbols that recovering the original ones divides by, and so which must not
+        be zero for the reverse translation to mean anything.
 
-        The companion of :meth:`symbols_that_must_not_be_zero`, over the other set of
-        symbols.  The two directions are the ones :mod:`desr.numerics` calls ``forward``
-        and ``reverse``, and each has exactly one symbol set it can divide by -- going
-        forward, a reduced symbol is a monomial in the originals, so only an original can
-        sit in a denominator; coming back, an original is a monomial in the reduced ones,
-        read off a **row** of :math:`V^{-1}`, so only a reduced symbol can.  That is why
-        the two methods need no `direction` argument: naming the set names the direction.
+        The companion of :meth:`forward_symbols_that_must_not_be_zero`, named for the
+        direction it is about rather than for the symbols it returns.  The directions are
+        the ones :mod:`desr.numerics` calls ``forward`` and ``reverse``, and each has
+        exactly one symbol set it can divide by -- going forward, a reduced symbol is a
+        monomial in the originals, so only an original can sit in a denominator; coming
+        back, an original is a monomial in the new ones, read off a **row** of
+        :math:`V^{-1}`, so only a new symbol can.  Naming the direction is what lets the
+        pair need no `direction` argument.
+
+        **Not the reduced system's symbols**, which is what this was called until the two
+        came apart.  The names here are :meth:`names_per_column`'s: every column of the
+        multiplier has one, including the columns a reduction spends -- a normalised
+        auxiliary, or an invariant identified with the clock.  Those are absent from the
+        reduced system and still belong here, because :mod:`desr.numerics` solves for
+        auxiliary values that need not be 1, and a zero one is fatal to the recovery
+        whether or not the reduced system carries the symbol.
 
         **Which axis.**  :math:`V` is indexed ``[original, reduced]`` and :math:`V^{-1}`
         the other way round, ``[reduced, original]``: inverting a matrix exchanges its row
@@ -3151,9 +3164,9 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.reverse_translate_parameter(translator.column_names())
         Matrix([[x1, 1/(x0*x1), kappa0/x0, kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
-        >>> translator.reduced_symbols_that_must_not_be_zero()
+        >>> translator.reverse_symbols_that_must_not_be_zero()
         (x0, x1)
-        >>> translator.symbols_that_must_not_be_zero()
+        >>> translator.forward_symbols_that_must_not_be_zero()
         (e_0, k_1)
 
         The two answers are over different symbol sets, and here the reverse one is both
@@ -3168,14 +3181,14 @@ class ODETranslator(object):
         ...                                   translator.column_of('k_m1/(e_0*k_1)'))
         >>> translator.reverse_translate_parameter(translator.column_names())
         Matrix([[x1, 1/(x0*x1), kappa0/(kappa1*x0), kappa1/x0, tau*x0, nu0*x1, nu1*x1]])
-        >>> translator.reduced_symbols_that_must_not_be_zero()
+        >>> translator.reverse_symbols_that_must_not_be_zero()
         (x0, x1, kappa1)
 
         ``k_m1`` is not something the forward reduction divides by, so a zero ``k_m1``
         reduces perfectly well -- it just makes :math:`\\kappa_1` zero, and then
         :math:`k_2` cannot be recovered:
 
-        >>> translator.symbols_that_must_not_be_zero()
+        >>> translator.forward_symbols_that_must_not_be_zero()
         (e_0, k_1)
         '''
         names = self.column_names(scheme=scheme)
@@ -3320,7 +3333,7 @@ class ODETranslator(object):
         if not values:
             return
 
-        zero_valued = [symbol for symbol in self.symbols_that_must_not_be_zero()
+        zero_valued = [symbol for symbol in self.forward_symbols_that_must_not_be_zero()
                        if symbol in values and values[symbol] == 0]
         if not zero_valued:
             return
@@ -3331,7 +3344,7 @@ class ODETranslator(object):
             'system would be undefined.  The variable order decides what gets scaled by, '
             'and the front of the order is that end: move {} towards the back with '
             'reorder_parameters, and {} will appear in numerators instead, where a value '
-            'of zero is harmless.  symbols_that_must_not_be_zero() reports the whole '
+            'of zero is harmless.  forward_symbols_that_must_not_be_zero() reports the whole '
             'set.'.format(named, 'is' if len(zero_valued) == 1 else 'are', named,
                           'it' if len(zero_valued) == 1 else 'they'))
 

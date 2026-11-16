@@ -1061,7 +1061,7 @@ class TestZeroInitialConditionsThroughAReduction(TestCase):
         # end, so a zero-valued initial condition is out of harm's way by default.
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        must_not_be_zero = translator.symbols_that_must_not_be_zero()
+        must_not_be_zero = translator.forward_symbols_that_must_not_be_zero()
         self.assertNotIn(sympy.Symbol('C_0'), must_not_be_zero)
         self.assertNotIn(sympy.Symbol('P_0'), must_not_be_zero)
 

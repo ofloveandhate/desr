@@ -11,7 +11,7 @@ the exponent with which its source appears in its target.  Reading it:
 
 - the **sign** of an edge is numerator versus denominator.  A negative edge into an
   invariant means that invariant divides by that symbol;
-- :meth:`~desr.ode_translation.ODETranslator.symbols_that_must_not_be_zero` is an edge
+- :meth:`~desr.ode_translation.ODETranslator.forward_symbols_that_must_not_be_zero` is an edge
   filter: a symbol qualifies when it has any edge into an auxiliary, which the reduction
   sets to 1, or a negative edge into an invariant.  A *positive* edge into an invariant and
   nothing into an auxiliary is the harmless case, where the invariant is simply zero, and is
@@ -217,7 +217,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     >>> sorted(str(symbol) for (layer, symbol), data in graph.nodes(data=True)
     ...        if layer == 'original' and data['must_not_be_zero'])
     ['e_0', 'k_1']
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (e_0, k_1)
 
     An edge is one exponent, and the invariant it points into is the monomial it belongs
@@ -288,13 +288,13 @@ def symbol_graph(translator, system, direction=FORWARD):
     # concentration in units of s_0", which is why `u = s/s_0` has no `s_0` left in it.
     sent_to_one = set(translator.normalisations())
 
-    # Note that this, `column_names` and `reduced_symbols_that_must_not_be_zero` are all
+    # Note that this, `column_names` and `reverse_symbols_that_must_not_be_zero` are all
     # asked afresh, and none of them is told a scheme.  See the class docstring's note on
     # why there is no `scheme` argument.
 
     divides_by = {
-        ORIGINAL: set(translator.symbols_that_must_not_be_zero()),
-        REDUCED: set(translator.reduced_symbols_that_must_not_be_zero()),
+        ORIGINAL: set(translator.forward_symbols_that_must_not_be_zero()),
+        REDUCED: set(translator.reverse_symbols_that_must_not_be_zero()),
     }
 
     graph = networkx.DiGraph()

@@ -4,7 +4,7 @@ The exponent graph.
 The graph is a reading of the Hermite multiplier, so most of these compare it against the
 multiplier and against the methods that answer the same questions in other words.  The
 pair that matter most are the two that would have caught the orientation bug in
-`reduced_symbols_that_must_not_be_zero`: the edges must agree with the matrix entry by
+`reverse_symbols_that_must_not_be_zero`: the edges must agree with the matrix entry by
 entry, and composing the two directions must give the identity.
 '''
 from unittest import TestCase
@@ -301,7 +301,7 @@ class TestWhatTheNodesCarry(TestCase):
         named = {symbol for (layer, symbol), data in self.graph.nodes(data=True)
                  if layer == ORIGINAL and data['must_not_be_zero']}
         self.assertEqual(named,
-                         set(self.translator.symbols_that_must_not_be_zero()))
+                         set(self.translator.forward_symbols_that_must_not_be_zero()))
 
     def test_nothing_on_the_reduced_layer_is_flagged_going_forward(self):
         # Going forward only an original symbol can sit in a denominator, so the reduced
@@ -316,7 +316,7 @@ class TestWhatTheNodesCarry(TestCase):
                  if layer == REDUCED and data['must_not_be_zero']}
         self.assertEqual(
             named,
-            set(self.translator.reduced_symbols_that_must_not_be_zero()))
+            set(self.translator.reverse_symbols_that_must_not_be_zero()))
 
     def test_a_zero_initial_condition_is_not_something_the_reduction_divides_by(self):
         # The three-case reading, on the graph: c_0 has one edge, it is positive, and it
@@ -817,10 +817,10 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
         self.assertEqual(kappa4['value'], 0)
 
     def test_the_two_answers_the_page_quotes(self):
-        self.assertEqual(self.translator.symbols_that_must_not_be_zero(),
+        self.assertEqual(self.translator.forward_symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('s_0 e_0 k_1')))
         self.assertEqual(
-            self.translator.reduced_symbols_that_must_not_be_zero(),
+            self.translator.reverse_symbols_that_must_not_be_zero(),
             tuple(sympy.symbols('x0 x1 kappa0')))
 
     def test_the_zero_returns_the_way_it_came(self):

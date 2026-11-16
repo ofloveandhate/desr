@@ -310,7 +310,7 @@ The reduction divides by these symbols, so none of them may be zero.  Neither :m
 nor :math:`P_0` is among them: each appears only in a numerator, so the invariant holding
 it is zero.
 
-    >>> translator.symbols_that_must_not_be_zero()
+    >>> translator.forward_symbols_that_must_not_be_zero()
     (S_0, k_1)
 
     >>> translator.invariant_monomials()

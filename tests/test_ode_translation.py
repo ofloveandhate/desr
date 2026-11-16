@@ -777,7 +777,7 @@ class TestSymbolsThatMustNotBeZero(TestCase):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
         # The auxiliaries are 1/(e_0*k_1) and e_0, so those two are what it divides by.
-        self.assertEqual(translator.symbols_that_must_not_be_zero(),
+        self.assertEqual(translator.forward_symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('e_0 k_1')))
 
     def test_a_symbol_only_ever_in_a_numerator_is_not_listed(self):
@@ -785,12 +785,12 @@ class TestSymbolsThatMustNotBeZero(TestCase):
         # value is zero.  That is how a zero initial condition survives a reduction.
         system = self.system(['k_2', 'k_m1', 'k_1', 'e_0'])
         translator = ODETranslator.from_ode_system(system)
-        self.assertNotIn(sympy.Symbol('e_0'), translator.symbols_that_must_not_be_zero())
+        self.assertNotIn(sympy.Symbol('e_0'), translator.forward_symbols_that_must_not_be_zero())
 
     def test_every_listed_symbol_is_in_an_auxiliary_or_a_denominator(self):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        listed = translator.symbols_that_must_not_be_zero()
+        listed = translator.forward_symbols_that_must_not_be_zero()
         for row, symbol in enumerate(system.symbols):
             in_auxiliary = any(e != 0 for e in translator.herm_mult_i[row, :])
             in_denominator = any(e < 0 for e in translator.herm_mult_n[row, :])
@@ -802,22 +802,22 @@ class TestSymbolsThatMustNotBeZero(TestCase):
         # sit at construction time: the choice is still being made.
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        before = translator.symbols_that_must_not_be_zero()
+        before = translator.forward_symbols_that_must_not_be_zero()
         # Column 2 is the first invariant column; an auxiliary column cannot be the source
         # of the operation, since adding it would change the Hermite form.
         translator.multiplier_add_columns(0, 2)
-        self.assertNotEqual(before, translator.symbols_that_must_not_be_zero())
+        self.assertNotEqual(before, translator.forward_symbols_that_must_not_be_zero())
 
     def test_the_system_may_be_passed_instead_of_relying_on_the_domain(self):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        self.assertEqual(translator.symbols_that_must_not_be_zero(),
-                         translator.symbols_that_must_not_be_zero())
+        self.assertEqual(translator.forward_symbols_that_must_not_be_zero(),
+                         translator.forward_symbols_that_must_not_be_zero())
 
     def test_the_order_is_the_systems_order(self):
         system = self.system()
         translator = ODETranslator.from_ode_system(system)
-        listed = translator.symbols_that_must_not_be_zero()
+        listed = translator.forward_symbols_that_must_not_be_zero()
         positions = [list(system.symbols).index(symbol) for symbol in listed]
         self.assertEqual(positions, sorted(positions))
 
@@ -856,7 +856,7 @@ class TestTranslatingWithAZeroValue(TestCase):
         system = self.system()
         system.update_parameter_values({'e_0': 0})
         translator = ODETranslator.from_ode_system(system)
-        self.assertIn(sympy.Symbol('e_0'), translator.symbols_that_must_not_be_zero())
+        self.assertIn(sympy.Symbol('e_0'), translator.forward_symbols_that_must_not_be_zero())
 
     def test_a_zero_value_on_a_symbol_it_does_not_divide_by_is_fine(self):
         system = self.system(['k_2', 'k_m1', 'k_1', 'e_0'])
@@ -904,11 +904,11 @@ class TestBothDirections(TestCase):
 
     def test_the_two_directions_give_different_answers(self):
         self.assertNotEqual(
-            set(self.translator.symbols_that_must_not_be_zero()),
-            set(self.translator.reduced_symbols_that_must_not_be_zero()))
+            set(self.translator.forward_symbols_that_must_not_be_zero()),
+            set(self.translator.reverse_symbols_that_must_not_be_zero()))
 
     def test_the_reverse_answer_is_over_the_reduced_symbols(self):
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
+        reverse = self.translator.reverse_symbols_that_must_not_be_zero()
         self.assertEqual(reverse, tuple(sympy.symbols('x0 x1')))
 
     def test_the_round_trip_recovers_every_original_symbol(self):
@@ -927,11 +927,11 @@ class TestBothDirections(TestCase):
             self.assertEqual(sympy.simplify(expression.subs(substitution) - original), 0)
 
     def test_the_forward_answer_is_over_the_original_symbols(self):
-        forward = self.translator.symbols_that_must_not_be_zero()
+        forward = self.translator.forward_symbols_that_must_not_be_zero()
         self.assertTrue(set(forward) <= set(self.system.symbols))
 
     def test_no_original_symbol_appears_in_the_reverse_answer(self):
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
+        reverse = self.translator.reverse_symbols_that_must_not_be_zero()
         self.assertEqual(set(reverse) & set(self.system.symbols), set())
 
     def test_the_reverse_answer_is_exactly_the_denominators_of_the_recovery(self):
@@ -947,12 +947,12 @@ class TestBothDirections(TestCase):
             _, denominator = sympy.fraction(sympy.together(expression))
             in_a_denominator |= denominator.free_symbols
         self.assertEqual(
-            set(self.translator.reduced_symbols_that_must_not_be_zero()),
+            set(self.translator.reverse_symbols_that_must_not_be_zero()),
             in_a_denominator)
 
     def test_the_reverse_answer_reads_against_the_column_names(self):
         names = list(self.translator.column_names())
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
+        reverse = self.translator.reverse_symbols_that_must_not_be_zero()
         positions = [names.index(name) for name in reverse]
         self.assertEqual(positions, sorted(positions))
 
@@ -962,7 +962,7 @@ class TestBothDirections(TestCase):
         # first r column names are the auxiliary columns, which exist whether or not the
         # scheme keeps them -- `auxiliary_names` is empty here for that reason.
         names = list(self.translator.column_names())
-        reverse = self.translator.reduced_symbols_that_must_not_be_zero()
+        reverse = self.translator.reverse_symbols_that_must_not_be_zero()
         self.assertEqual(set(reverse), set(names[:self.translator.r]))
 
     def test_a_reduction_can_be_sound_forward_and_unrecoverable_backward(self):
@@ -975,9 +975,9 @@ class TestBothDirections(TestCase):
             self.translator.column_of('k_m1/(e_0*k_1)'))
 
         self.assertNotIn(sympy.Symbol('k_m1'),
-                         self.translator.symbols_that_must_not_be_zero())
+                         self.translator.forward_symbols_that_must_not_be_zero())
         self.assertIn(sympy.Symbol('kappa1'),
-                      self.translator.reduced_symbols_that_must_not_be_zero())
+                      self.translator.reverse_symbols_that_must_not_be_zero())
 
         # And the recovery of k_2 is where it sits.
         names = list(self.translator.column_names())
@@ -992,9 +992,9 @@ class TestBothDirections(TestCase):
         self.system.update_parameter_values({'k_2': 0})
         reduced = self.translator.translate(self.system)
         self.assertNotIn(sympy.Symbol('k_2'),
-                         self.translator.symbols_that_must_not_be_zero())
+                         self.translator.forward_symbols_that_must_not_be_zero())
         self.assertNotIn(sympy.Symbol('kappa0'),
-                         self.translator.reduced_symbols_that_must_not_be_zero())
+                         self.translator.reverse_symbols_that_must_not_be_zero())
         self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
                          sympy.Integer(0))
 
@@ -1627,11 +1627,11 @@ class TestFourVariableWithZeroInitialConditions(TestCase):
                          ReductionScheme.PARAMETER)
 
     def test_the_reduction_divides_by_the_front_of_the_order_only(self):
-        self.assertEqual(self.translator.symbols_that_must_not_be_zero(),
+        self.assertEqual(self.translator.forward_symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('S_0 k_1')))
 
     def test_neither_zero_valued_symbol_is_divided_by(self):
-        must_not_be_zero = self.translator.symbols_that_must_not_be_zero()
+        must_not_be_zero = self.translator.forward_symbols_that_must_not_be_zero()
         for symbol in (sympy.Symbol('C_0'), sympy.Symbol('P_0')):
             with self.subTest(symbol=symbol):
                 self.assertNotIn(symbol, must_not_be_zero)
@@ -1788,7 +1788,7 @@ class TestMurraySixThirteenAsThePageDoesIt(TestCase):
 
     def test_the_zero_valued_symbol_is_not_divided_by(self):
         fresh = ODETranslator.from_ode_system(self.system)
-        self.assertEqual(fresh.symbols_that_must_not_be_zero(),
+        self.assertEqual(fresh.forward_symbols_that_must_not_be_zero(),
                          tuple(sympy.symbols('s_0 k_1')))
 
     def test_murrays_groups(self):
@@ -2347,7 +2347,7 @@ class TestWhichVocabularyEachReportSpeaks(TestCase):
     `y0` column on the clock.  This is the sweep that was missing, over every report
     that claims to name what the reduction produced.
 
-    `reduced_symbols_that_must_not_be_zero` is deliberately **not** in the list.  It
+    `reverse_symbols_that_must_not_be_zero` is deliberately **not** in the list.  It
     reads against `column_names`, as its docstring says and as `symbol_graph` uses it,
     and it names normalised auxiliaries on purpose -- `desr.numerics` solves for
     auxiliary values that need not be 1, and a zero one is fatal there whether or not
@@ -2414,7 +2414,7 @@ class TestWhichVocabularyEachReportSpeaks(TestCase):
         system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
         translator = ODETranslator.from_ode_system(system)
-        listed = translator.reduced_symbols_that_must_not_be_zero()
+        listed = translator.reverse_symbols_that_must_not_be_zero()
 
         self.assertEqual(set(), set(listed) - set(translator.names_per_column()))
         self.assertTrue(set(listed) - set(translator.translate(system).symbols))

@@ -1050,7 +1050,7 @@ class ODESystem(object):
         ``y_0`` turns out to be -- so the reduction stays entirely symbolic, and the one
         thing that cannot happen is for the reduction to *divide* by ``y_0``.  That is
         checked when a reduced system is built; see
-        :meth:`desr.ode_translation.ODETranslator.symbols_that_must_not_be_zero`.
+        :meth:`desr.ode_translation.ODETranslator.forward_symbols_that_must_not_be_zero`.
 
         >>> system.parameter_values
         {y_0: 0}
