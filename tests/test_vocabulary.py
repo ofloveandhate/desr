@@ -744,3 +744,48 @@ class TestTheTwoAxesAreIndependent(TestCase):
             with self.subTest(symbol=str(symbol)):
                 self.assertIn(symbol, reduced.dependents)
                 self.assertNotIn(symbol, reduced.parameters)
+
+
+class TestForwardAndReverseMeanTheSameOnBothClasses(TestCase):
+    '''
+    `forward` is original to reduced and `reverse` is back again, on the translator
+    and on a reduced system alike.  A reduced system carries the forward monomials so
+    that it needs no translator; the claim the shared name makes is that the two are
+    the same quantity, which is checked here rather than asserted in a docstring.
+    '''
+
+    ENZYME_CHAIN = 'x + e -> y + e\ny -> z\nz + f -> x + f'
+
+    def systems(self):
+        return (('Michaelis-Menten', ODESystem.from_equations(
+                    ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    self.ENZYME_CHAIN).to_ode_system()),
+                ('HL 6.6', ODESystem.from_equations(
+                    ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                     'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])))
+
+    def test_a_reduced_system_carries_the_translator_s_forward_monomials(self):
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                translator = ODETranslator.from_ode_system(system)
+                reduced = translator.translate(system)
+                self.assertEqual(tuple(translator.forward_monomials()),
+                                 reduced.forward_monomials)
+
+    def test_an_original_system_has_none_to_carry(self):
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                self.assertIsNone(system.forward_monomials)
+
+    def test_forward_and_reverse_undo_each_other(self):
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                translator = ODETranslator.from_ode_system(system)
+                forward = dict(zip(translator.column_names(system),
+                                   translator.forward_monomials()))
+                self.assertEqual(
+                    list(system.symbols),
+                    [sympy.simplify(monomial.subs(forward, simultaneous=True))
+                     for monomial in translator.reverse_monomials(system)])

@@ -733,6 +733,13 @@ class ODESystem(object):
         monomial in the **original** system's symbols, in column order: the :math:`r`
         auxiliaries first, then the invariants.
 
+        Named for the direction it goes -- original to reduced -- and the same
+        quantity as
+        :meth:`~desr.ode_translation.ODETranslator.forward_monomials`, carried by the
+        reduced system so that it does not need the translator that made it.
+        :meth:`~desr.ode_translation.ODETranslator.reverse_monomials` is the other
+        way.
+
         :const:`None` when this is not a reduction, for the reason
         :attr:`named_symbols` gives.
 
