@@ -52,42 +52,18 @@ import sympy
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, PathPatch
 from matplotlib.path import Path
 
-from desr import ODESystem, ODETranslator
-from desr.chemical_reaction_network import ChemicalReactionNetwork
+from desr.figures._palette import (FONT_RC, PANEL_EDGE, PANEL_FILL, PICKED, PLAIN,
+                                   QUIET, UNIT_COLOUR, VALUE_COLOUR)
+from desr.ode_translation import ODETranslator
 # expr_to_tex rather than sympy.latex: desr writes a negative subscript `k_m1`, and
 # sympy sets that as a literal m.
 from desr.tex_tools import dimension_to_tex, display_tex, expr_to_tex
 
 
-#: Colour means the same thing here as in the chain figure: **rust** the auxiliaries,
-#: which are the units, and **blue** the invariants, which are the values.  A block of a
-#: matrix takes the colour of the symbols it makes.
-UNIT_COLOUR, VALUE_COLOUR = '#8a4500', '#1f5c86'
-PLAIN, QUIET = 'black', '#555555'
-
-#: The wash behind a highlighted row, and the panel fills.
-PICKED = '#f0e2d2'
-PANEL_FILL, PANEL_EDGE = '#fbfaf8', '#d9d6d0'
-
 #: Text metrics, as multiples of the font size.  Layout happens before anything is
 #: drawn, so these estimate what the renderer will do; both run a little wide, which
 #: leaves the panels loose rather than clipped.
 CHAR_W, LINE_H = 0.58, 1.55
-
-#: Computer Modern, which matplotlib ships, so the figure sets in the same face as the
-#: paper it belongs in.  The sans default also makes a :math:`\\kappa` hard to tell
-#: from a :math:`k`, which this figure has both of.  ``axes.unicode_minus`` is off
-#: because cmr10 has no U+2212 and matplotlib says so, loudly, once per label.
-FONT_RC = {
-    'font.family': 'serif',
-    'font.serif': ['cmr10', 'DejaVu Serif'],
-    'mathtext.fontset': 'cm',
-    'mathtext.rm': 'serif',
-    'axes.unicode_minus': False,
-    # This figure has no tick labels at all, but matplotlib warns once per axes
-    # unless the formatter is told it may set numbers as mathtext.
-    'axes.formatter.use_mathtext': True,
-}
 
 #: Inches.  The width of the text block on a page -- pass `width` for a journal's own.
 PAGE_IN = 6.5
@@ -635,17 +611,26 @@ def equation_lines(system):
 
 def dimensionless_lines(system):
     """
-    Each equation multiplied through by :math:`t/x`, expanded into its terms.
+    Every quantity a scaling has to leave alone, which is what the exponents are read
+    from -- all of it, not only the equations.  A system with an initial condition, a
+    constraint or a same-unit requirement has columns in K from those too, and a panel
+    that showed only the equations would be short of the matrix beside it.
 
-    This is what the exponents are read from, and the panel that shows it is the only
-    place a viewer can learn why :math:`t` turns up in rows of K that the original
-    equations never mention.
+    An equation is written as the derivative it came from, because its expanded terms
+    do not say so and that is the whole reason :math:`t` is in them.
     """
-    clock = system.indep_var
-    return [_math('({}/{})\\,d{}/d{} = {}'.format(
-        expr_to_tex(clock), expr_to_tex(symbol), expr_to_tex(symbol),
-        expr_to_tex(clock), expr_to_tex(expression)))
-        for symbol, expression in system.dimensionless_equations().items()]
+    clock = expr_to_tex(system.indep_var)
+    lines = []
+    for row in system.dimensionless_expressions():
+        drawn = expr_to_tex(row['expression'])
+        if row['kind'] == 'equation':
+            # The expanded terms do not show that they came from a derivative, and
+            # that is the whole reason t is in them.
+            symbol = expr_to_tex(row['of'])
+            drawn = '({}/{})\\,d{}/d{} = {}'.format(clock, symbol, symbol, clock,
+                                                    drawn)
+        lines.append(_math(drawn))
+    return lines
 
 
 def symmetry_lines(system, scaling_matrix):
@@ -875,22 +860,3 @@ def flowchart_figure(system, title=None, width=PAGE_IN, font=6.0):
             panel.draw(ax, x, y)
         _connect(ax, shifted, edges, font)
     return figure
-
-
-SYSTEMS = [
-    ('Michaelis-Menten, two variable', ODESystem.from_equations(
-        ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
-         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])),
-    ('Hubert & Labahn 6.6', ODESystem.from_equations(
-        ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
-         'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])),
-    ('enzyme chain, a reaction network', ChemicalReactionNetwork.from_diagram(
-        'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
-]
-
-_label, _system = SYSTEMS[0]
-figure = flowchart_figure(_system, _label)
-
-
-if __name__ == '__main__':
-    plt.show()

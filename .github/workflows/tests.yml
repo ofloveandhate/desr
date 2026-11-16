@@ -9,9 +9,10 @@ name: tests
 #   sphinx doctest    the worked examples in docs/source/examples/*.rst
 #   sphinx html       the `.. plot::` directives -- the doctest builder does NOT run these,
 #                     and two figures were broken while all ~900 doctests passed
-#   examples/         six of the eight scripts are referenced by no doc page, so nothing
-#                     else runs them; that is how a parameter-ordering bug survived until
-#                     one of them tripped over it
+#   examples/         the scripts with no doc page yet, which nothing else runs; that is
+#                     how a parameter-ordering bug survived until one of them tripped
+#                     over it.  A script that draws a figure for a page lives beside that
+#                     page instead, and the HTML build above is what runs it.
 #
 # The second axis is the optional dependencies.  desr is sympy and python-flint, and
 # `import desr` must work without numpy, scipy, networkx or matplotlib -- the first two

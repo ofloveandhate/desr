@@ -51,6 +51,10 @@ _LAZY = {
     # a top-level `symbol_graph` would be ambiguous.  `ODETranslator.symbol_graph` is the
     # way in, and `from desr.symbol_graph import draw_symbol_graph` gets the drawing.
     'symbol_graph': None,
+    # desr.figures draws with matplotlib, and the symbol map reaches networkx through
+    # desr.symbol_graph.  The same bargain again: `from desr.figures import
+    # flowchart_figure` works, and neither dependency is needed for `import desr`.
+    'figures': None,
 }
 
 

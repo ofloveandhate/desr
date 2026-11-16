@@ -281,7 +281,7 @@ Visualization
 
 Plotting the numerical results:
 
-.. plot:: _examples/quadrature_recovery.py
+.. plot:: examples/scripts/quadrature_recovery.py
 
 The left depicts the numerical solution of the nondimensionalized system, sans auxiliary variables.  
 The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what

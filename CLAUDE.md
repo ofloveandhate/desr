@@ -38,7 +38,7 @@ its dependency is missing reports a success it has not earned.
 
 **Run an example:**
 ```bash
-python examples/michaelis_menten.py
+python examples/cell_cycle_control_network.py
 ```
 
 ## Architecture
@@ -103,10 +103,19 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   once printed its result and returned `None` with its doctest passing. Behaviour shown in
   `docs/source/examples/*.rst` should also be asserted in `tests/`, so a regression surfaces
   before anyone builds the docs.
-- Some scripts in `examples/` open plot windows, but they **can** be run unattended: set
-  `matplotlib.use('Agg')` first and `plt.show()` becomes a no-op. Worth doing, because six
-  of the eight are referenced by no doc page and so are tested by nothing else — which is
-  how a parameter-ordering bug survived until one of them tripped over it.
+- Example code lives in two places, by what it is for. `docs/source/examples/*.rst` are
+  the worked examples, and a figure one of them draws is a script beside it in
+  `docs/source/examples/scripts/`, rendered into the page by `.. plot::`. What remains in
+  the top-level `examples/` is a handful of print-based scripts with no page yet; each is
+  run by CI and is tested by nothing else, which is how a parameter-ordering bug survived
+  until one of them tripped over it. If a script opens a plot window, set
+  `matplotlib.use('Agg')` first and `plt.show()` becomes a no-op.
+- The figures are library code, in `desr/figures/`, behind the `graphs` extra:
+  `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
+  draws it as a chain of systems. Neither computes anything — every matrix, monomial,
+  dimension and substitution on either page comes from a getter, so a figure drawn for a
+  model desr has never seen is as right as the library is. Keep it that way: if a figure
+  needs a quantity, the library should be the one to work it out.
 - The naming scheme controls output variable names. It is a **dict** over the keys
   `parameters`, `independent`, `dependents` and `auxiliaries`; all are optional, and one left
   out takes the default for whichever reduction scheme runs — `desr`'s own `tau`/`nu`/`kappa`

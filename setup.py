@@ -28,7 +28,7 @@ def read_version():
 setup(
     name='desr',
     version=read_version(),
-    packages=['desr',],
+    packages=['desr', 'desr.figures'],
     author='Richard Tanburn, Silviana Amethyst',
     author_email='richard.tanburn@gmail.com, amethyst@mpi-cbg.de',
     description='Simplify ordinary differential equations by finding scaling symmetries.',

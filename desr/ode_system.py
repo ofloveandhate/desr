@@ -2353,38 +2353,77 @@ class ODESystem(object):
         assert out.shape[0] == len(self.symbols)
         return out
 
-    def dimensionless_equations(self):
+    def dimensionless_expressions(self):
         '''
-        Each equation multiplied through by :math:`t/x`, which makes it dimensionless.
+        Everything :meth:`exponent_matrix` takes its columns from, in column order.
 
-        :math:`dx/dt` scales the way :math:`x/t` does, so :math:`(t/x)\\,dx/dt` scales
-        not at all, and a scaling leaves the system alone exactly when it leaves every
-        term of these alone.  The terms are where :meth:`exponent_matrix` gets its
-        columns, which is why :math:`t` appears in rows of it that the equations
+        A scaling leaves the system alone exactly when it leaves every term of every
+        one of these alone, so between them they are the whole of what the scaling
+        matrix is computed from.  There are four sources and the equations are only
+        the first: an initial condition, a constraint and a same-unit requirement each
+        add a quantity that has to be left alone too, and each adds columns.
+
+        An equation contributes :math:`(t/x)\\,dx/dt`, expanded.  :math:`dx/dt` scales
+        the way :math:`x/t` does, so that quantity scales not at all -- which is why
+        :math:`t` appears in rows of :meth:`exponent_matrix` that the equations
         themselves never mention.
 
-        Initial conditions, constraints and same-unit requirements contribute columns
-        to :meth:`exponent_matrix` as well; this is the part that comes from the
-        equations.
-
         Returns:
-            dict: ``{symbol: expression}``, expanded, one per dependent variable.
+            tuple of dict: in column-block order, with keys
+
+            ``kind``
+                ``'equation'``, ``'initial condition'``, ``'constraint'`` or
+                ``'same unit'``.
+            ``of``
+                the symbol it belongs to, or the constraint itself.
+            ``expression``
+                the quantity a scaling has to leave alone.
 
         >>> system = ODESystem.from_equations(
         ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        >>> system.dimensionless_equations()[sympy.Symbol('c')]
-        -k_1*s*t - k_2*t - k_m1*t + e_0*k_1*s*t/c
+        >>> for row in system.dimensionless_expressions():
+        ...     print(row['kind'], '|', row['of'], '|', row['expression'])
+        equation | c | -k_1*s*t - k_2*t - k_m1*t + e_0*k_1*s*t/c
+        equation | s | c*k_1*t + c*k_m1*t/s - e_0*k_1*t
 
-        Four terms, and four of :meth:`exponent_matrix`'s columns:
+        Seven terms between them, and seven columns:
 
-        >>> len(sympy.Add.make_args(system.dimensionless_equations()[sympy.Symbol('c')]))
-        4
+        >>> sum(len(sympy.Add.make_args(row['expression']))
+        ...     for row in system.dimensionless_expressions())
+        7
+        >>> system.exponent_matrix().shape[1]
+        7
+
+        An initial condition adds a quantity, and a column with it:
+
+        >>> system.update_initial_conditions({'s': 's_0'})
+        >>> system.dimensionless_expressions()[-1]['kind']
+        'initial condition'
+        >>> system.dimensionless_expressions()[-1]['expression']
+        s/s_0
+        >>> system.exponent_matrix().shape[1]
+        8
         '''
         clock = self.independent_variable
-        return {symbol: sympy.expand(clock * derivative / symbol)
+
+        rows = [{'kind': 'equation', 'of': symbol,
+                 'expression': sympy.expand(clock * derivative / symbol)}
                 for symbol, derivative in self.derivative_dict.items()
-                if derivative is not None and symbol != self.independent_variable}
+                if derivative is not None and symbol != clock]
+
+        rows.extend({'kind': 'initial condition', 'of': variable,
+                     'expression': variable / initial_condition}
+                    for variable, initial_condition in self.initial_conditions.items())
+
+        rows.extend({'kind': 'constraint', 'of': constraint,
+                     'expression': constraint.lhs / constraint.rhs}
+                    for constraint in self.constraints)
+
+        rows.extend({'kind': 'same unit', 'of': variable, 'expression': expr / variable}
+                    for variable, expr in self._requires_same_unit.items())
+
+        return tuple(rows)
 
     def exponent_matrix_hnf(self):
         '''

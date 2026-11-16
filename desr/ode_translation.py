@@ -795,6 +795,15 @@ class ODETranslator(object):
                 auxiliaries: ``y1`` is ``e`` measured in ``x1``, and ``y1 == e / x1``
                 says the whole of it.  :const:`None` alongside an ``of`` of
                 :const:`None`, and for a unit row.
+            ``unit_monomial``
+                that same unit as a monomial in the caller's own symbols, so that a
+                reader who has only the original system can see what it is.
+                :const:`None` wherever ``measured_in`` is.
+            ``adopted``
+                where ``denotes`` goes once the normalisation is applied.  Equal to
+                ``denotes`` on a row the normalisation does not reach, which is how
+                the quadrature and the values measured in it tell themselves apart
+                from the rest.
 
         >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
         >>> enzyme = ChemicalReactionNetwork.from_diagram(
@@ -816,6 +825,22 @@ class ODETranslator(object):
         A value is its symbol divided by its unit, which is the sentence the two halves
         of the table make together:
 
+        The unit a value is measured in, in the caller's own symbols, and where the
+        monomial goes once that unit is adopted:
+
+        >>> for row in table[4:6]:
+        ...     print('{} = {} = {} * {}  |-> {}'.format(
+        ...         row['symbol'], row['denotes'], row['of'],
+        ...         1 / row['unit_monomial'], row['adopted']))
+        y0 = k_2_3*t = t * k_2_3  |-> t
+        y1 = e*k_0_1/k_2_3 = e * k_0_1/k_2_3  |-> e
+
+        A row the normalisation never reaches keeps its monomial, and those rows are
+        the quadrature and the values measured in it:
+
+        >>> [str(row['symbol']) for row in table if row['adopted'] == row['denotes']]
+        ['x3', 'y3', 'y4']
+
         >>> for row in table[4:6]:
         ...     print('{} = {} = {} / {}'.format(
         ...         row['symbol'], row['denotes'], row['of'], row['measured_in']))
@@ -829,10 +854,17 @@ class ODETranslator(object):
 
         names = self.column_names(system)
         monomials = self.forward_monomials()
+        normalisations = self.normalisations(system)
+        in_originals = dict(zip(names, monomials))
 
         rows = []
         for index, name in enumerate(names):
             monomial = monomials[index]
+            # Where this monomial goes once the units are adopted.  Equal to `denotes`
+            # on a row the normalisation does not reach, which is how a reader tells
+            # the quadrature and what it measures from everything else.
+            adopted = sympy.simplify(
+                monomial.subs(normalisations, simultaneous=True))
             powers = monomial.as_powers_dict()
             carried = [(dimensions[s], powers[s]) for s in system.symbols
                        if powers.get(s, 0)]
@@ -847,12 +879,19 @@ class ODETranslator(object):
             if index < self.r:
                 rows.append({'symbol': name, 'denotes': monomial,
                              'dimension': dimension, 'role': 'unit',
-                             'of': None, 'measured_in': None})
+                             'of': None, 'measured_in': None,
+                             'unit_monomial': None, 'adopted': adopted})
             else:
                 measures, unit = self._measured_in(monomial, system)
+                # The same unit `measured_in` names, as a monomial in the caller's own
+                # symbols.  A reader who has only the original system can see it; and
+                # it saves anyone dividing `denotes` by `of` to find out.
+                unit_monomial = (None if unit is None else
+                                 sympy.simplify(unit.subs(in_originals)))
                 rows.append({'symbol': name, 'denotes': monomial,
                              'dimension': dimension, 'role': 'value',
-                             'of': measures, 'measured_in': unit})
+                             'of': measures, 'measured_in': unit,
+                             'unit_monomial': unit_monomial, 'adopted': adopted})
         return rows
 
     def units_and_dimensions(self, system=None):

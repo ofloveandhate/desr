@@ -1641,6 +1641,138 @@ class TestPhysicalDimensions(TestCase):
         self.assertEqual(before.translate(), after.translate())
 
 
+class TestADimensionallyConsistentChangeOfVariables(TestCase):
+    '''
+    A change of variables that keeps the units straight leaves the number of scaling
+    symmetries alone.  One that does not can raise it, and the extra symmetry is an
+    artefact of the substitution rather than a property of the model.
+
+    ``dx/dt = (a + b) x + b`` with ``c = a + b`` is the smallest case.  Writing ``c``
+    in place of ``a + b`` and saying nothing else loses the fact that ``b`` and ``c``
+    are added together, so desr is free to scale them separately.
+    '''
+
+    AS_WRITTEN = r'\frac{dx}{dt} &= (a + b) x + b'
+    SUBSTITUTED = r'\frac{dx}{dt} &= (c) x + b'
+
+    def count(self, system):
+        return ODETranslator.from_ode_system(system).num_scaling_symmetries
+
+    def test_the_system_as_written_has_one(self):
+        self.assertEqual(1, self.count(ODESystem.from_tex(self.AS_WRITTEN)))
+
+    def test_substituting_silently_invents_a_second(self):
+        # The reduction is larger, and wrong: nothing in the model says b and c scale
+        # independently, only the substitution's silence does.
+        self.assertEqual(2, self.count(ODESystem.from_tex(self.SUBSTITUTED)))
+
+    def test_requiring_the_same_unit_puts_it_back(self):
+        system = ODESystem.from_tex(self.SUBSTITUTED)
+        system.require_same_unit({'c': 'b'})
+        self.assertEqual(1, self.count(system))
+        self.assertEqual(ODESystem.from_tex(self.AS_WRITTEN).maximal_scaling_matrix(),
+                         system.maximal_scaling_matrix())
+
+    def test_so_does_carrying_the_constraint(self):
+        # Letting desr make the substitution keeps the relation, so the count holds
+        # even though the system now has a symbol more.
+        system = ODESystem.from_tex(self.AS_WRITTEN)
+        system.add_constraint('c', 'a+b')
+        self.assertEqual(1, self.count(system))
+        self.assertEqual(len(ODESystem.from_tex(self.AS_WRITTEN).symbols) + 1,
+                         len(system.symbols))
+
+    def test_the_reduction_is_smaller_when_the_symmetry_is_real(self):
+        # What the invented symmetry buys, and why it is worth catching: it removes a
+        # symbol the model still depends on.
+        honest = ODESystem.from_tex(self.AS_WRITTEN)
+        naive = ODESystem.from_tex(self.SUBSTITUTED)
+        honest_reduced = ODETranslator.from_ode_system(honest).translate(honest)
+        naive_reduced = ODETranslator.from_ode_system(naive).translate(naive)
+        self.assertEqual(3, len(honest_reduced.symbols))
+        self.assertEqual(2, len(naive_reduced.symbols))
+
+
+class TestDimensionlessExpressions(TestCase):
+    '''
+    The quantities a scaling has to leave alone, which is what the exponent matrix is
+    built from.  The claim that has to hold for every system, not only the tidy ones:
+    their terms are its columns, all of them.
+    '''
+
+    EQUATIONS = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                 'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
+    def systems(self):
+        from desr.chemical_reaction_network import ChemicalReactionNetwork
+
+        with_initial = ODESystem.from_equations(self.EQUATIONS)
+        with_initial.update_initial_conditions({'s': 's_0'})
+
+        with_two_initial = ODESystem.from_equations(self.EQUATIONS)
+        with_two_initial.update_initial_conditions({'s': 's_0', 'c': 'c_0'})
+
+        with_constraint = ODESystem.from_equations(self.EQUATIONS)
+        with_constraint.add_constraint(sympy.Symbol('k_2'), sympy.Symbol('k_m1'))
+
+        conserved = ODESystem.from_equations(
+            ['dn/dt = n*(r - k*p)', 'dp/dt = p*(k*n - d)', 'dw/dt = 0'])
+
+        return (('plain', ODESystem.from_equations(self.EQUATIONS)),
+                ('one initial condition', with_initial),
+                ('two initial conditions', with_two_initial),
+                ('a constraint', with_constraint),
+                ('a conserved variable', conserved),
+                ('enzyme chain', ChemicalReactionNetwork.from_diagram(
+                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
+                ('HL 6.4', ODESystem.from_equations(
+                    ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])))
+
+    def test_their_terms_are_the_exponent_matrix_s_columns(self):
+        # The whole claim.  A figure or a reader that works through these has worked
+        # through everything the scaling matrix was computed from, with nothing left
+        # over in the matrix that they never saw.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                terms = sum(len(sympy.Add.make_args(row['expression']))
+                            for row in system.dimensionless_expressions())
+                self.assertEqual(system.exponent_matrix().shape[1], terms)
+
+    def test_every_scaling_leaves_each_of_them_alone(self):
+        # Why they are the right quantities: the scaling matrix annihilates every
+        # term of every one of these, which is what it was solved for.
+        for label, system in self.systems():
+            scaling = system.maximal_scaling_matrix()
+            symbols = list(system.symbols)
+            for row in system.dimensionless_expressions():
+                for term in sympy.Add.make_args(row['expression']):
+                    with self.subTest(system=label, term=str(term)):
+                        powers = term.as_powers_dict()
+                        weights = scaling * sympy.Matrix(
+                            [powers.get(symbol, 0) for symbol in symbols])
+                        self.assertTrue(weights.is_zero_matrix)
+
+    def test_an_initial_condition_is_reported_and_counted(self):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        before = len(system.dimensionless_expressions())
+        system.update_initial_conditions({'s': 's_0'})
+        rows = system.dimensionless_expressions()
+
+        self.assertEqual(before + 1, len(rows))
+        self.assertEqual('initial condition', rows[-1]['kind'])
+        self.assertEqual(sympy.Symbol('s'), rows[-1]['of'])
+        self.assertEqual(sympy.Symbol('s') / sympy.Symbol('s_0'),
+                         rows[-1]['expression'])
+
+    def test_the_equations_come_first(self):
+        # The order is the column order of the exponent matrix, and the equations are
+        # the first block of it.
+        system = ODESystem.from_equations(self.EQUATIONS)
+        system.update_initial_conditions({'s': 's_0'})
+        kinds = [row['kind'] for row in system.dimensionless_expressions()]
+        self.assertEqual(['equation', 'equation', 'initial condition'], kinds)
+
+
 class TestDimensionOfAMonomial(TestCase):
     '''
     ``[x]`` is read as the dimension of `x`, and that reading is defined for any
