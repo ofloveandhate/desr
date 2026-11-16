@@ -1300,10 +1300,16 @@ class ODETranslator(object):
         Each original symbol as a monomial in the reduced symbols, once the
         normalisation has been applied: what to write to get the original back.
 
-        :meth:`reverse_monomials` is this before the normalisation, so the two differ
-        exactly on the symbols that a normalised auxiliary reaches.  An auxiliary is
-        normalised when it is constant -- a monomial in the parameters alone -- and one
-        the scaling moves is not, so it stays in these images and has to be integrated.
+        :meth:`reverse_monomials` is this before the reduction's two steps, so the two
+        differ exactly on the columns those steps spend.  An auxiliary is normalised when
+        it is constant -- a monomial in the parameters alone -- and one the scaling moves
+        is not, so it stays in these images and has to be integrated.  A column identified
+        with the clock becomes the clock, under whatever name the reduced system gives it.
+
+        Every image is written in symbols the reduced system actually has, which is what
+        makes these substitutions rather than a table of monomials: the column names are
+        :meth:`names_per_column`, and a column the reduction did not keep names nothing
+        there.
 
         :meth:`translate_parameter_substitutions` answers the same question and refuses
         any system the parameter scheme does not fit; this one holds for every scheme.
@@ -1334,15 +1340,41 @@ class ODETranslator(object):
         >>> ODETranslator.from_ode_system(enzyme).substitutions()[
         ...     sympy.Symbol('y')]
         x3*y3
+
+        Its clock invariant is identified with the clock, so `t`'s image is the reduced
+        system's own independent variable and not the column that invariant occupies:
+
+        >>> enzyme_translator = ODETranslator.from_ode_system(enzyme)
+        >>> enzyme_translator.substitutions()[sympy.Symbol('t')]
+        tau
+        >>> enzyme_translator.names_per_column()
+        (x0, x1, x2, x3, y0, y1, y2, y3, y4)
+        >>> enzyme_translator.translate(enzyme).symbols
+        (tau, x3, y1, y2, y3, y4)
         '''
         system = self._system_or(None)
-        normalised = set(self.parameter_auxiliaries())
+        scheme = self.scheme()
+        names = self.names_per_column()
+        # The normalised auxiliaries are matched by monomial rather than by the column
+        # indices this also reports: under the dependent-variable scheme those index a
+        # deflated multiplier, and `names` is written against the full one.  Identified
+        # columns are only ever the general scheme's, where the two agree.
+        _, identified = self._dropped_columns(system, scheme)
 
-        to_one = {name: sympy.Integer(1)
-                  for name, monomial in zip(self.names_per_column(),
-                                            self.auxiliary_monomials())
-                  if monomial in normalised}
-        return {symbol: sympy.simplify(monomial.subs(to_one, simultaneous=True))
+        # Both of the reduction's steps, because both are the same move: replacing a
+        # column's name with what the reduced system has in its place.  A normalised
+        # auxiliary is replaced by the 1 it was set to, and a column identified with the
+        # clock by the clock -- which is the reduced system's own, named by
+        # `_clock_name_for`.  Applying only the first would leave an image naming a
+        # column the reduced system does not carry, and these are substitutions *into*
+        # that system.
+        applied = {name: sympy.Integer(1)
+                   for name, monomial in zip(names, self.auxiliary_monomials())
+                   if monomial in set(self.parameter_auxiliaries())}
+        clock = self._reduced_clock(system, identified)
+        applied.update({names[self.r + column]: clock for column in identified})
+
+        return {symbol: sympy.simplify(monomial.subs(applied, simultaneous=True))
                 for symbol, monomial in zip(system.symbols,
                                             self.reverse_monomials())}
 

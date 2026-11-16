@@ -2253,3 +2253,79 @@ class TestWhatTheReducedClockDenotes(TestCase):
                                  reduced.independent_variable)
                 self.assertEqual(sympy.Symbol('k_2_3') * system.independent_variable,
                                  self.denotation(reduced))
+
+
+class TestSubstitutionsNameOnlySymbolsTheReducedSystemHas(TestCase):
+    '''
+    `substitutions()` says what to write in place of each original symbol to get it
+    back out of the reduced system, so every symbol in every image has to be one that
+    system carries.  The column names are :meth:`names_per_column`, which names every
+    column of the multiplier whatever the reduction does with it, and a reduction
+    spends two kinds of column: a normalised auxiliary, which becomes the 1 it was set
+    to, and an invariant identified with the clock, which becomes the clock.
+
+    Only the second was missing, so the property held everywhere except a general
+    reduction that identifies something -- where `t` mapped to the column the clock
+    invariant occupies, and the reduced system has no such symbol.
+    '''
+
+    SYSTEMS = {
+        'mm two variable': ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                            'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'],
+        'predator-prey': ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                          'dp/dt = s*p*(1 - h*p / n)'],
+        'HL 6.6': ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                   'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'],
+        'HL 6.4': ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'],
+        'decay': ['dn/dt = -n/tc'],
+    }
+
+    def systems(self):
+        ''' The table above, plus the enzyme chain, which is built not written. '''
+        for label, equations in self.SYSTEMS.items():
+            yield label, ODESystem.from_equations(equations)
+        yield 'enzyme chain', ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+
+    def test_every_image_is_written_in_the_reduced_systems_own_symbols(self):
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                translator = ODETranslator.from_ode_system(system)
+                carried = set(translator.translate(system).symbols)
+                for symbol, image in translator.substitutions().items():
+                    stray = image.free_symbols - carried
+                    self.assertEqual(
+                        set(), stray,
+                        '{} maps to {}, which names {} -- not a symbol of the reduced '
+                        'system {}'.format(symbol, image,
+                                           ', '.join(sorted(map(str, stray))),
+                                           tuple(sorted(map(str, carried)))))
+
+    def test_the_clock_maps_to_the_clock_that_was_identified_with_it(self):
+        # The case the property was false in, named rather than left to the sweep.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+
+        self.assertEqual(reduced.independent_variable,
+                         translator.substitutions()[system.independent_variable])
+        # And it is not the column that invariant occupies, which is still named.
+        self.assertIn(sympy.Symbol('y0'), translator.names_per_column())
+        self.assertNotIn(sympy.Symbol('y0'), reduced.symbols)
+
+    def test_without_an_identification_the_clock_is_an_ordinary_monomial(self):
+        # The other side of it, and not the same as "the clock maps to itself".  HL 6.6
+        # identifies nothing, but the general scheme gives the clock no column of its
+        # own either, so `t` comes back as a monomial in the symbols the reduction kept
+        # -- which is what every other original symbol does.  Only an identification
+        # makes the image the reduced system's clock.
+        system = ODESystem.from_equations(self.SYSTEMS['HL 6.6'])
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+        image = translator.substitutions()[system.independent_variable]
+
+        self.assertEqual((), translator.indep_var_invariants())
+        self.assertEqual(sympify_expression('x0**3/y0**2'), image)
+        self.assertNotEqual(reduced.independent_variable, image)
+        self.assertEqual(set(), image.free_symbols - set(reduced.symbols))
