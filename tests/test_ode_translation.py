@@ -213,8 +213,8 @@ class TestColumnLookup(TestCase):
         column = self.translator.column_of('e_0*k_1*t')
         self.assertIsInstance(column, int)
 
-    def test_column_monomials_is_indexed_by_column(self):
-        monomials = self.translator.column_monomials()
+    def test_forward_monomials_is_indexed_by_column(self):
+        monomials = self.translator.forward_monomials()
         self.assertEqual(self.translator.herm_mult.cols, len(monomials))
         for column, monomial in enumerate(monomials):
             with self.subTest(column=column):

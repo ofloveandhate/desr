@@ -812,7 +812,7 @@ class ODETranslator(object):
                       else system.dimensions_of(self.scaling_matrix))
 
         names = self.column_names(system)
-        monomials = self.column_monomials()
+        monomials = self.forward_monomials()
 
         rows = []
         for index, name in enumerate(names):
@@ -987,7 +987,7 @@ class ODETranslator(object):
                    symbols_domain=ode_system.symbols, naming_scheme=naming_scheme,
                    new_indices_start_at=new_indices_start_at, system=ode_system)
 
-    def column_monomials(self):
+    def forward_monomials(self):
         '''
         What every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult` stands
         for, as a monomial in the original symbols.
@@ -1004,16 +1004,110 @@ class ODETranslator(object):
         ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.column_monomials()
+        >>> translator.forward_monomials()
         (1/(e_0*k_1), e_0, k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0)
         '''
         variables = self._validate_variables(None, self.n, 'y', True)
         return tuple(scale_action(variables, self.herm_mult))
 
+    def reverse_monomials(self, system=None, scheme=None):
+        '''
+        What every column of :attr:`inv_herm_mult` stands for, as a monomial in the
+        reduced symbols: each original symbol, recovered.
+
+        The reverse of :meth:`forward_monomials`, which reads :math:`V` and gives each
+        reduced symbol as a monomial in the original ones.  Both are read down their
+        columns; what changes is which symbols index the columns and which the rows.
+
+        Args:
+            system (ODESystem, optional): The system whose reduced names to use.
+            scheme (Scheme, optional): As for :meth:`column_names`.
+
+        Returns:
+            tuple of sympy.Expr: One monomial per original symbol, in the order of
+            that system's :attr:`~desr.ode_system.ODESystem.symbols`.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> system.symbols
+        (e_0, k_1, k_2, k_m1, t, c, s)
+        >>> translator.reverse_monomials(system)
+        (x1, 1/(x0*x1), kappa0/x0, kappa1/x0, tau*x0, nu0*x1, nu1*x1)
+
+        Substituting one into the other gives the symbols back, which is the whole of
+        what it means for the two matrices to be inverse:
+
+        >>> back = dict(zip(translator.column_names(system),
+        ...                 translator.forward_monomials()))
+        >>> tuple(sympy.simplify(monomial.subs(back, simultaneous=True))
+        ...       for monomial in translator.reverse_monomials(system))
+        (e_0, k_1, k_2, k_m1, t, c, s)
+        '''
+        names = self.column_names(system, scheme)
+        return tuple(scale_action(names, self.inv_herm_mult))
+
+    def substitutions(self, system=None, scheme=None):
+        '''
+        Each original symbol as a monomial in the reduced symbols, once the
+        normalisation has been applied: what to write to get the original back.
+
+        :meth:`reverse_monomials` is this before the normalisation, so the two differ
+        exactly on the symbols that a normalised auxiliary reaches.  An auxiliary is
+        normalised when it is constant -- a monomial in the parameters alone -- and one
+        the scaling moves is not, so it stays in these images and has to be integrated.
+
+        :meth:`translate_parameter_substitutions` answers the same question and refuses
+        any system the parameter scheme does not fit; this one holds for every scheme.
+
+        Args:
+            system (ODESystem, optional): The system being reduced.
+            scheme (Scheme, optional): As for :meth:`column_names`.
+
+        Returns:
+            dict: ``{original symbol: image}``, one entry per symbol.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.substitutions(system)
+        {e_0: 1, k_1: 1, k_2: kappa0, k_m1: kappa1, t: tau, c: nu0, s: nu1}
+
+        A reduction that normalises nothing leaves every monomial standing:
+
+        >>> hl = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...     'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> transl = ODETranslator.from_ode_system(hl)
+        >>> transl.substitutions(hl)[sympy.Symbol('z1')]
+        y0/x0
+
+        The enzyme chain keeps one auxiliary, and it stays wherever it stood:
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> ODETranslator.from_ode_system(enzyme).substitutions(enzyme)[
+        ...     sympy.Symbol('y')]
+        x3*y3
+        '''
+        if system is None:
+            system = self.system
+        names = self.column_names(system, scheme)
+        normalised = set(self.parameter_auxiliaries(system))
+
+        to_one = {name: sympy.Integer(1)
+                  for name, monomial in zip(names, self.auxiliary_monomials())
+                  if monomial in normalised}
+        return {symbol: sympy.simplify(monomial.subs(to_one, simultaneous=True))
+                for symbol, monomial in zip(
+                    system.symbols, self.reverse_monomials(system, scheme))}
+
     def column_names(self, system=None, scheme=None):
         '''
         A name for every column of :attr:`~desr.ode_translation.ODETranslator.herm_mult`,
-        in the same order as :meth:`column_monomials`.
+        in the same order as :meth:`forward_monomials`.
 
         **Every** column is named, whatever the reduction does with it.  The auxiliary
         columns are named from the naming scheme's ``auxiliaries`` pattern even under the
@@ -1051,7 +1145,7 @@ class ODETranslator(object):
 
     def column_kinds(self, system=None, scheme=None):
         '''
-        What kind of thing every column is, in the same order as :meth:`column_monomials`.
+        What kind of thing every column is, in the same order as :meth:`forward_monomials`.
 
         The third of the ``column_*`` family, and like the others it covers **every**
         column whatever the reduction does with it -- a normalised auxiliary and an
@@ -1150,7 +1244,7 @@ class ODETranslator(object):
         write-up wants, column number beside what the column is -- is one zip:
 
         >>> for column, (name, monomial) in enumerate(zip(translator.column_names(system),
-        ...                                               translator.column_monomials())):
+        ...                                               translator.forward_monomials())):
         ...     print(column, name, '=', monomial)
         0 x0 = 1/(e_0*k_1)
         1 x1 = e_0
@@ -1163,7 +1257,7 @@ class ODETranslator(object):
         if isinstance(monomial_or_name, str):
             monomial_or_name = sympify_expression(monomial_or_name)
 
-        monomials = self.column_monomials()
+        monomials = self.forward_monomials()
         for column, monomial in enumerate(monomials):
             if monomial == monomial_or_name:
                 return column
@@ -1743,7 +1837,7 @@ class ODETranslator(object):
 
         # The parameter scheme normalises its auxiliaries to 1 and discards them, so there
         # are none to record.
-        column_monomials = (list(scale_action(system.symbols, self.herm_mult_i))
+        forward_monomials = (list(scale_action(system.symbols, self.herm_mult_i))
                             + list(scale_action(system.symbols, self.herm_mult_n)))
         reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
                                    is_reduced=True,
@@ -1754,7 +1848,7 @@ class ODETranslator(object):
                                    symbol_kinds=self._symbol_kinds_for(
                                        system, ReductionScheme.PARAMETER),
                                    original_system=system.copy(),
-                                   column_monomials=column_monomials)
+                                   forward_monomials=forward_monomials)
         reduced_system.default_order_variables()
 
         # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
@@ -1946,7 +2040,7 @@ class ODETranslator(object):
                                 normalise_parameters=normalise_parameters,
                                 identify_indep_var=identify_indep_var),
                             original_system=system.copy(),
-                            column_monomials=aux_monomials + inv_monomials)
+                            forward_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
@@ -2159,7 +2253,7 @@ class ODETranslator(object):
                                 system, ReductionScheme.GENERAL, include_aux_vars,
                                 normalise_parameters, identify_indep_var),
                             original_system=system.copy(),
-                            column_monomials=aux_monomials + inv_monomials)
+                            forward_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, scheme['independent'])
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
@@ -3273,6 +3367,104 @@ class ODETranslator(object):
         too, and only the exponents tell the two apart.
         '''
         return _parameter_columns(self.herm_mult_i, self._dynamic_rows(system))
+
+    def reduced_values(self, system=None, values=None):
+        '''
+        The values the original symbols' known values force on the reduced ones.
+
+        One substitution is enough, and is **complete** rather than best-effort: no
+        reduced symbol is a monomial in the other reduced symbols, because the columns
+        of the multiplier are multiplicatively independent -- the multiplier is
+        invertible -- so there is no redundancy on the reduced side to iterate over.
+
+        A monomial need not have all of its symbols known to have a known value.  A
+        zero in a numerator settles it whatever the rest are, which is the case that
+        matters: :math:`c_0 / s_0` is zero for every :math:`s_0` once :math:`c_0` is.
+        A zero in a *denominator* settles nothing, and is excluded by its value being
+        non-finite rather than by inspecting the exponents -- though a reduction that
+        divides by a known zero is refused before it gets here.
+
+        Args:
+            system (ODESystem, optional): The system being reduced.
+            values (dict, optional): ``{original symbol: value}``.  Defaults to the
+                system's own :attr:`~desr.ode_system.ODESystem.parameter_values`.
+
+        Returns:
+            dict: ``{reduced symbol: value}``, holding only those it settles.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> system.update_parameter_values({'k_2': 0})
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.reduced_values(system)
+        {kappa0: 0}
+
+        Nothing known forces nothing:
+
+        >>> plain = ODESystem.from_equations(equations)
+        >>> ODETranslator.from_ode_system(plain).reduced_values(plain)
+        {}
+        '''
+        if system is None:
+            system = self.system
+        if values is None:
+            values = dict(system.parameter_values)
+        if not values:
+            return {}
+
+        settled = {}
+        for name, monomial in zip(self.column_names(system),
+                                  self.forward_monomials()):
+            substituted = monomial.subs(values)
+            if substituted.is_number and substituted.is_finite:
+                settled[name] = substituted
+        return settled
+
+    def auxiliary_kinds(self, system, variables=None):
+        '''
+        Whether each auxiliary sits still or has to be integrated, in column order.
+
+        Hubert & Labahn's auxiliary system is :math:`dx/dt = x \\star F(y^{W_\\partial})
+        \\cdot V_i`, and they call it a quadrature: given the reduced system's solution,
+        each auxiliary follows by one integration.  Its integrand is
+        :math:`(z^{-1} \\star dz/dt) \\cdot V_i` -- the logarithmic derivatives of the
+        original symbols, combined by a column of :math:`V_i` -- and a **parameter
+        contributes zero to it**, having no derivative.
+
+        So an auxiliary that is a monomial in the parameters alone has
+        :math:`d(\\log x)/dt = 0`: it is constant, and recovering the original system
+        needs a *constant of integration* rather than an integral.  That is the whole of
+        why the parameter scheme can normalise its auxiliaries to 1 and drop them: its
+        block form puts every column of :math:`V_i` on parameter rows, so every one of
+        them is such a monomial.  The paper states the conclusion -- constants there,
+        quadratures in general -- without walking this step.
+
+        Read per auxiliary rather than per scheme, which is finer than the paper needs
+        to be and is what a reduction like the enzyme chain's calls for: three of its
+        auxiliaries are monomials in rate constants and sit still, while the fourth is
+        a species and moves.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            variables (iter of sympy.Symbol, optional): As for :meth:`invariants`.
+
+        Returns:
+            tuple of str: ``'parameter'`` where the quadrature is trivial,
+            ``'dependent'`` where it is not, one per auxiliary.
+
+        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
+        >>> enzyme = ChemicalReactionNetwork.from_diagram(
+        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
+        >>> translator = ODETranslator.from_ode_system(enzyme)
+        >>> translator.auxiliary_monomials()
+        Matrix([[1/k_2_3, k_2_3/k_0_1, k_2_3/k_4_5, x]])
+        >>> translator.auxiliary_kinds(enzyme)
+        ('parameter', 'parameter', 'parameter', 'dependent')
+        '''
+        constant = set(self.parameter_auxiliaries(system, variables))
+        return tuple('parameter' if monomial in constant else 'dependent'
+                     for monomial in self.auxiliary_monomials(variables))
 
     def parameter_auxiliaries(self, system, variables=None):
         '''

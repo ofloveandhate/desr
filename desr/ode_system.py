@@ -234,7 +234,7 @@ class ODESystem(object):
             symbols, so without it the record names symbols belonging to nobody, and two
             different originals using the same letters are indistinguishable.  It is also
             what tells a reduction this library produced from one assembled by hand.
-        column_monomials (iter of sympy.Expr, optional): For a reduced system, what every
+        forward_monomials (iter of sympy.Expr, optional): For a reduced system, what every
             column of the Hermite multiplier stands for, as a monomial in the original
             symbols, in column order -- the `r` auxiliaries and then the invariants.
             This is `named_symbols` completed: that one is keyed by the symbols the
@@ -263,7 +263,7 @@ class ODESystem(object):
     '''
 
     def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None,
-                 column_monomials=None, physical_dimensions=None):
+                 forward_monomials=None, physical_dimensions=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -284,8 +284,8 @@ class ODESystem(object):
         self._named_symbols = None if named_symbols is None else dict(named_symbols)
         self._physical_dimensions = dict(physical_dimensions or {})
         self._symbol_kinds = None if symbol_kinds is None else dict(symbol_kinds)
-        self._column_monomials = (None if column_monomials is None
-                                  else tuple(column_monomials))
+        self._forward_monomials = (None if forward_monomials is None
+                                  else tuple(forward_monomials))
         self._original_system = original_system
 
         # sanity checks
@@ -365,7 +365,7 @@ class ODESystem(object):
                            named_symbols=self._named_symbols,
                            symbol_kinds=self._symbol_kinds,
                            original_system=self._original_system,
-                           column_monomials=self._column_monomials,
+                           forward_monomials=self._forward_monomials,
                            physical_dimensions=self._physical_dimensions)
         system.update_initial_conditions(self.initial_conditions)
         for eqn in self.constraints:
@@ -727,7 +727,7 @@ class ODESystem(object):
         return NumericTranslator(self)
 
     @property
-    def column_monomials(self):
+    def forward_monomials(self):
         '''
         What every column of the reduction's Hermite multiplier stands for, as a
         monomial in the **original** system's symbols, in column order: the :math:`r`
@@ -751,7 +751,7 @@ class ODESystem(object):
         Returns:
             tuple or None
         '''
-        return self._column_monomials
+        return self._forward_monomials
 
     @property
     def symbol_kinds(self):
@@ -1781,7 +1781,7 @@ class ODESystem(object):
                                 original_system=self._original_system,
                                 # In the *original* system's symbols, so a
                                 # substitution on this one leaves them alone.
-                                column_monomials=self._column_monomials,
+                                forward_monomials=self._forward_monomials,
                                 # A dimension belongs to a symbol, so a rename
                                 # takes it along and a removal drops it.
                                 physical_dimensions={
@@ -2353,6 +2353,129 @@ class ODESystem(object):
         assert out.shape[0] == len(self.symbols)
         return out
 
+    def dimensionless_equations(self):
+        '''
+        Each equation multiplied through by :math:`t/x`, which makes it dimensionless.
+
+        :math:`dx/dt` scales the way :math:`x/t` does, so :math:`(t/x)\\,dx/dt` scales
+        not at all, and a scaling leaves the system alone exactly when it leaves every
+        term of these alone.  The terms are where :meth:`exponent_matrix` gets its
+        columns, which is why :math:`t` appears in rows of it that the equations
+        themselves never mention.
+
+        Initial conditions, constraints and same-unit requirements contribute columns
+        to :meth:`exponent_matrix` as well; this is the part that comes from the
+        equations.
+
+        Returns:
+            dict: ``{symbol: expression}``, expanded, one per dependent variable.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> system.dimensionless_equations()[sympy.Symbol('c')]
+        -k_1*s*t - k_2*t - k_m1*t + e_0*k_1*s*t/c
+
+        Four terms, and four of :meth:`exponent_matrix`'s columns:
+
+        >>> len(sympy.Add.make_args(system.dimensionless_equations()[sympy.Symbol('c')]))
+        4
+        '''
+        clock = self.independent_variable
+        return {symbol: sympy.expand(clock * derivative / symbol)
+                for symbol, derivative in self.derivative_dict.items()
+                if derivative is not None and symbol != self.independent_variable}
+
+    def scaling_derivation(self):
+        '''
+        The matrices :meth:`maximal_scaling_matrix` passes through on its way to
+        :math:`A`.
+
+        The scaling matrix is the left null space of :meth:`exponent_matrix`, found by
+        row Hermite normal form: :math:`U K = H`, the zero rows at the bottom of
+        :math:`H` say which combinations of :math:`K`'s rows vanish, and those
+        combinations are the matching rows of :math:`U`.  Those rows are then put in
+        row Hermite normal form themselves, so that the answer does not depend on how
+        the elimination ran, and that is :math:`A`.
+
+        Returns:
+            dict: with keys ``exponent_matrix``, ``hermite_form``, ``multiplier``,
+            ``selected`` and ``scaling_matrix``.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> steps = system.scaling_derivation()
+        >>> steps['selected']
+        Matrix([
+        [1, 0, 1, 1, -1, 1, 1],
+        [0, 1, 1, 1, -1, 0, 0]])
+
+        The selected rows are not the answer; they are put in row Hermite normal form
+        first, and the numbers change:
+
+        >>> steps['scaling_matrix']
+        Matrix([
+        [0, -1, -1, -1, 1, 0, 0],
+        [1, -1,  0,  0, 0, 1, 1]])
+        >>> steps['scaling_matrix'] == system.maximal_scaling_matrix()
+        True
+
+        Both annihilate the exponent matrix, which is what makes them scalings:
+
+        >>> (steps['selected'] * steps['exponent_matrix']).is_zero_matrix
+        True
+        '''
+        exponent_matrix = self.exponent_matrix()
+        hermite_form, multiplier = hnf_row(exponent_matrix)
+
+        zero_rows = sum(1 for row in hermite_form.tolist()
+                        if all(entry == 0 for entry in row))
+        selected = multiplier[multiplier.shape[0] - zero_rows:, :]
+
+        return {'exponent_matrix': exponent_matrix,
+                'hermite_form': hermite_form,
+                'multiplier': multiplier,
+                'selected': selected,
+                'scaling_matrix': self.maximal_scaling_matrix()}
+
+    def symbols_by_dimension(self, scaling_matrix=None):
+        '''
+        The symbols grouped by the dimension they share.
+
+        Two symbols have the same dimension exactly when their columns of the scaling
+        matrix agree, so these groups are the columns' equivalence classes.
+
+        Args:
+            scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+
+        Returns:
+            tuple: ``(dimension, symbols)`` pairs, a group's first symbol in the
+            order of :attr:`symbols`.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> for dimension, symbols in system.symbols_by_dimension():
+        ...     print(symbols, 'have dimension', dimension)
+        (e_0, c, s) have dimension [e_0]
+        (k_1,) have dimension 1/([e_0]*[t])
+        (k_2, k_m1) have dimension 1/[t]
+        (t,) have dimension [t]
+        '''
+        dimensions = self.dimensions_of(scaling_matrix)
+
+        groups = []
+        for symbol in self.symbols:
+            dimension = dimensions[symbol]
+            for index, (seen, symbols) in enumerate(groups):
+                if seen == dimension:
+                    groups[index] = (seen, symbols + [symbol])
+                    break
+            else:
+                groups.append((dimension, [symbol]))
+        return tuple((dimension, tuple(symbols)) for dimension, symbols in groups)
+
     def maximal_scaling_matrix(self):
         '''
         Determine the maximal scaling matrix leaving this system invariant.
@@ -2377,20 +2500,32 @@ class ODESystem(object):
         '''
         One name per structural dimension, in row order, with the sign to read it by.
 
-        A direction is named after a symbol that lives in it **alone** and with weight
-        :math:`\\pm 1`, so that the symbol's dimension is that name exactly.  The name is
-        written ``[t]``, which is the usual notation for the dimension of :math:`t`, and
-        is a name rather than an operation: desr has no ``[]`` to apply to an arbitrary
-        expression, only these names and the monomials in them.  Where the
-        weight is :math:`-1` the direction is named by the *other* generator, which is why
-        a sign comes back with the name: both :math:`e_i` and :math:`-e_i` generate the
-        same direction of the lattice, so choosing between them is presentation and
-        changes no matrix.
+        ``[x]`` is read as *the dimension of* :math:`x`, and every symbol has one:
+        :meth:`dimensions_of` gives it, and :meth:`dimension_of` gives it for any
+        monomial in them.  So ``[c]`` means something whether or not it is one of the
+        names chosen here -- on Michaelis-Menten it means ``[e_0]``, because `c` and
+        `e_0` share a dimension.
 
-        A direction with no such symbol -- Hubert & Labahn 6.6 has none at weight
-        :math:`+1`, though `z_1` sits there at :math:`-1` -- falls back to
-        ``[direction 0]``.  That is the only place the row order shows, and it shows
-        precisely when there is nothing better to say.
+        What this chooses is which :math:`r` of those values serve as the
+        **generators** the others are written in.  A generator is taken to be the
+        dimension of a symbol that lives in the direction **alone** and at weight
+        :math:`\\pm 1`, so that the name a reader meets is the dimension of a quantity
+        they can see in their own equations rather than an abstract label, and so
+        that ``[t] = [t]`` holds of the symbol it was named for.  Where the weight is
+        :math:`-1` the direction is generated by the *other* of :math:`\\pm e_i`,
+        which is why a sign comes back with the name: both generate the same direction
+        of the lattice, so choosing between them is presentation and changes no matrix.
+
+        The independent variable is preferred when it qualifies, whichever sign it
+        sits at, because a direction the clock lives in alone is a time and saying so
+        beats naming it after whichever rate constant sorts first.
+
+        A direction with no such symbol -- the row is primitive, but primitive does not
+        mean it holds a :math:`\\pm 1`, and :math:`(2, 3)` holds neither -- falls back
+        to ``[dimension_1]``, counting from one as the scaling factors do.  That label
+        is the one name here that is *not* the dimension of anything: it names a
+        dimension the system has and no symbol of the system measures.  It is also the
+        only place the row order shows.
 
         Returns:
             list: ``(name, sign)`` per row.
@@ -2401,11 +2536,23 @@ class ODESystem(object):
         names = []
         for row in range(rows):
             chosen = None
-            # Weight +1 first, so a direction is named after a symbol that *has* that
-            # dimension rather than its inverse.  Michaelis-Menten's first direction holds
-            # `t` at +1 and `k_2` at -1, and naming it after the rate constant would be
-            # right but backwards to read.
-            for wanted in (1, -1):
+
+            # The independent variable first, whichever way it sits.  A direction the
+            # clock lives in alone is a time, and a reader wants that said in terms of
+            # the clock rather than of whichever rate constant happens to sort first.
+            # Taking it at -1 costs a negated row and nothing else.
+            indep = self.independent_variable
+            if indep in symbols:
+                column = symbols.index(indep)
+                if abs(scaling_matrix[row, column]) == 1 and not any(
+                        scaling_matrix[other, column] != 0
+                        for other in range(rows) if other != row):
+                    chosen = (indep, scaling_matrix[row, column])
+
+            # Otherwise weight +1, so a direction is named after a symbol that *has*
+            # that dimension rather than its inverse.  Michaelis-Menten's second
+            # direction holds `e_0`, `c` and `s` at +1, and any of them would do.
+            for wanted in (() if chosen is not None else (1, -1)):
                 for column in range(columns):
                     if scaling_matrix[row, column] != wanted:
                         continue
@@ -2417,7 +2564,7 @@ class ODESystem(object):
                 if chosen is not None:
                     break
             if chosen is None:
-                names.append((sympy.Symbol('[direction {}]'.format(row)), 1))
+                names.append((sympy.Symbol('[dimension_{}]'.format(row + 1)), 1))
             else:
                 names.append((sympy.Symbol('[{}]'.format(chosen[0])), chosen[1]))
         return names
@@ -2482,6 +2629,142 @@ class ODESystem(object):
                 monomial *= name ** (sign * scaling_matrix[row, column])
             dimensions[symbol] = monomial
         return dimensions
+
+    def dimension_of(self, monomial, scaling_matrix=None):
+        '''
+        The dimension of a monomial in this system's symbols -- the :math:`[x]` that
+        :meth:`dimensions_of` gives for a single symbol, for any product of them.
+
+        Weights add when symbols multiply, so dimensions multiply, and the dimension
+        of a monomial is the product of its factors' dimensions raised to their
+        powers.  An invariant comes back as 1, which is what being dimensionless is.
+
+        Args:
+            monomial (sympy.Expr): A product of the system's symbols and their
+                inverses.
+            scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+
+        Returns:
+            sympy.Expr: a Laurent monomial in the dimension names.
+
+        Raises:
+            ValueError: if `monomial` is not a monomial in this system's symbols.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> e_0, k_1, k_2, t, c = sympy.var('e_0 k_1 k_2 t c')
+        >>> system.dimension_of(c)
+        [e_0]
+        >>> system.dimension_of(k_1 * e_0 * t)
+        1
+
+        That last is an invariant, and every invariant comes back the same way:
+
+        >>> from desr.ode_translation import ODETranslator
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> {system.dimension_of(invariant)
+        ...  for invariant in translator.invariant_monomials()}
+        {1}
+
+        An auxiliary is where the dimensions went, so it is not 1:
+
+        >>> system.dimension_of(1 / (e_0 * k_1))
+        [t]
+        '''
+        powers = monomial_to_powers(sympify_expression(monomial), list(self.symbols))
+        if powers is None:
+            raise ValueError(
+                '{} is not a monomial in this system\'s symbols.'.format(monomial))
+
+        dimensions = self.dimensions_of(scaling_matrix)
+        answer = sympy.Integer(1)
+        for symbol, power in zip(self.symbols, powers):
+            if power:
+                answer *= dimensions[symbol] ** power
+        return sympy.simplify(answer)
+
+    def dimension_matrix(self, scaling_matrix=None):
+        '''
+        The dimensions as a matrix: one row per dimension, one column per symbol.
+
+        Column :math:`j` holds the exponents of :meth:`dimensions_of`'s answer for
+        symbol :math:`j`, so reading a column down the names gives that symbol's
+        dimension with no sign to remember.
+
+        It is the scaling matrix with a row negated wherever that row's name sits at
+        :math:`-1`.  Negating a row of a scaling matrix replaces :math:`\\lambda` by
+        :math:`1/\\lambda` and leaves a scaling matrix, so this is the same content
+        the other way up -- but only this way up do the columns read as dimensions.
+
+        **Which way up a row ends is a choice, and not this method's.**  A direction is
+        named after a symbol that lives in it alone at :math:`\\pm 1`, and several
+        symbols may qualify: Michaelis-Menten's first direction holds `t` at
+        :math:`+1` and both `k_2` and `k_m1` at :math:`-1`, so naming it after a rate
+        constant would negate the row and write every dimension in `1/[k_2]`.
+        :meth:`_dimension_names` settles it -- the independent variable if it is a
+        candidate at all, then weight :math:`+1`, then symbol order -- and this method
+        follows that choice exactly, because :meth:`dimensions_of` already has.  So
+        the arbitrariness here is the one already in the names, and none of it is new.
+
+        Args:
+            scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
+
+        Returns:
+            tuple: ``(names, matrix)``, the names in row order.
+
+        >>> system = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> names, matrix = system.dimension_matrix()
+        >>> names
+        [[t], [e_0]]
+        >>> system.symbols
+        (e_0, k_1, k_2, k_m1, t, c, s)
+        >>> matrix
+        Matrix([
+        [0, -1, -1, -1, 1, 0, 0],
+        [1, -1,  0,  0, 0, 1, 1]])
+
+        The column of `k_1` is :math:`(-1, -1)`, which says :math:`1/([e_0][t])`:
+
+        >>> system.dimensions_of()[sympy.Symbol('k_1')]
+        1/([e_0]*[t])
+
+        Here every name sits at :math:`+1` and the matrix is the scaling matrix
+        unchanged, which is why reading a scaling matrix as dimensions usually
+        appears to work:
+
+        >>> matrix == system.maximal_scaling_matrix()
+        True
+
+        Hubert & Labahn 6.6 is where it does not.  The only symbol at weight
+        :math:`\\pm 1` is :math:`z_1`, at :math:`-1`, so its row is negated:
+
+        >>> hl = ODESystem.from_equations(
+        ...     ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...      'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> hl.maximal_scaling_matrix()
+        Matrix([[3, -1, 5]])
+        >>> names, matrix = hl.dimension_matrix()
+        >>> names
+        [[z1]]
+        >>> matrix
+        Matrix([[-3, 1, -5]])
+
+        >>> hl.symbols
+        (t, z1, z2)
+        >>> hl.dimensions_of()[sympy.Symbol('t')]
+        [z1]**(-3)
+        '''
+        if scaling_matrix is None:
+            scaling_matrix = self.maximal_scaling_matrix()
+        names = self._dimension_names(scaling_matrix)
+
+        rows = [[sign * scaling_matrix[row, column]
+                 for column in range(scaling_matrix.shape[1])]
+                for row, (_, sign) in enumerate(names)]
+        return [name for name, _ in names], sympy.Matrix(rows)
 
 
     def set_dimension(self, symbol, dimension):
@@ -2729,7 +3012,9 @@ class ODESystem(object):
             factor (str or sympy.Symbol): the name of the scaling factor.  `lamda` is
                 sympy's spelling of the greek letter -- `lambda` is a Python keyword and
                 so does not parse -- and it is the spelling that renders as
-                :math:`\\lambda`.
+                :math:`\\lambda`.  Where there is more than one scaling the name is
+                subscripted, because the rows are independent one-parameter groups and
+                one name across all of them would say they were a single group.
 
         Returns:
             list of dict: one per symmetry, in row order, mapping each symbol the
@@ -2741,23 +3026,35 @@ class ODESystem(object):
         >>> for symmetry in system.scaling_symmetries():
         ...     print(',  '.join('{} -> {}'.format(symbol, image)
         ...                      for symbol, image in symmetry.items()))
-        k_1 -> k_1/lamda,  k_2 -> k_2/lamda,  k_m1 -> k_m1/lamda,  t -> lamda*t
-        e_0 -> e_0*lamda,  k_1 -> k_1/lamda,  c -> c*lamda,  s -> lamda*s
+        k_1 -> k_1/lamda_1,  k_2 -> k_2/lamda_1,  k_m1 -> k_m1/lamda_1,  t -> lamda_1*t
+        e_0 -> e_0*lamda_2,  k_1 -> k_1/lamda_2,  c -> c*lamda_2,  s -> lamda_2*s
+
+        A system with one scaling keeps the bare name:
+
+        >>> hl = ODESystem.from_equations(
+        ...     ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...      'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> hl.scaling_symmetries()[0][sympy.Symbol('z1')]
+        z1/lamda
 
         The first is a change of the unit of time, the second of concentration, which is
         what :meth:`dimensions_of` names those directions after.
         """
         if scaling_matrix is None:
             scaling_matrix = self.maximal_scaling_matrix()
-        factor = to_symbol(factor)
+        rows = scaling_matrix.shape[0]
+        name = str(factor)
 
         symmetries = []
-        for row in range(scaling_matrix.shape[0]):
+        for row in range(rows):
+            # One row is one group and gets the bare name; several are several
+            # groups, and sharing a name between them would make them look like one.
+            lamda = to_symbol(name if rows == 1 else '{}_{}'.format(name, row + 1))
             moved = {}
             for column, symbol in enumerate(self.symbols):
                 power = scaling_matrix[row, column]
                 if power:
-                    moved[symbol] = factor ** power * symbol
+                    moved[symbol] = lamda ** power * symbol
             symmetries.append(moved)
         return symmetries
 

@@ -84,39 +84,7 @@ def _original_kinds(system):
     return kinds
 
 
-def _auxiliary_kind(monomial, system):
-    '''
-    Whether an auxiliary sits still or has to be integrated.
-
-    Hubert & Labahn's auxiliary system is :math:`dx/dt = x \\star F(y^{W_\\partial})
-    \\cdot V_i`, and they call it a quadrature: given the reduced system's solution, each
-    auxiliary follows by one integration.  Its integrand is
-    :math:`(z^{-1} \\star dz/dt) \\cdot V_i` -- the logarithmic derivatives of the original
-    symbols, combined by a column of :math:`V_i` -- and a **parameter contributes zero to
-    it**, having no derivative.
-
-    So an auxiliary that is a monomial in the parameters alone has
-    :math:`d(\\log x)/dt = 0`: it is constant, and recovering the original system needs a
-    *constant of integration* rather than an integral.  That is the whole of why the
-    parameter scheme can normalise its auxiliaries to 1 and drop them: its block form puts
-    every column of :math:`V_i` on parameter rows, so every one of them is such a monomial.
-    The paper states the conclusion -- constants there, quadratures in general -- without
-    walking this step.
-
-    Read per auxiliary rather than per scheme, which is finer than the paper needs to be
-    and is what a reduction like the enzyme chain's calls for: three of its auxiliaries are
-    monomials in rate constants and sit still, while the fourth is a species and moves.
-
-    Returns:
-        str: ``'parameter'`` where the quadrature is trivial, ``'dependent'`` where it is
-        not.  The independent variable counts as something that moves, since a monomial
-        containing it is not constant either.
-    '''
-    moving = set(system.variables) | {system.independent_variable}
-    return 'dependent' if monomial.free_symbols & moving else 'parameter'
-
-
-def _reduced_kinds(translator, system, monomials):
+def _reduced_kinds(translator, system):
     '''
     What each column is, in column order.
 
@@ -134,38 +102,13 @@ def _reduced_kinds(translator, system, monomials):
     does, and under the parameter scheme it does not report them at all.  Being an
     auxiliary is orthogonal to being a parameter or a dependent -- the reduced system says
     so itself, listing the enzyme chain's ``x0``, ``x1`` and ``x2`` among its parameters --
-    so the two are carried separately here and :func:`_auxiliary_kind` decides the second.
+    so the two are carried separately here and
+    :meth:`~desr.ode_translation.ODETranslator.auxiliary_kinds` decides the second.
     '''
     roles = translator.column_kinds(system)
-    return [_auxiliary_kind(monomials[column], system) if column < translator.r
-            else role
+    auxiliaries = translator.auxiliary_kinds(system)
+    return [auxiliaries[column] if column < translator.r else role
             for column, role in enumerate(roles)]
-
-
-def _propagated_values(monomials, names, values):
-    '''
-    The values the known original ones force on the reduced symbols.
-
-    One substitution is enough, and is **complete** rather than best-effort: no reduced
-    symbol is a monomial in the other reduced symbols, because the columns of the
-    multiplier are multiplicatively independent -- the multiplier is invertible -- so there
-    is no redundancy on the reduced side to iterate over.
-
-    A monomial need not have all of its symbols known to have a known value.  A zero in a
-    numerator settles it whatever the rest are, which is the case that matters: `c_0 / s_0`
-    is zero for every `s_0` once `c_0` is.  A zero in a *denominator* settles nothing, and
-    is excluded by its value being non-finite rather than by inspecting the exponents --
-    though a reduction that divides by a known zero is refused before it gets here.
-    '''
-    if not values:
-        return {}
-
-    propagated = {}
-    for name, monomial in zip(names, monomials):
-        substituted = monomial.subs(values)
-        if substituted.is_number and substituted.is_finite:
-            propagated[name] = substituted
-    return propagated
 
 
 def symbol_graph(translator, system, direction=FORWARD):
@@ -310,20 +253,20 @@ def symbol_graph(translator, system, direction=FORWARD):
 
     originals = list(translator.symbols_domain)
     names = list(translator.column_names(system))
-    monomials = list(translator.column_monomials())
+    monomials = list(translator.forward_monomials())
 
     original_kinds = _original_kinds(system)
-    reduced_kinds = _reduced_kinds(translator, system, monomials)
+    reduced_kinds = _reduced_kinds(translator, system)
 
     # What each original symbol equals in terms of the reduced ones, the mirror of
-    # `column_monomials`.  Taken from `reverse_translate_parameter` -- which is
+    # `forward_monomials`.  Taken from `reverse_translate_parameter` -- which is
     # `scale_action(variables, inv_herm_mult)` and nothing else, so it applies whatever
     # scheme runs -- rather than indexing the inverse again here.  One place decides that
     # orientation, and it is the one that was always right.
     recoveries = list(translator.reverse_translate_parameter(names))
 
     original_values = dict(system.parameter_values)
-    reduced_values = _propagated_values(monomials, names, original_values)
+    reduced_values = translator.reduced_values(system)
 
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is

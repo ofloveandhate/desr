@@ -214,7 +214,7 @@ class TestWhatTheNodesCarry(TestCase):
 
     def test_the_monomials_are_the_columns(self):
         names = list(self.translator.column_names(self.system))
-        for name, monomial in zip(names, self.translator.column_monomials()):
+        for name, monomial in zip(names, self.translator.forward_monomials()):
             with self.subTest(column=name):
                 self.assertEqual(self.graph.nodes[(REDUCED, name)]['monomial'], monomial)
 
