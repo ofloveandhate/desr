@@ -894,7 +894,7 @@ class ODETranslator(object):
                              'unit_monomial': unit_monomial, 'adopted': adopted})
         return rows
 
-    def units_and_dimensions(self):
+    def num_units_and_dimensions(self):
         """
         How many units this reduction coins, and how many dimensions they measure.
 
@@ -923,7 +923,7 @@ class ODETranslator(object):
         >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
         >>> system = ODESystem.from_equations(equations)
-        >>> ODETranslator.from_ode_system(system).units_and_dimensions()
+        >>> ODETranslator.from_ode_system(system).num_units_and_dimensions()
         {'units': 2, 'dimensions': None}
 
         Michaelis-Menten coins one unit per dimension, so every scaling it admits is a
@@ -931,7 +931,7 @@ class ODETranslator(object):
 
         >>> declared = ODESystem.from_equations(equations)
         >>> declared.set_dimensions({'t': 'time', 'e_0': 'concentration'})
-        >>> ODETranslator.from_ode_system(declared).units_and_dimensions()
+        >>> ODETranslator.from_ode_system(declared).num_units_and_dimensions()
         {'units': 2, 'dimensions': 2}
 
         The enzyme chain coins two more units than it has dimensions:
@@ -941,7 +941,7 @@ class ODETranslator(object):
         ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
         >>> enzyme.set_dimensions({'t': 'time', 'e': 'concentration',
         ...                        'f': 'concentration', 'x': 'concentration'})
-        >>> ODETranslator.from_ode_system(enzyme).units_and_dimensions()
+        >>> ODETranslator.from_ode_system(enzyme).num_units_and_dimensions()
         {'units': 4, 'dimensions': 2}
         """
         system = self._system_or(None)

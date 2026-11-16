@@ -1934,7 +1934,7 @@ class TestUnitTable(TestCase):
         self.assertEqual(3, sum(row['dimension'] == concentration for row in units))
         self.assertEqual(
             {'units': 4, 'dimensions': 2},
-            ODETranslator.from_ode_system(system).units_and_dimensions())
+            ODETranslator.from_ode_system(system).num_units_and_dimensions())
 
     def test_a_value_names_the_symbol_it_measures(self):
         system = self.enzyme()
@@ -1990,14 +1990,14 @@ class TestUnitTable(TestCase):
         self.assertIsNone(dimensions['x1'])
         self.assertEqual(
             {'units': 4, 'dimensions': None},
-            ODETranslator.from_ode_system(system).units_and_dimensions())
+            ODETranslator.from_ode_system(system).num_units_and_dimensions())
 
     def test_every_scaling_michaelis_menten_admits_is_a_change_of_unit(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
         system.set_dimensions({'t': 'time', 'e_0': 'concentration'})
         self.assertEqual(
             {'units': 2, 'dimensions': 2},
-            ODETranslator.from_ode_system(system).units_and_dimensions())
+            ODETranslator.from_ode_system(system).num_units_and_dimensions())
 
     def test_declaring_dimensions_changes_no_row_but_the_dimension(self):
         # Physical dimensions are an overlay.  The symbols, what they denote and their

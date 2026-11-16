@@ -2834,7 +2834,7 @@ class ODESystem(object):
         multiplier, the structural dimensions, or the reduction.  It adds a reading, in
         which :meth:`~desr.ode_translation.ODETranslator.unit_table` names the units a
         reduction coins and
-        :meth:`~desr.ode_translation.ODETranslator.units_and_dimensions` says how many
+        :meth:`~desr.ode_translation.ODETranslator.num_units_and_dimensions` says how many
         dimensions those units measure.
 
         Args:
