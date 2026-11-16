@@ -47,12 +47,14 @@ Run with::
     python examples/reduction_chain.py
 """
 
+import matplotlib
 import matplotlib.pyplot as plt
 import sympy
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from matplotlib.transforms import Bbox
 
-from desr.figures._palette import (INERT, PLAIN, QUIET, UNIT_COLOUR, VALUE_COLOUR)
+from desr.figures._palette import (FONT_RC, INERT, PLAIN, QUIET, UNIT_COLOUR,
+                                   VALUE_COLOUR)
 from desr.ode_translation import ODETranslator
 from desr.symbol_graph import (symbol_graph, draw_symbol_graph, node_positions,
                                ORIGINAL, REDUCED)
@@ -369,9 +371,10 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
     # a column position any of them share.
     headed = Bbox.union([artist.get_window_extent(renderer) for artist in drawn])
     headed = headed.transformed(ax.transData.inverted())
+    # Size alone, no weight: Computer Modern ships no bold face, so asking for one gets
+    # the roman back with a warning.  The flowchart's panel headings are set the same way.
     drawn.append(ax.text((headed.x0 + headed.x1) / 2, headed.y1 + 0.06, title,
-                         fontsize=font + 1.5, weight='bold', ha='center',
-                         va='bottom'))
+                         fontsize=font + 1.5, ha='center', va='bottom'))
 
     _tight_box(ax, drawn, renderer)
     return ax
@@ -416,7 +419,7 @@ def _system_box(figure, rect, title, system, font, note=None):
                                 transform=ax.transAxes, facecolor='#f6f5f2',
                                 edgecolor=INERT, linewidth=0.7, zorder=0,
                                 clip_on=False))
-    ax.text(0.5, 0.95, title, fontsize=font + 1, weight='bold', ha='center',
+    ax.text(0.5, 0.95, title, fontsize=font + 1, ha='center',
             va='top', transform=ax.transAxes)
     lines = summary_lines(system)
     step = 0.66 / max(len(lines), 1)
@@ -519,6 +522,22 @@ def symbol_map_figure(system, title=None, size=None, font=6.5, steps=None,
 
     Returns:
         matplotlib.figure.Figure
+    """
+    # Every artist resolves its font when it is made, so the whole figure is drawn inside
+    # the context rather than only created in it.  The drawing is a function of its own
+    # so that the context wraps it without indenting a hundred lines under a `with`.
+    with matplotlib.rc_context(FONT_RC):
+        return _draw_symbol_map(system, title, size, font, steps, notes)
+
+
+def _draw_symbol_map(system, title, size, font, steps, notes):
+    """
+    The body of :func:`symbol_map_figure`, called with the figure font in force.
+
+    Args: as :func:`symbol_map_figure`, all of them positional, since nothing but that
+        function calls this.
+
+    :rtype: matplotlib.figure.Figure
     """
     notes = dict(notes or {})
     translator = ODETranslator.from_ode_system(system)
