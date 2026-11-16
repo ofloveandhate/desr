@@ -91,7 +91,7 @@ jobs:
           system = ODESystem.from_equations(['dn/dt = n*(r*(1 - n/K) - k*p/(n+d))',
                                              'dp/dt = s*p*(1 - h*p/n)'])
           translator = ODETranslator.from_ode_system(system)
-          assert translator.scheme(system) == ReductionScheme.PARAMETER
+          assert translator.scheme() == ReductionScheme.PARAMETER
           reduced = translator.translate(system)
           assert len(reduced.symbols) == translator.expected_variable_count(system)
           assert reduced.scheme == ReductionScheme.PARAMETER
