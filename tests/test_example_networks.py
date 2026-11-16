@@ -90,5 +90,5 @@ class TestTheExampleReactionNetworks(TestCase):
                                    translator.forward_monomials()))
                 recovered = [
                     sympy.simplify(monomial.subs(forward, simultaneous=True))
-                    for monomial in translator.reverse_monomials(system)]
+                    for monomial in translator.reverse_monomials()]
                 self.assertEqual(list(system.symbols), recovered)

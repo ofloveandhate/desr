@@ -105,8 +105,8 @@ def _reduced_kinds(translator, system):
     so the two are carried separately here and
     :meth:`~desr.ode_translation.ODETranslator.auxiliary_kinds` decides the second.
     '''
-    roles = translator.column_kinds(system)
-    auxiliaries = translator.auxiliary_kinds(system)
+    roles = translator.kinds_per_column()
+    auxiliaries = translator.auxiliary_kinds()
     return [auxiliaries[column] if column < translator.r else role
             for column, role in enumerate(roles)]
 
@@ -252,7 +252,10 @@ def symbol_graph(translator, system, direction=FORWARD):
     direction = _resolved_direction(direction)
 
     originals = list(translator.symbols_domain)
-    names = list(translator.column_names(system))
+    # One name per column.  Under the dependent-variable scheme the scaling leaves the
+    # clock alone, so the reduction keeps it rather than coining a name for it, and
+    # `column_names` is a name short of the columns it would be read against.
+    names = list(translator.names_per_column())
     monomials = list(translator.forward_monomials())
 
     original_kinds = _original_kinds(system)
@@ -266,7 +269,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     recoveries = list(translator.reverse_translate_parameter(names))
 
     original_values = dict(system.parameter_values)
-    reduced_values = translator.propagated_parameter_values(system)
+    reduced_values = translator.propagated_parameter_values()
 
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is

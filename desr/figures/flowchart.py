@@ -742,7 +742,11 @@ def flowchart_panels(system, font):
     """
     translator = ODETranslator.from_ode_system(system)
     old = [_tex(symbol) for symbol in system.symbols]
-    names = list(translator.column_names(system))
+    # One name per column, so that a reduction which keeps the clock -- the
+    # dependent-variable scheme -- labels the clock's column with the clock rather
+    # than being one name short and pairing every column after it with the wrong
+    # symbol.
+    names = list(translator.names_per_column())
     new = [_tex(name) for name in names]
     r = translator.r
 
@@ -799,8 +803,8 @@ def flowchart_panels(system, font):
                [Matrix(W, font, row_labels=new, col_labels=old, row_divider=r,
                        row_colours=kinds),
                 Lines(monomial_lines(system.symbols,
-                                     translator.reverse_monomials(system),
-                                     translator.substitutions(system)),
+                                     translator.reverse_monomials(),
+                                     translator.substitutions()),
                       font)], font)],
 
         [Panel('Reduced system', [Lines(equation_lines(reduced), font)], font,
@@ -822,6 +826,53 @@ def flowchart_panels(system, font):
     return panels, edges
 
 
+#: Point size below which the body text stops being worth setting, and the figure
+#: refuses rather than producing something nobody can read.
+FONT_FLOOR = 4.0
+
+#: How much the font drops on each attempt to fit the page.
+FONT_STEP = 0.25
+
+
+def _overflow(placed, width):
+    """How much wider than `width` the widest row came out, in inches."""
+    if not placed:
+        return 0.0
+    left = min(x for _, x, _ in placed)
+    right = max(x + panel.size[0] for panel, x, _ in placed)
+    return max(0.0, (right - left) - width)
+
+
+def _fitted(system, width, font):
+    """
+    The layout at the largest font no wider than `width`.
+
+    A row too wide to fit makes its panels stack, and when stacking has run out the
+    only thing left is smaller type.  Below :data:`FONT_FLOOR` there is nothing
+    honest to return: a figure that runs off the page looks finished and is not, and
+    a figure set at three points is not readable either.
+
+    Raises:
+        ValueError: when the system does not fit at any legible size.
+    """
+    trial = font
+    while True:
+        rows, edges = flowchart_panels(system, trial)
+        placed, height = _place(rows, width)
+        over = _overflow(placed, width)
+        if not over:
+            return rows, edges, placed, height, trial
+        if trial <= FONT_FLOOR:
+            raise ValueError(
+                'this system does not fit a {:.2f} in page: at {:.2f} point, the '
+                'smallest this figure is set, it needs {:.2f} in.  {} symbols make '
+                'matrices {} columns wide.  Pass a larger `width`, or draw something '
+                'that shows the block structure instead of every entry.'.format(
+                    width + 2 * PAD_IN, trial, width + over, len(system.symbols),
+                    len(system.symbols)))
+        trial = max(FONT_FLOOR, trial - FONT_STEP)
+
+
 def flowchart_figure(system, title=None, width=PAGE_IN, font=6.0):
     """
     The reduction as a loop of matrices, one page-width wide and as tall as it needs.
@@ -830,16 +881,23 @@ def flowchart_figure(system, title=None, width=PAGE_IN, font=6.0):
         system (ODESystem): The system to reduce.
         title (str, optional): A heading.  A journal caption says this instead.
         width (float, optional): Inches.  Defaults to a page's text width.
-        font (float, optional): Point size of the body text.
+        font (float, optional): Point size of the body text, and a starting point
+            rather than a promise: a system too wide for the page is set smaller
+            until it fits, down to :data:`FONT_FLOOR`.
 
     Returns:
         matplotlib.figure.Figure
+
+    Raises:
+        ValueError: when the system does not fit the width at any legible size.  Past
+            a certain number of symbols a page-wide figure of every matrix entry does
+            not exist, and the answer is a different figure rather than a smaller
+            font.
     """
     # Every artist resolves its font when it is made, so the whole figure is built
     # inside the context rather than only created in it.
     with matplotlib.rc_context(FONT_RC):
-        rows, edges = flowchart_panels(system, font)
-        placed, height = _place(rows, width - 2 * PAD_IN)
+        rows, edges, placed, height, font = _fitted(system, width - 2 * PAD_IN, font)
 
         title_h = _line(font + 3) + 0.12 if title else 0.0
         total = height + title_h + 2 * PAD_IN

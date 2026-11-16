@@ -2009,3 +2009,73 @@ class TestUnitTable(TestCase):
                 self.assertEqual(row['denotes'], other['denotes'])
                 self.assertEqual(row['role'], other['role'])
                 self.assertEqual(row['of'], other['of'])
+
+
+class TestNamingTheColumnsWhenTheClockIsKept(TestCase):
+    '''
+    The dependent-variable scheme applies when the scaling leaves the independent
+    variable alone.  The clock is then invariant as it stands, so the reduction keeps
+    it rather than coining a symbol for it -- and ``column_names``, which names what
+    the reduced system gains, is one short of the columns it would be read against.
+
+    Hubert & Labahn 6.4 is that case, and 6.6 is the same shape of system where the
+    scaling does move the clock.
+    '''
+
+    DEP_VAR = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+    GENERAL = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+               'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
+
+    def test_the_scaling_fixes_the_clock_exactly_when_the_scheme_is_dep_var(self):
+        for label, equations, expected in (
+                ('HL 6.4', self.DEP_VAR, ReductionScheme.DEP_VAR),
+                ('HL 6.6', self.GENERAL, ReductionScheme.GENERAL)):
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                translator = ODETranslator.from_ode_system(system)
+                fixed = translator.scaling_matrix[
+                    :, system.independent_variable_index].is_zero_matrix
+                self.assertEqual(expected, translator.scheme(system))
+                self.assertEqual(expected == ReductionScheme.DEP_VAR, fixed)
+
+    def test_there_is_a_name_for_every_column(self):
+        for label, equations in (('HL 6.4', self.DEP_VAR),
+                                 ('HL 6.6', self.GENERAL)):
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                translator = ODETranslator.from_ode_system(system)
+                self.assertEqual(translator.herm_mult.shape[1],
+                                 len(translator.names_per_column()))
+                self.assertEqual(translator.herm_mult.shape[1],
+                                 len(translator.kinds_per_column()))
+
+    def test_the_column_put_back_is_the_one_that_is_the_clock(self):
+        system = ODESystem.from_equations(self.DEP_VAR)
+        translator = ODETranslator.from_ode_system(system)
+        names = translator.names_per_column()
+        monomials = translator.forward_monomials()
+
+        self.assertEqual((sympy.Symbol('x0'), sympy.Symbol('t'),
+                          sympy.Symbol('y0')), names)
+        self.assertEqual(system.independent_variable, monomials[1])
+        self.assertEqual('independent', translator.kinds_per_column()[1])
+
+    def test_the_round_trip_closes_under_the_dependent_variable_scheme(self):
+        system = ODESystem.from_equations(self.DEP_VAR)
+        translator = ODETranslator.from_ode_system(system)
+        forward = dict(zip(translator.names_per_column(),
+                           translator.forward_monomials()))
+        recovered = [sympy.simplify(monomial.subs(forward, simultaneous=True))
+                     for monomial in translator.reverse_monomials()]
+        self.assertEqual(list(system.symbols), recovered)
+
+    def test_the_clock_comes_back_as_itself(self):
+        # What the scheme is for: the scaling does not move t, so t is its own
+        # invariant and the reduced system's clock is the original one.
+        system = ODESystem.from_equations(self.DEP_VAR)
+        translator = ODETranslator.from_ode_system(system)
+        substitutions = translator.substitutions()
+        self.assertEqual(system.independent_variable,
+                         substitutions[system.independent_variable])
+        self.assertEqual(system.independent_variable,
+                         translator.translate(system).independent_variable)

@@ -788,4 +788,4 @@ class TestForwardAndReverseMeanTheSameOnBothClasses(TestCase):
                 self.assertEqual(
                     list(system.symbols),
                     [sympy.simplify(monomial.subs(forward, simultaneous=True))
-                     for monomial in translator.reverse_monomials(system)])
+                     for monomial in translator.reverse_monomials()])
