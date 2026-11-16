@@ -48,10 +48,11 @@ The reduction pipeline flows: `ODESystem` → `ODETranslator` → reduced `ODESy
 The public names are exported from the package, so a whole workflow is one import:
 `from desr import ODESystem, ODETranslator`. `desr/__init__.py` holds the list in
 `__all__`; submodules stay reachable as attributes (`desr.matrix_normal_forms`) for
-everything finer-grained. The numeric names (`NumericTranslation`, `scheme_of`,
+everything finer-grained. The numeric names (`NumericTranslator`,
 `InsufficientKnownValues`, `ConflictingKnownValues`) resolve through a module-level
 `__getattr__` rather than an eager import, because `desr.numerics` needs numpy and
-`import desr` must not. `tests/test_namespace.py` pins both halves of that.
+`import desr` must not. `desr.symbol_graph` and `desr.figures` resolve the same way,
+for networkx and matplotlib. `tests/test_namespace.py` pins both halves of that.
 
 ### Core modules
 
