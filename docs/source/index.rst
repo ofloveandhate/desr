@@ -13,6 +13,9 @@ Contents
 
    examples/example_index
    symbol_kinds
+   three_schemes
+   dimensions
+   figures
    crn_doc
    ode_translation_doc
    ode_system_doc
