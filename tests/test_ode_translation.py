@@ -2329,3 +2329,92 @@ class TestSubstitutionsNameOnlySymbolsTheReducedSystemHas(TestCase):
         self.assertEqual(sympify_expression('x0**3/y0**2'), image)
         self.assertNotEqual(reduced.independent_variable, image)
         self.assertEqual(set(), image.free_symbols - set(reduced.symbols))
+
+
+class TestWhichVocabularyEachReportSpeaks(TestCase):
+    '''
+    There are two sets of names here and they are not the same set.
+
+    The **columns** of the multiplier are all named, whatever a reduction does with
+    them, because that is what lets a column operation refer to one -- so
+    `names_per_column` holds a name for a normalised auxiliary and for an invariant
+    identified with the clock alike.  The **reduced system** carries neither: a
+    normalised auxiliary became the 1 it was set to, and an identified invariant became
+    the clock.
+
+    A report that describes the reduced system must speak the first vocabulary, and
+    `substitutions` once did not: it wrote `t -> y0` for a reduction that had spent the
+    `y0` column on the clock.  This is the sweep that was missing, over every report
+    that claims to name what the reduction produced.
+
+    `reduced_symbols_that_must_not_be_zero` is deliberately **not** in the list.  It
+    reads against `column_names`, as its docstring says and as `symbol_graph` uses it,
+    and it names normalised auxiliaries on purpose -- `desr.numerics` solves for
+    auxiliary values that need not be 1, and a zero one is fatal there whether or not
+    the reduced system carries the symbol.
+    '''
+
+    SYSTEMS = TestSubstitutionsNameOnlySymbolsTheReducedSystemHas.SYSTEMS
+
+    #: Each report that claims to name symbols of the reduced system, and how to get
+    #: the symbols it claims out of what it returns.
+    REPORTS = (
+        ('invariant_names', lambda t: t.invariant_names()),
+        ('auxiliary_names', lambda t: t.auxiliary_names()),
+        ('named_symbols keys', lambda t: tuple(t.named_symbols())),
+        ('symbol_kinds keys', lambda t: tuple(t.symbol_kinds())),
+        ('propagated_parameter_values keys',
+         lambda t: tuple(t.propagated_parameter_values())),
+        ('substitutions images',
+         lambda t: tuple(sympy.Symbol(str(s))
+                         for image in t.substitutions().values()
+                         for s in image.free_symbols)),
+    )
+
+    def systems(self):
+        ''' As the class above, plus the enzyme chain, which is built not written. '''
+        for label, equations in self.SYSTEMS.items():
+            yield label, ODESystem.from_equations(equations)
+        yield 'enzyme chain', ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+
+    def test_every_report_names_only_what_the_reduction_produced(self):
+        for label, system in self.systems():
+            translator = ODETranslator.from_ode_system(system)
+            carried = set(translator.translate(system).symbols)
+            for name, read in self.REPORTS:
+                with self.subTest(system=label, report=name):
+                    stray = set(read(translator)) - carried
+                    self.assertEqual(
+                        set(), stray,
+                        '{} names {}, which the reduced system {} does not carry'.format(
+                            name, ', '.join(sorted(map(str, stray))),
+                            tuple(sorted(map(str, carried)))))
+
+    def test_the_two_vocabularies_really_do_differ(self):
+        # Otherwise the sweep above would be vacuous: if every column name were also a
+        # reduced symbol there would be nothing for a report to get wrong.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        columns = set(translator.names_per_column())
+        carried = set(translator.translate(system).symbols)
+
+        self.assertTrue(columns - carried,
+                        'no column name is absent from the reduced system, so this '
+                        'system cannot show the distinction')
+        # Both kinds of spent column are among them: normalised auxiliaries and the
+        # invariant identified with the clock.
+        for spent in ('x0', 'x1', 'x2', 'y0'):
+            self.assertIn(sympy.Symbol(spent), columns - carried)
+
+    def test_the_zero_report_speaks_the_other_vocabulary_on_purpose(self):
+        # Pinned so that nobody "fixes" it into the reduced system's vocabulary and
+        # quietly drops the auxiliaries desr.numerics has to check.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        translator = ODETranslator.from_ode_system(system)
+        listed = translator.reduced_symbols_that_must_not_be_zero()
+
+        self.assertEqual(set(), set(listed) - set(translator.names_per_column()))
+        self.assertTrue(set(listed) - set(translator.translate(system).symbols))
