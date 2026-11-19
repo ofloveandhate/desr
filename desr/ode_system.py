@@ -843,11 +843,15 @@ class ODESystem(object):
         substitutes.
 
         Empty when nothing was normalised: for an original system, for a general reduction
-        asked not to normalise, and for one with no parameter auxiliary to spend.  It is
-        empty for a parameter reduction too, which discards its auxiliaries rather than
-        recording them -- see
-        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` for
-        that scheme's table.
+        asked not to normalise, and for one with no parameter auxiliary to spend.
+
+        A parameter reduction normalises every auxiliary, so this is where its choice of
+        units is recorded as well.  That it keeps none of the auxiliaries afterwards is a
+        separate fact, and the reason :attr:`auxiliary_names` is empty there; the symbols
+        recorded here are the *original* ones the choice pins, which exist either way.
+        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` is
+        the fuller table for that scheme, giving an image for every original symbol rather
+        than only the pinned ones.
 
         Returns:
             dict: ``{original symbol: 1}``.

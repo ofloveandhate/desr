@@ -2128,14 +2128,17 @@ class ODETranslator(object):
                            + [new_deriv_dict[var] for var in dependents]
                            + [None] * len(new_constants))
 
-        # The parameter scheme normalises its auxiliaries to 1 and discards them, so there
-        # are none to record.
+        # This scheme normalises every auxiliary, so it records the units it chose like
+        # the others do.  The auxiliaries themselves are discarded, which is a separate
+        # fact and the reason `auxiliary_names` is empty here; what `normalisations`
+        # reports is which *original* symbols the choice pins, and those exist either way.
         forward_monomials = (list(scale_action(system.symbols, self.herm_mult_i))
                             + list(scale_action(system.symbols, self.herm_mult_n)))
         reduced_system = ODESystem(new_variables, new_derivatives, indep_var=new_indep,
                                    is_reduced=True,
                                    scheme=ReductionScheme.PARAMETER,
                                    num_scaling_symmetries=self.r,
+                                   normalisations=self.normalisations(),
                                    named_symbols=self._named_symbols_for(
                                        system, ReductionScheme.PARAMETER),
                                    symbol_kinds=self._symbol_kinds_for(
