@@ -2385,9 +2385,10 @@ class ODETranslator(object):
         Args:
             system (ODESystem): System to reduce.
             include_aux_vars (bool): Whether to keep the auxiliary variables.  With
-                :const:`False` this is Hubert & Labahn's remark 3.2, and since it drops
-                every auxiliary without claiming a value for any, the two steps below have
-                nothing to spend and do not run.
+                :const:`False` the reduction drops every auxiliary without claiming a
+                value for any, so the two steps below have nothing to spend and do not
+                run, and the count is :math:`n - r + 1` -- discussed in remark 3.2 of the
+                second arXiv version of desr's own paper.
             normalise_parameters (bool): Whether to set the parameter auxiliaries to 1.
             identify_indep_var (bool): Whether to identify an invariant that has become the
                 independent variable with it.
@@ -2489,9 +2490,8 @@ class ODETranslator(object):
         dynamic = set(system.dependents) | {system.independent_variable}
 
         # Both steps need the auxiliaries to be there to spend: `include_aux_vars=False`
-        # is Hubert & Labahn's remark 3.2, which drops every auxiliary without claiming a
-        # value for any of them, so there is nothing to normalise and nothing to pin a
-        # clock invariant with.
+        # drops every auxiliary without claiming a value for any of them, so there is
+        # nothing to normalise and nothing to pin a clock invariant with.
         normalised_columns, identified_columns = self._dropped_columns(
             system, ReductionScheme.GENERAL, include_aux_vars,
             normalise_parameters, identify_indep_var)
@@ -2823,7 +2823,9 @@ class ODETranslator(object):
             variables (iter of sympy.Expression):
                 :math:`r` constants (auxiliary variables) followed by the independent, dependent and invariant constants.
 
-        Example 7.5 (Prey-predator model) from :cite:`Hubert2013c`.
+        Section 7.5 (Predator-Prey Model) of :cite:`Hubert2013c`.  There is no numbered
+        Example 7.5 in that paper; the model is the one its section 7.5 works through,
+        and its scaling symmetry is determined in that paper's Example 5.2.
 
         .. math::
             \\frac{dn}{dt} = n  \\left( r \\left(1 - \\frac{n}{K} \\right) - \\frac{k p}{n + d} \\right)
@@ -3755,7 +3757,7 @@ class ODETranslator(object):
         '''
         Whether each auxiliary sits still or has to be integrated, in column order.
 
-        Hubert & Labahn's auxiliary system is :math:`dx/dt = x \\star F(y^{W_\\partial})
+        Hubert & Labahn's auxiliary system is :math:`dx/dt = x \\star F(y^{W_d})
         \\cdot V_i`, and they call it a quadrature: given the reduced system's solution,
         each auxiliary follows by one integration.  Its integrand is
         :math:`(z^{-1} \\star dz/dt) \\cdot V_i` -- the logarithmic derivatives of the

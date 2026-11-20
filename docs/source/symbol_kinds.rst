@@ -217,7 +217,7 @@ The difference between those two tables is the difference between recovering the
 system with constants and recovering it with integrals.
 
 :cite:`Hubert2013c` writes the auxiliary system as :math:`\frac{dx}{dt} = x \star
-F(y^{W_\partial}) \cdot V_i` and calls it a quadrature: once the reduced system is solved,
+F(y^{W_d}) \cdot V_i` and calls it a quadrature: once the reduced system is solved,
 each auxiliary follows by one integration.  The integrand is built from the logarithmic
 derivatives of the original symbols, and **a parameter contributes zero to it**, having no
 derivative at all.
