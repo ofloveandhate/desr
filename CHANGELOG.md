@@ -41,6 +41,12 @@ each can be turned off.
     one that does not is refused.
   - A reduced symbol that denotes the original symbol of the same name is
     not a name clash.
+  - An invariant that is one of the original symbols keeps that symbol's
+    name: a dimensionless parameter, a clock the reduction does not rescale,
+    and every symbol of a system with no scaling symmetry, which therefore
+    reduces to itself.  An auxiliary is always given a new name.  Setting
+    `rename_unchanged_symbols` to `True` in the naming scheme gives every
+    invariant a generated name instead.
 
 ### A translator remembers its system
 

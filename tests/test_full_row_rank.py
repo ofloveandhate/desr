@@ -19,40 +19,7 @@ from desr.matrix_normal_forms import normal_hnf_col
 from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslator, ReductionScheme
 
-
-def false_equations(system, reduced):
-    '''
-    The reduced equations that are not true, by the chain rule.
-
-    Each reduced symbol denotes a monomial in the original symbols, and the reduced
-    system gives its rate with respect to the reduced clock.  The original system gives
-    the rate of the same monomial directly.  The two must agree.
-    '''
-    denotes = reduced.named_symbols
-    rates = {symbol: (sympy.Integer(0) if rate is None else rate)
-             for symbol, rate in zip(system.symbols, system.derivatives)}
-    rates[system.independent_variable] = sympy.Integer(1)
-
-    def rate_of(monomial):
-        return sum(sympy.diff(monomial, symbol) * rate for symbol, rate in rates.items())
-
-    clock = reduced.independent_variable
-    clock_rate = rate_of(denotes[clock])
-    wrong = []
-    for symbol, rate in zip(reduced.symbols, reduced.derivatives):
-        if symbol == clock:
-            continue
-        claimed = (sympy.Integer(0) if rate is None
-                   else rate.subs(denotes, simultaneous=True) * clock_rate)
-        if sympy.simplify(rate_of(denotes[symbol]) - claimed) != 0:
-            wrong.append(symbol)
-    return wrong
-
-
-def forget(reduced):
-    ''' The same equations as a plain system, with no record of being a reduction. '''
-    return ODESystem(reduced.symbols, reduced.derivatives,
-                     indep_var=reduced.independent_variable)
+from oracles import false_equations, forget
 
 
 WITH_SYMMETRY = {
@@ -180,6 +147,11 @@ class TestASystemWithNoScalingSymmetry(TestCase):
                 self.assertEqual(len(system.symbols), len(reduced.symbols))
                 self.assertEqual(set(system.symbols), set(reduced.named_symbols.values()))
                 self.assertEqual(0, reduced.num_scaling_symmetries)
+                # And it is the system itself, names included: nothing was changed, so
+                # nothing is renamed.
+                self.assertEqual({symbol: symbol for symbol in system.symbols},
+                                 dict(reduced.named_symbols))
+                self.assertEqual(system, forget(reduced))
 
     def test_the_general_scheme_agrees(self):
         # Hubert & Labahn's general reduction adds the retained clock, so n + 1, and with

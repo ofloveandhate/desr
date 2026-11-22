@@ -49,9 +49,8 @@ Reducing it returns the same system, under the same names:
     >>> twice.named_symbols
     {kappa0: kappa0, kappa1: kappa1, tau: tau, nu0: nu0, nu1: nu1}
 
-Every symbol denotes itself.  The names the second reduction generates coincide with the
-ones already there, and since each means the same quantity in both systems that is not a
-clash.
+Every symbol denotes itself.  An invariant that is one of the original symbols keeps its
+name, and with no symmetry left that is all of them.
 
 
 When an auxiliary is carried
@@ -89,23 +88,30 @@ That freedom is the constant of integration of the quadrature.  It is not a symm
 the first reduction missed: the invariants :math:`y_1, \ldots, y_4` and the clock are
 untouched by it.
 
-Reducing again uses that one symmetry, with :math:`x_3` as its auxiliary, and returns
-the same system under new names.  The names are chosen here so that none repeats:
+Reducing again uses that one symmetry, with :math:`x_3` as its auxiliary:
 
-    >>> names = {'parameters': 'q', 'dependents': 'w', 'auxiliaries': 'u'}
-    >>> second = ODETranslator.from_ode_system(kept, naming_scheme=names).translate(kept)
+    >>> second = ODETranslator.from_ode_system(kept).translate(kept)
     >>> second.named_symbols
-    {tau: tau, u0: x3, w0: y1, w1: y2, w2: y3, w3: y4}
+    {tau: tau, x0: x3, y1: y1, y2: y2, y3: y3, y4: y4}
     >>> second
     dtau/dtau = 1
-    du0/dtau = u0*(-w0 + w1*w3)
-    dw0/dtau = 0
-    dw1/dtau = 0
-    dw2/dtau = w2*(w0 + w0/w2 - w1*w3 - 1)
-    dw3/dtau = w3*(w0 - w1*w3 - w1 + w2/w3)
+    dx0/dtau = x0*(-y1 + y2*y4)
+    dy1/dtau = 0
+    dy2/dtau = 0
+    dy3/dtau = y3*(y1 + y1/y3 - y2*y4 - 1)
+    dy4/dtau = y4*(y1 - y2*y4 - y2 + y3/y4)
 
-Each symbol of the second reduction denotes one symbol of the first, and the equations
-are the same ones written in those names.
+The clock and the four invariants are unchanged and keep their names.  The auxiliary is
+given a new name, as an auxiliary always is: the second reduction has one, so it is
+:math:`x_0`, and it denotes the :math:`x_3` of the first.  The equations are the same
+ones.
+
+A third reduction changes nothing at all, the one auxiliary being :math:`x_0` already:
+
+    >>> again = ODESystem(second.symbols, second.derivatives,
+    ...                   indep_var=second.independent_variable)
+    >>> ODETranslator.from_ode_system(again).translate(again).named_symbols
+    {tau: tau, x0: x0, y1: y1, y2: y2, y3: y3, y4: y4}
 
 
 Summary
@@ -113,5 +119,6 @@ Summary
 
 After one reduction a system has either no scaling symmetry, or only the symmetries
 that rescale an auxiliary it still carries.  In the first case a second reduction is the
-identity.  In the second it is a relabelling.  In neither does the number of symbols or
-the content of the equations change.
+identity.  In the second it renames the auxiliary, by position, and leaves everything
+else as it is.  In neither does the number of symbols or the content of the equations
+change.
