@@ -705,6 +705,20 @@ class NumericTranslator(object):
         way to use a point value of a dependent variable, such as an initial condition for
         a system that has no constant standing for it.
 
+        **An auxiliary the reduced system still carries is read from the series.**  A
+        reduction that normalised its constant auxiliaries and kept one that moves has
+        that one in its solution already, so it counts as known, is returned as given,
+        and is not integrated a second time.  Only what is neither carried nor constant
+        is integrated.
+
+        **A series cannot pass through a point where a rate divides by zero.**  The rate's
+        denominator is evaluated along the samples first, and a zero is refused, because
+        the integrator does not fail on a rate that is not finite -- it never returns.
+        One case is not a singularity and is not refused: a reduction kept in Hubert &
+        Labahn's form writes :math:`y_0 / t` for an invariant :math:`y_0` that is a
+        constant multiple of the clock, which is :math:`0/0` at the origin and a constant
+        everywhere.  That quotient is replaced by its constant.
+
         Args:
             values (dict): Values of variables of the reduced system: the independent
                 variable as an array of times, and every invariant as an array of the same
@@ -747,6 +761,15 @@ class NumericTranslator(object):
         sampled = np.array([np.broadcast_to(np.asarray(values[y], dtype=float), times.shape)
                             for y in self._invariants])
 
+        # An auxiliary the reduced system still carries is in the series already.  A
+        # reduction that normalised its constant auxiliaries and kept one that moves is
+        # the usual case: the constants come from known values, and the one that moves
+        # is read off the solution rather than integrated a second time.
+        carried = {column: values[auxiliary]
+                   for column, auxiliary in enumerate(self._auxiliaries)
+                   if isinstance(auxiliary, sympy.Symbol)
+                   and values.get(auxiliary) is not None}
+
         if auxiliaries is not None:
             start = self._given_auxiliaries(auxiliaries)
         else:
@@ -754,17 +777,30 @@ class NumericTranslator(object):
             self._reject_time_varying(known_values)
             at_first = {self.reduced.independent_variable: times[0]}
             at_first.update(dict(zip(self._invariants, sampled[:, 0])))
+            # Their first values, so that `auxiliaries_from` counts each carried
+            # auxiliary as the equation it is and asks only for what is still free.
+            at_first.update({self._auxiliaries[column]: _first(series)
+                             for column, series in carried.items()})
             constants = [v for v in self._acted if v in self.system.parameters]
             start = self.auxiliaries_from(at_first, known_values, tolerance,
                                           allowed=constants)
 
         rates = self.auxiliary_growth_rates()
-        if all(rate == 0 for rate in rates):
-            # Constant along the series, so they stay scalars; anything rebuilt from them
-            # and a constant invariant is then a scalar too, as a constant should be.
-            return list(start)
-        return self._integrate_auxiliaries(times, sampled, start, rates, invariants_at,
-                                           solver_options)
+        recovered = list(start)
+        # Only what is neither carried nor constant has to be integrated.  A constant
+        # stays a scalar, so anything rebuilt from it and a constant invariant is a
+        # scalar too, as a constant should be.
+        moving = [column for column, rate in enumerate(rates)
+                  if rate != 0 and column not in carried]
+        if moving:
+            integrated = self._integrate_auxiliaries(
+                times, sampled, [start[column] for column in moving],
+                [rates[column] for column in moving], invariants_at, solver_options)
+            for column, series in zip(moving, integrated):
+                recovered[column] = series
+        for column, series in carried.items():
+            recovered[column] = series
+        return recovered
 
     def _integrate_auxiliaries(self, times, sampled, start, rates, invariants_at, options):
         '''Integrate d(log|x|)/dt = H along the solution.  Needs scipy.'''
@@ -779,6 +815,12 @@ class NumericTranslator(object):
             from scipy.interpolate import CubicSpline
             invariants_at = CubicSpline(times, sampled, axis=1)
 
+        # Both before anything is integrated: a rate that is not finite makes the solver
+        # shrink its step for ever rather than fail, so a singular series has to be
+        # caught here or it is never caught at all.
+        rates = self._without_clock_ratios(rates, times, sampled)
+        self._refuse_singular_rates(rates, times, sampled)
+
         rate_of = sympy.lambdify([self.reduced.independent_variable, list(self._invariants)],
                                  list(rates), modules='numpy')
         signs = [np.sign(float(x)) for x in start]
@@ -786,6 +828,14 @@ class NumericTranslator(object):
             raise ValueError(
                 'An auxiliary variable is zero at the first time point, where the change of '
                 'variables is singular, so the solution cannot be translated back.')
+
+        at_start = np.asarray(rate_of(times[0], np.asarray(invariants_at(times[0]))),
+                              dtype=float)
+        if not np.all(np.isfinite(at_start)):
+            raise ValueError(
+                'The rate of an auxiliary variable is not finite at {} = {}, the first '
+                'point of the series, so it cannot be integrated from there.'.format(
+                    self.reduced.independent_variable, times[0]))
 
         integrated = solve_ivp(
             lambda t, u: np.asarray(rate_of(t, np.asarray(invariants_at(t))), dtype=float),
@@ -795,6 +845,83 @@ class NumericTranslator(object):
             raise RuntimeError('Could not integrate the auxiliary variables: {}'.format(
                 integrated.message))
         return [sign * np.exp(row) for sign, row in zip(signs, integrated.y)]
+
+    def _without_clock_ratios(self, rates, times, sampled):
+        '''
+        Rewrite the rates so that an invariant which is a constant multiple of the clock
+        no longer appears divided by it.
+
+        Hubert & Labahn write a system as :math:`t\\,dz/dt = z \\star F`, so a reduction
+        that keeps their form carries a :math:`1/t` in every rate, and an invariant such
+        as :math:`y_0 = k_{23} t` beside it.  The quotient :math:`y_0 / t` is the constant
+        :math:`k_{23}`, but at :math:`t = 0` it is evaluated as :math:`0/0`.  Nothing is
+        singular there; the form only writes it that way.
+
+        Each such invariant is replaced by its constant times the clock, with the
+        constant read off the series at a sample where the clock is not zero, and the
+        :math:`t` then cancels.  An invariant that involves anything which moves is left
+        alone, since its quotient by the clock is not a constant.
+
+        Args:
+            rates (list of sympy.Expr): The growth rates, in the reduced symbols.
+            times (numpy.ndarray): The clock along the series.
+            sampled (numpy.ndarray): The invariants along the series, one row each.
+
+        Returns:
+            list of sympy.Expr
+        '''
+        clock = self.reduced.independent_variable
+        if not self._shares_indep_var:
+            # The clock is itself a rescaled time, so the invariant that was a multiple
+            # of the original one has already been identified with it.
+            return list(rates)
+        away = np.flatnonzero(times != 0)
+        if not len(away):
+            return list(rates)
+        sample = away[0]
+
+        original_clock = self.system.independent_variable
+        constants = set(self.system.parameters)
+        monomials = list(self.reduced.forward_monomials)[self.r:]
+        multiples = {}
+        for row, (invariant, monomial) in enumerate(zip(self._invariants, monomials)):
+            if not isinstance(invariant, sympy.Symbol) or invariant == clock:
+                continue
+            if (monomial / original_clock).free_symbols <= constants:
+                multiples[invariant] = float(sampled[row, sample] / times[sample]) * clock
+        if not multiples:
+            return list(rates)
+        return [sympy.cancel(sympy.together(rate.subs(multiples))) for rate in rates]
+
+    def _refuse_singular_rates(self, rates, times, sampled):
+        '''
+        Refuse a series along which a growth rate divides by zero.
+
+        Read off the rate's own denominator, evaluated along the samples, because that is
+        the exact condition: a system such as Hubert & Labahn 6.6 has a :math:`1/t` in
+        its equations that no rewriting removes, and it cannot be integrated through
+        :math:`t = 0` in any coordinates.
+
+        Raises:
+            ValueError: naming the rate, what it divides by, and where that is zero.
+        '''
+        clock = self.reduced.independent_variable
+        arguments = [clock, list(self._invariants)]
+        for rate in rates:
+            denominator = sympy.denom(sympy.together(rate))
+            if not denominator.free_symbols:
+                continue
+            along = np.broadcast_to(np.asarray(
+                sympy.lambdify(arguments, denominator, modules='numpy')(times, sampled),
+                dtype=float), times.shape)
+            zeros = np.flatnonzero(along == 0)
+            if len(zeros):
+                raise ValueError(
+                    'The auxiliary variables cannot be recovered along this series.  '
+                    'Their rate {} divides by {}, which is zero at {} = {}.  The system '
+                    'is singular there in these variables, so a series has to stay away '
+                    'from that point.'.format(
+                        rate, denominator, clock, times[zeros[0]]))
 
     def _evaluate(self, ordered, exponents, outputs):
         result = {}
@@ -892,7 +1019,24 @@ class NumericTranslator(object):
         lines.append('The reduced system is shared by an entire {}-parameter family of '
                      'original systems, and this does not choose between them.'.format(
                          missing))
-        if missing == 1:
+        if len(candidates) < missing:
+            # Nothing that may be known here can pin what is left.  In a series that
+            # means the remaining freedom moves only things that vary, and a constant
+            # cannot fix those; a list of candidates would be empty or too short, and
+            # offering it would send the caller looking for a value that does not exist.
+            restricted = set(allowed) != set(self._acted)
+            lines.append(
+                '{} that may be known here {} it.'.format(
+                    'Nothing' if not candidates else 'Only {}'.format(
+                        ', '.join(map(str, candidates))),
+                    'fixes' if not candidates else 'can help fix'))
+            if restricted:
+                lines.append(
+                    'A series accepts only constants, and what is still free rescales '
+                    'only quantities that vary.  Compute the auxiliaries at one point '
+                    'with auxiliaries_from(), where a value of any variable may be given, '
+                    'and pass them as auxiliaries=.')
+        elif missing == 1:
             lines.append('Supply the value of one of: {}.'.format(
                 ', '.join(map(str, candidates))))
         else:
