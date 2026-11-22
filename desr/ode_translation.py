@@ -1802,11 +1802,17 @@ class ODETranslator(object):
         changes the choice of auxiliary, which is just as free.  Adding an *auxiliary*
         column anywhere would change :math:`AV`, and is refused.
 
-        **Which columns.**  A column is its monomial, and that is the way to say which one
-        is meant: a sympy expression in the system's own symbols.  Take it from
-        :meth:`invariant_monomials` or :meth:`auxiliary_monomials`, or write it with the
-        symbols of the system.  A string is parsed and an integer is a position; both are
-        accepted, and the position of a column is the thing most likely to be wrong.
+        **Which columns.**  A column can be given by its monomial or by its index, and the
+        two are good for different things.
+
+        The monomial says which column is meant: a sympy expression in the system's own
+        symbols, taken from :meth:`invariant_monomials` or :meth:`auxiliary_monomials` or
+        written out, or a string to be parsed.  It needs no looking up.  It changes when
+        the column does, so after an operation the column answers to its new monomial.
+
+        The index stays put.  That makes it the handle to keep when several operations
+        are applied to the same column in a row: :meth:`column_of` finds it once from the
+        monomial, and the same integer goes on meaning the same column.
 
         Args:
             i: The column to change: its monomial as a sympy expression or a string, or
@@ -1912,6 +1918,16 @@ class ODETranslator(object):
         >>> translator.multiplier_add_columns(second, first, power=-1)
         >>> translator.invariant_monomials()
         Matrix([[t*z1**3, z2/(t**2*z1)]])
+
+        **By index, when chaining.**  Looked up once, the position goes on meaning the
+        same column however its monomial changes:
+
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> column = translator.column_of(z1**2*z2/t)
+        >>> translator.multiplier_add_columns(column, t*z1**3, power=-1)
+        >>> translator.multiplier_negate_column(column)
+        >>> translator.forward_monomials()[column]
+        t**2*z1/z2
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
