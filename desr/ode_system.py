@@ -3465,6 +3465,13 @@ def maximal_scaling_matrix(exprs, variables=None):
     >>> exprs = list(map(sympy.sympify, exprs))
     >>> maximal_scaling_matrix(exprs)
     Matrix([[2, 1, 2]])
+
+    The matrix always has full row rank, by Hubert & Labahn's Proposition 5.1.  When no
+    scaling leaves the expressions invariant it has no rows, and still one column per
+    variable:
+
+    >>> maximal_scaling_matrix([sympy.sympify('z_1 + z_2 + 1')])
+    Matrix(0, 2, [])
     '''
     if variables is None:
         variables = sorted(expressions_to_variables(exprs), key=str)
@@ -3474,18 +3481,23 @@ def maximal_scaling_matrix(exprs, variables=None):
 
     hermite_rform, multiplier_rform = hnf_row(exponent_matrix)
 
-    # Find the non-zero rows at the bottom
-    row_is_zero = [all([i == 0 for i in row]) for row in hermite_rform.tolist()]
-    # Make sure they all come at the end
-    num_nonzero = sum(map(int, row_is_zero))
-    if num_nonzero == 0:
-        return sympy.zeros(1, len(variables))
-    assert hermite_rform[-num_nonzero:, :].is_zero_matrix
-
-    # Make sure we have the right number of columns
+    # Hubert & Labahn, Proposition 5.1: with U*K in row Hermite normal form "having
+    # exactly r zero rows", the maximal scaling matrix is the last r rows of U.
+    num_zero_rows = sum(1 for row in hermite_rform.tolist() if not any(row))
+    num_rows = multiplier_rform.shape[0]
+    # They all come at the end.  Sliced from the front, because `[-0:]` is the whole
+    # matrix and not the last none of it.
+    assert hermite_rform[num_rows - num_zero_rows:, :].is_zero_matrix
     assert multiplier_rform.shape[1] == len(variables)
-    # Return the last num_nonzero rows of the Hermite multiplier
-    return hnf_row(multiplier_rform[-num_nonzero:, :])[0]
+
+    if num_zero_rows == 0:
+        # No scaling leaves these expressions invariant, so the matrix has no rows.  Not
+        # a row of zeros: that would be one scaling parameter that scales nothing, which
+        # is a different statement, and one with rank 0 where the proposition's (i) says
+        # the matrix found is always of full row rank.
+        return sympy.zeros(0, len(variables))
+
+    return hnf_row(multiplier_rform[num_rows - num_zero_rows:, :])[0]
 
 __all__ = ['ODESystem','parse_de','rational_expr_to_exponent_matrix','maximal_scaling_matrix']
 

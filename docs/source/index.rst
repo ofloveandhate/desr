@@ -14,6 +14,8 @@ Contents
    examples/example_index
    symbol_kinds
    three_schemes
+   no_symmetry
+   idempotent
    dimensions
    figures
    crn_doc

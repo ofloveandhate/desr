@@ -32,6 +32,15 @@ each can be turned off.
   - `substitutions()` writes each original symbol in the reduced system's own
     symbols, under every scheme.  It applies both of a reduction's steps, so
     no image names a column the reduction spent.
+  - A system with no scaling symmetry has a scaling matrix with no rows, as
+    Hubert & Labahn's Proposition 5.1 gives it, and its reduction is the
+    identity.  It used to be given a row of zeros, counted as one symmetry,
+    and reduced to equations that were not true.  Reducing a reduced system
+    therefore returns it unchanged.
+  - A scaling matrix passed to `ODETranslator` must have full row rank, and
+    one that does not is refused.
+  - A reduced symbol that denotes the original symbol of the same name is
+    not a name clash.
 
 ### A translator remembers its system
 
