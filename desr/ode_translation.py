@@ -4704,37 +4704,95 @@ class ODETranslator(object):
 
         return sympy.Matrix(columns).T
 
-    ## Determine whether an expression is an invariant or not
     def is_invariant_expr(self, expr, variable_order=None):
         '''
-        Determine whether an expression is an invariant or not
+        Whether an expression is left unchanged by the scaling action.
 
-        Parameters
-        ----------
-        expr : sympy.Expr
-            A symbolic expression which may or may not be an invariant under the scaling action.
-        variable_order : list, tuple
-            An ordered list that determines how the matrix acts on the variables.
+        Each symbol is multiplied by its weight in every row of the scaling matrix --
+        :math:`z_j \\mapsto \\lambda_1^{A_{1j}} \\cdots \\lambda_r^{A_{rj}} z_j` -- and the
+        expression is invariant when that changes nothing.  The test is made on the
+        expression itself, so it holds for any rational expression and not only for a
+        monomial: a sum is invariant exactly when the :math:`\\lambda` cancel from it.
 
-        Returns
-        -------
-        bool
-            True if the expression is an invariant.
+        Args:
+            expr (sympy.Expr or str): The expression to test.  A string is parsed with
+                the library's own convention.
+            variable_order (iter of sympy.Symbol, optional): The symbols the columns of
+                the scaling matrix stand for.  Defaults to :attr:`symbols_domain`.
+
+        Returns:
+            bool
+
+        Raises:
+            ValueError: If the expression mentions a symbol the scaling does not act on,
+                since there is then no weight to give it; if `variable_order` has the
+                wrong length; or if there is no order to read the columns against.
+
+        >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+        >>> system = ODESystem.from_equations(equations)
+        >>> translator = ODETranslator.from_ode_system(system)
+
+        The invariants the reduction finds are invariant, and a bare symbol the scaling
+        moves is not:
+
+        >>> all(translator.is_invariant_expr(m) for m in translator.invariant_monomials())
+        True
+        >>> translator.is_invariant_expr('s')
+        False
+
+        A sum can be invariant without being a monomial.  The two concentrations scale
+        together, so their sum scales with them, and dividing by a third undoes it:
+
+        >>> translator.is_invariant_expr('c + s')
+        False
+        >>> translator.is_invariant_expr('(c + s)/e_0')
+        True
+
+        A symbol the scaling knows nothing about is refused rather than guessed at:
+
+        >>> translator.is_invariant_expr('s/q')
+        Traceback (most recent call last):
+            ...
+        ValueError: The scaling does not act on q, so whether s/q is invariant is not something it can say.  It acts on e_0, k_1, k_2, k_m1, t, c, s.
         '''
         if variable_order is not None:
             variable_order = tuple(variable_order)
             if len(variable_order) != self.n:
-                raise ValueError('{} variables given but we have {} actions'.format(len(variable_order), self.n))
+                raise ValueError(
+                    '{} variables given but the scaling matrix has {} columns'.format(
+                        len(variable_order), self.n))
         else:
             if self.symbols_domain is None:
-                raise ValueError('No variable order found to determine invariance.')
-            variable_order = self.symbols_domain
+                raise ValueError(
+                    'This translator was built from a bare matrix, so there is no order '
+                    'to read its columns against.  Pass variable_order.')
+            variable_order = tuple(self.symbols_domain)
 
-        missing_var = set(variable_order).difference(expr.atoms(sympy.Symbol))
-        if len(missing_var):
-            raise ValueError('Unknown action on variables: {}'.format())
+        if isinstance(expr, str):
+            expr = sympify_expression(expr)
+        expr = sympy.sympify(expr)
 
-        raise NotImplemented()
+        unknown = expr.free_symbols - set(variable_order)
+        if unknown:
+            raise ValueError(
+                'The scaling does not act on {}, so whether {} is invariant is not '
+                'something it can say.  It acts on {}.'.format(
+                    ', '.join(sorted(map(str, unknown))), expr,
+                    ', '.join(map(str, variable_order))))
+
+        # Dummies, so that no symbol of the caller's can be mistaken for a scale, and
+        # positive, so that sympy will combine their powers.
+        scales = [sympy.Dummy('lambda', positive=True) for _ in range(self.r)]
+        scaled = {}
+        for column, symbol in enumerate(variable_order):
+            factor = sympy.Integer(1)
+            for row, scale in enumerate(scales):
+                factor *= scale ** self.scaling_matrix[row, column]
+            scaled[symbol] = factor * symbol
+
+        difference = expr.subs(scaled, simultaneous=True) - expr
+        return sympy.simplify(sympy.cancel(sympy.together(difference))) == 0
 
 
 
