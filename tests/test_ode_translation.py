@@ -2466,3 +2466,139 @@ class TestWhichVocabularyEachReportSpeaks(TestCase):
 
         self.assertEqual(set(), set(listed) - set(translator.names_per_column()))
         self.assertTrue(set(listed) - set(translator.translate(system).symbols))
+
+
+class TestTheClockIsNotAlsoAnAuxiliary(TestCase):
+    '''
+    The general scheme applies when the scaling moves the independent variable, so a
+    basis for the directions it moves may simply contain `t`.  Keeping that column as
+    an auxiliary gives the reduced system a second name for a variable it already
+    carries, and `dx0/dt = x0/t`, which is `dt/dt = 1` twice over.
+
+    It is not a cosmetic duplicate.  The library offers auxiliaries as the directions a
+    caller may choose units along, and :mod:`desr.numerics` will solve for values that
+    need not be 1.  This one is not free: give it anything but the clock's value and the
+    round trip returns a different original system, with no error raised.  Identifying
+    it with the clock, as an invariant in the same position already was, is the fix.
+    '''
+
+    #: Smallest case, and three more.  All general-scheme, all with `t` in `V_i`.
+    AFFECTED = {
+        'c z^3': ['dz/dt = c*z**3'],
+        'c z^3 / t': ['dz/dt = c*z**3/t'],
+        'c z^2 / t': ['dz/dt = c*z**2/t'],
+        'c t z^2': ['dz/dt = c*t*z**2'],
+    }
+
+    #: Unaffected, and reductions whose shape this must not disturb.
+    UNAFFECTED = {
+        'mm two variable': ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                            'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'],
+        'HL 6.6': ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                   'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'],
+        'HL 6.4': ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'],
+        'decay': ['dn/dt = -n/tc'],
+    }
+
+    def test_no_two_symbols_denote_the_same_quantity(self):
+        for label, equations in dict(self.AFFECTED, **self.UNAFFECTED).items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                reduced = ODETranslator.from_ode_system(system).translate(system)
+                denotations = list(reduced.named_symbols.values())
+                self.assertEqual(
+                    len(denotations), len(set(denotations)),
+                    'two symbols of {} denote the same monomial'.format(
+                        tuple(map(str, reduced.symbols))))
+
+    def test_the_clock_column_is_not_kept_as_an_auxiliary(self):
+        for label, equations in self.AFFECTED.items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                translator = ODETranslator.from_ode_system(system)
+                t = system.independent_variable
+
+                # The multiplier does put the clock in the auxiliary block; that is the
+                # premise, and if it stopped being true this test would pass vacuously.
+                self.assertIn(t, list(translator.auxiliary_monomials()))
+
+                reduced = translator.translate(system)
+                self.assertNotIn(t, [reduced.named_symbols[name]
+                                     for name in reduced.auxiliary_names])
+                self.assertEqual(t, reduced.independent_variable)
+                self.assertEqual(t, reduced.named_symbols[t])
+
+    def test_the_clock_keeps_its_name_because_it_still_denotes_t(self):
+        # Identifying an auxiliary that is `t` outright changes no denotation, so the
+        # rename to `tau` must not fire.  Contrast the enzyme chain, where an *invariant*
+        # `k_2_3*t` is identified and the clock does become a rescaled time.
+        system = ODESystem.from_equations(['dz/dt = c*z**3'])
+        reduced = ODETranslator.from_ode_system(system).translate(system)
+        self.assertEqual(sympy.Symbol('t'), reduced.independent_variable)
+
+        enzyme = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        other = ODETranslator.from_ode_system(enzyme).translate(enzyme)
+        self.assertEqual(sympy.Symbol('tau'), other.independent_variable)
+
+    def test_it_composes_with_normalisation(self):
+        # `a*b*z**3` has auxiliaries (b, t, z): one normalised to 1, one the clock, one
+        # kept.  The two ways of spending a column have to compose.
+        system = ODESystem.from_equations(['dz/dt = a*b*z**3'])
+        translator = ODETranslator.from_ode_system(system)
+        self.assertIn(system.independent_variable,
+                      list(translator.auxiliary_monomials()))
+        self.assertTrue(translator.normalisations())
+
+        reduced = translator.translate(system)
+        self.assertEqual(1, len(reduced.auxiliary_names))
+        self.assertEqual(system.independent_variable, reduced.independent_variable)
+
+    def test_a_reduction_can_end_with_no_auxiliaries_at_all(self):
+        # `z**3/t` has r = 1 and its single auxiliary is the clock, so the reduced system
+        # keeps none -- a count of n + 1 - 1 for a reason that is not normalisation.
+        system = ODESystem.from_equations(['dz/dt = z**3/t'])
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(1, translator.r)
+        self.assertEqual([system.independent_variable],
+                         list(translator.auxiliary_monomials()))
+
+        reduced = translator.translate(system)
+        self.assertEqual((), reduced.auxiliary_names)
+        self.assertEqual(translator.expected_variable_count(system),
+                         len(reduced.symbols))
+
+    def test_the_recovery_no_longer_has_a_free_variable_that_is_not_free(self):
+        # What the duplicate cost.  `x0` denoted `t`, but nothing tied them, so a caller
+        # choosing an auxiliary value -- which is what auxiliaries are for -- got a
+        # different original system back and no error.  With `x0` gone there is no such
+        # knob to turn.
+        from desr.numerics import NumericTranslator
+
+        system = ODESystem.from_equations(['dz/dt = c*z**3'])
+        translator = ODETranslator.from_ode_system(system)
+        reduced = translator.translate(system)
+        numeric = NumericTranslator(reduced)
+
+        original = {sympy.Symbol('c'): 2.0, sympy.Symbol('t'): 3.0,
+                    sympy.Symbol('z'): 1.5}
+        recovered = numeric.reverse(numeric.forward(original))
+        for symbol, value in original.items():
+            self.assertAlmostEqual(value, float(recovered[symbol]), places=9)
+
+        self.assertNotIn(sympy.Symbol('x0'), reduced.symbols)
+
+    def test_numerics_does_not_list_the_clock_among_the_auxiliaries(self):
+        # The column's monomial is `t`, and the reduced symbol denoting `t` is the clock,
+        # so resolving auxiliaries by monomial lands on it.  Its value is known, which is
+        # right; calling it an auxiliary is not.
+        from desr.numerics import NumericTranslator
+
+        for label, equations in dict(self.AFFECTED, **self.UNAFFECTED).items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                reduced = ODETranslator.from_ode_system(system).translate(system)
+                numeric = NumericTranslator(reduced)
+                self.assertNotIn(reduced.independent_variable, numeric.auxiliary_names)
+                self.assertEqual(tuple(reduced.auxiliary_names),
+                                 tuple(numeric.auxiliary_names))

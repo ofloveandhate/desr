@@ -83,11 +83,13 @@ class TestODESystemScaling(TestCase):
 
         ## By default y0 is identified with t -- its monomial is t itself -- so the
         ## equation dy0/dt = y0/t becomes dt/dt = 1, which the system already has.
-        ## The clock is called tau once that identification is made: it now denotes y0's
-        ## monomial rather than the system's own t, and the two are different quantities
-        ## wherever y0 is not t itself.
+        ## The clock keeps the name t, because y0's monomial is t itself and identifying
+        ## the two changes what nothing denotes.  The name follows the denotation, not the
+        ## fact of an identification: tau is for a clock that has become a rescaled time.
         default = translator.translate_general(system)
-        self.assertEqual(('tau', 'x0', 'y1'), tuple(map(str, default.symbols)))
+        self.assertEqual(('t', 'x0', 'y1'), tuple(map(str, default.symbols)))
+        self.assertEqual(system.independent_variable,
+                         default.named_symbols[default.independent_variable])
 
         ## Test reverse translating
         t_var, c1_var, c2_var = sympy.var('t c1 c2')
