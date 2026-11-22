@@ -432,6 +432,34 @@ class ODETranslator(object):
         if (symbols_domain is not None) and (self.n != len(self.symbols_domain)):
             raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.symbols_domain), self.n))
 
+        # Hubert & Labahn assume a scaling matrix of full row rank from section 2.1 on:
+        # it is what gives a unimodular multiplier with A*V = [H, 0] and H of full rank,
+        # and so what makes the number of rows the number of scaling symmetries.  A zero
+        # row, or a row that repeats or combines others, is a scaling parameter that adds
+        # no scaling; counting it as a symmetry reduces by one that is not there, and the
+        # reduced equations come out false.  A matrix with no rows passes -- its rank is
+        # its row count -- and is what a system with no scaling symmetry has.
+        rank = scaling_matrix.rank()
+        if rank != scaling_matrix.rows:
+            extra = scaling_matrix.rows - rank
+            if rank == 0:
+                remedy = ('It defines no scaling at all.  The scaling matrix of a system '
+                          'with no scaling symmetry has no rows: sympy.zeros(0, {}).'
+                          .format(scaling_matrix.cols))
+            else:
+                remedy = ('Supply {} independent row{} -- the nonzero rows of its row '
+                          'Hermite normal form are such a set.'.format(
+                              rank, '' if rank == 1 else 's'))
+            raise ValueError(
+                'The scaling matrix has {rows} row{s} but rank {rank}, and it must have '
+                'full row rank: each row is taken as one scaling symmetry, and {extra} of '
+                'these {adds} no scaling the others do not already give.  {remedy}  '
+                'A translator built with from_ode_system computes a matrix of full row '
+                'rank.'.format(
+                    rows=scaling_matrix.rows, s='' if scaling_matrix.rows == 1 else 's',
+                    rank=rank, extra=extra, adds='adds' if extra == 1 else 'add',
+                    remedy=remedy))
+
         if hermite_multiplier is not None:
             determinant = hermite_multiplier.det()
             if abs(determinant) != 1:
@@ -585,21 +613,21 @@ class ODETranslator(object):
         Returns:
             str: The scaling matrix :math:`A`, the Hermite multiplier :math:`V` and :math:`W = V^{-1}`, in beautiful LaTeX.
 
-        >>> print(ODETranslator(sympy.Matrix(range(12)).reshape(3, 4)).to_tex())
+        Hubert & Labahn's example 6.4, in the symbols :math:`(t, z_1, z_2)`:
+
+        >>> system = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
+        ...                                    'dz2/dt = z2*(1/t - z1*z2)'])
+        >>> print(ODETranslator.from_ode_system(system).to_tex())
         A=
-        0 & 1 & 2 & 3 \\\\
-        4 & 5 & 6 & 7 \\\\
-        8 & 9 & 10 & 11 \\\\
+        0 & -1 & 1 \\\\
         V=
-        -1 & 1 & 2 & 1 \\\\
-        1 & 0 & -3 & -2 \\\\
-        0 & 0 & 0 & 1 \\\\
-        0 & 0 & 1 & 0 \\\\
+        0 & 1 & 0 \\\\
+        -1 & 0 & 1 \\\\
+        0 & 0 & 1 \\\\
         W=
-        0 & 1 & 2 & 3 \\\\
-        1 & 1 & 1 & 1 \\\\
-        0 & 0 & 0 & 1 \\\\
-        0 & 0 & 1 & 0 \\\\
+        0 & -1 & 1 \\\\
+        1 & 0 & 0 \\\\
+        0 & 0 & 1 \\\\
 
         '''
         to_print = (self.scaling_matrix, self.herm_mult, self.inv_herm_mult)
@@ -719,18 +747,21 @@ class ODETranslator(object):
         rectangular and inverting it fails with a `NonSquareMatrixError` from somewhere
         further on, which says nothing useful.
 
-        >>> translator = ODETranslator(sympy.Matrix(range(12)).reshape(3, 4))
+        Hubert & Labahn's example 6.4, whose scaling leaves the independent variable
+        alone.  The symbols are :math:`(t, z_1, z_2)`, so its index is 0:
+
+        >>> system = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
+        ...                                    'dz2/dt = z2*(1/t - z1*z2)'])
+        >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.herm_mult
         Matrix([
-        [-1, 1,  2,  1],
-        [ 1, 0, -3, -2],
-        [ 0, 0,  0,  1],
-        [ 0, 0,  1,  0]])
-        >>> translator.dep_var_herm_mult(2)
+        [ 0, 1, 0],
+        [-1, 0, 1],
+        [ 0, 0, 1]])
+        >>> translator.dep_var_herm_mult(0)
         Matrix([
-        [-1, 1,  2],
-        [ 1, 0, -3],
-        [ 0, 0,  1]])
+        [-1, 1],
+        [ 0, 1]])
         '''
         new_herm_mult = self.herm_mult.copy()
         col_to_delete = new_herm_mult[indep_var_index, :]
@@ -749,18 +780,20 @@ class ODETranslator(object):
             sympy.Matrix:
                 The inverse Hermite multiplier :math:`W`, ignoring the independent variable.
 
-        >>> translator = ODETranslator(sympy.Matrix(range(12)).reshape(3, 4))
+        Hubert & Labahn's example 6.4 again, with the independent variable at index 0:
+
+        >>> system = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
+        ...                                    'dz2/dt = z2*(1/t - z1*z2)'])
+        >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.inv_herm_mult
         Matrix([
-        [0, 1, 2, 3],
-        [1, 1, 1, 1],
-        [0, 0, 0, 1],
-        [0, 0, 1, 0]])
-        >>> translator.dep_var_inv_herm_mult(2)
+        [0, -1, 1],
+        [1,  0, 0],
+        [0,  0, 1]])
+        >>> translator.dep_var_inv_herm_mult(0)
         Matrix([
-        [0, 1, 3],
-        [1, 1, 1],
-        [0, 0, 1]])
+        [-1, 1],
+        [ 0, 1]])
         '''
         if indep_var_index not in self._dep_var_inv_herm_mult_cache:
             self._dep_var_inv_herm_mult_cache[indep_var_index] = \
@@ -851,7 +884,11 @@ class ODETranslator(object):
             if not all(value.is_integer for value in solution):
                 continue
             if block * solution == exponents:
-                unit = sympy.prod([name ** solution[index]
+                # `Mul`, not `prod`: with no auxiliaries the product is empty, and an
+                # empty `prod` is the Python integer 1, which has none of an
+                # expression's methods.  Measured in units of 1 is the right answer
+                # there -- the invariant is the symbol itself.
+                unit = sympy.Mul(*[name ** solution[index]
                                    for index, name in enumerate(auxiliaries)])
                 return candidate, unit
         return None, None
@@ -3358,19 +3395,28 @@ class ODETranslator(object):
         `p`, and ``naming_scheme={'dependents': ['n', 'p']}`` is how to reproduce that.  So
         an explicit entry of the naming scheme is exempt.
 
-        The independent variable is exempt too, and the test for it is the thing this
-        whole check is about: the clock is skipped only when the reduced system's clock
-        *is* the original one, which is what :meth:`_clock_name_for` arranges by leaving
-        the name alone exactly then.  A reduction whose clock denotes something else has
-        renamed it by that point, so there is no shared spelling here to forgive.
+        **A shared name that denotes the same quantity is not a clash.**  What is refused
+        is one spelling for two quantities, so a reduced symbol whose monomial is the
+        original symbol of that name passes: both systems mean one thing by it.  That is
+        the clock whenever it comes through the reduction as itself, which
+        :meth:`_clock_name_for` arranges by leaving the name alone exactly then.  It is
+        also every symbol of a system that has no scaling symmetry, whose reduction is the
+        identity -- which is what lets a reduced system be reduced again and come back
+        unchanged rather than be refused for agreeing with itself.
+
+        A caller who set `independent`, including to :const:`None`, has chosen the
+        clock's name and is not second-guessed here.
 
         Raises:
             ValueError: naming the clashing symbols and the way out.
         '''
-        shared = set(system.symbols) & set(reduced_system.symbols)
+        denotes = reduced_system.named_symbols or {}
+        shared = {symbol
+                  for symbol in set(system.symbols) & set(reduced_system.symbols)
+                  if denotes.get(symbol) != symbol}
         shared -= self._names_given_explicitly()
-        if reduced_system.independent_variable == system.independent_variable:
-            shared.discard(system.independent_variable)
+        if 'independent' in self._naming_scheme:
+            shared.discard(reduced_system.independent_variable)
         if not shared:
             return
 
