@@ -513,10 +513,15 @@ class ODETranslator(object):
         :rtype: sympy.Expr
         '''
         identified, clock_auxiliaries = set(identified), set(clock_auxiliaries)
+        # Against `system.symbols`, not the *_monomials() accessors: those fall back to
+        # placeholder names on a translator built from a bare matrix, and a monomial in
+        # placeholders never equals the system's clock, so the name would be decided by
+        # how the translator was made rather than by what the clock denotes.
         if identified:
-            return list(self.invariant_monomials())[min(identified)]
+            return list(scale_action(system.symbols, self.herm_mult_n))[min(identified)]
         if clock_auxiliaries:
-            return list(self.auxiliary_monomials())[min(clock_auxiliaries)]
+            return list(scale_action(system.symbols,
+                                     self.herm_mult_i))[min(clock_auxiliaries)]
         return system.independent_variable
 
     def _clock_name_for(self, system, identified, clock_auxiliaries=()):

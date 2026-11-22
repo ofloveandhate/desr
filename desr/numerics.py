@@ -224,16 +224,20 @@ class NumericTranslator(object):
         '''
         tuple: The auxiliaries of the reduced system, empty if it carries none.
 
-        *symbols*, not *variables*: an auxiliary is a normalised direction and may be a
         An auxiliary the reduction normalised is not named here, having no symbol in the
         reduced system to be named by; :attr:`~desr.ode_system.ODESystem.normalisations`
-        is where those are reported.  So this can be shorter than :attr:`r`.
+        is where those are reported.  Nor is one the reduction identified with the
+        independent variable: its value is the clock's, and the clock is not an auxiliary.
+        So this can be shorter than :attr:`r`, and it agrees with the reduced system's own
+        :attr:`~desr.ode_system.ODESystem.auxiliary_names`.
 
         *symbols*, not *variables*: an auxiliary is a normalised direction and may be a
         parameter of the reduced system rather than something that varies -- under the
         general scheme they usually are, being monomials in the original parameters.
         '''
-        return tuple(x for x in self._auxiliaries if isinstance(x, sympy.Symbol))
+        clock = self.reduced.independent_variable
+        return tuple(x for x in self._auxiliaries
+                     if isinstance(x, sympy.Symbol) and x != clock)
 
     @property
     def invariant_names(self):

@@ -2587,3 +2587,18 @@ class TestTheClockIsNotAlsoAnAuxiliary(TestCase):
             self.assertAlmostEqual(value, float(recovered[symbol]), places=9)
 
         self.assertNotIn(sympy.Symbol('x0'), reduced.symbols)
+
+    def test_numerics_does_not_list_the_clock_among_the_auxiliaries(self):
+        # The column's monomial is `t`, and the reduced symbol denoting `t` is the clock,
+        # so resolving auxiliaries by monomial lands on it.  Its value is known, which is
+        # right; calling it an auxiliary is not.
+        from desr.numerics import NumericTranslator
+
+        for label, equations in dict(self.AFFECTED, **self.UNAFFECTED).items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                reduced = ODETranslator.from_ode_system(system).translate(system)
+                numeric = NumericTranslator(reduced)
+                self.assertNotIn(reduced.independent_variable, numeric.auxiliary_names)
+                self.assertEqual(tuple(reduced.auxiliary_names),
+                                 tuple(numeric.auxiliary_names))
