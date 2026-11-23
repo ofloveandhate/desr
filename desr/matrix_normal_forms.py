@@ -900,91 +900,57 @@ def smith_normal_form(matrix_):
     [0, 10, 0],
     [0,  0, 0]])
     """
-    matrix_ = matrix_.copy()
-    transformed = matrix_.copy()
+    # Elimination on the trailing block, one diagonal entry at a time.  For entry k:
+    # bring the nonzero entry of least absolute value in the block to (k, k); subtract
+    # multiples of row k and column k from the others, which leaves remainders smaller
+    # than the pivot; repeat until row k and column k are clear.  If the pivot then fails
+    # to divide some entry of the remaining block, add that entry's row to row k and
+    # repeat -- the next pivot is smaller, so this ends.  Every step is a unimodular row
+    # or column operation, applied to U or V as it is applied to the matrix.
+    smith = matrix_.copy()
+    rows, columns = smith.shape
+    row_actions = sympy.eye(rows)
+    col_actions = sympy.eye(columns)
 
-    if is_smith_normal_form(transformed):
-        row_actions = sympy.eye(matrix_.shape[0])
-        col_actions = sympy.eye(matrix_.shape[1])
-        return transformed, row_actions, col_actions
+    for k in range(min(rows, columns)):
+        while True:
+            candidates = [(abs(smith[i, j]), i, j)
+                          for i in range(k, rows) for j in range(k, columns)
+                          if smith[i, j] != 0]
+            if not candidates:
+                break
+            _, i, j = min(candidates)
+            smith.row_swap(k, i)
+            row_actions.row_swap(k, i)
+            smith.col_swap(k, j)
+            col_actions.col_swap(k, j)
+            pivot = smith[k, k]
 
-    # First make a pivot in the top left corner.
-    #
-    # The Havas-Majewski-Matthews helpers, not the public ones: this uses a Hermite normal
-    # form as a *subroutine* and needs the pivot in the top-left corner so that the
-    # recursion below can work on transformed[1:, 1:].  The form desr reports puts pivots in
-    # the bottom-right instead -- see :data:`_CONVENTION` -- which would leave the recursion
-    # chewing on the wrong block.  The Smith normal form itself is diagonal with each entry
-    # dividing the next, so it does not depend on which Hermite convention got it there, and
-    # this function's answer is the same either way.
-    transformed, row_actions = _hnf_row_hmm(transformed)
-    transformed, col_actions = _hnf_col_hmm(transformed)
-
-    # Now put the lower block into Smith normal form
-    block, _row_actions, _col_actions = smith_normal_form(transformed[1:, 1:])
-
-    # Compose the row and column actions found
-    row_actions = row_actions * expand_matrix(_row_actions)
-    col_actions = expand_matrix(_col_actions) * col_actions
-    transformed[1:, 1:] = block
-    assert row_actions * matrix_ * col_actions == transformed
-
-    # Now make sure the pivot is in the right place
-    for i in range(min(*transformed.shape) - 1):
-        if transformed[i+1,i+1] == 0:
-            break
-        # Move the pivot entry down if it's 0
-        if transformed[i,i] == 0:
-            transformed, row_actions = _swap_ij_rows([transformed, row_actions], i, i+1)
-            transformed, col_actions = _swap_ij_cols([transformed, col_actions], i, i+1)
-
-    assert row_actions * matrix_ *  col_actions == transformed
-    assert transformed[1:, 0].is_zero_matrix
-    assert transformed[0, 1:].is_zero_matrix
-
-    # Enforce diagonal entries to divide the next diagonal entry
-    for i in range(min(*transformed.shape) - 1):
-        assert row_actions * matrix_ * col_actions == transformed
-        if transformed[i+1,i+1] == 0:
-            break
-
-        # If we don't have division, ensure we do
-        if transformed[i+1,i+1] % transformed[i,i]:
-            # If we have division in the wrong order, just swap them around
-            if not transformed[i,i] % transformed[i+1,i+1]:
-                transformed, row_actions = _swap_ij_rows([transformed, row_actions], i, i + 1)
-                transformed, col_actions = _swap_ij_cols([transformed, col_actions], i, i + 1)
-                # Reset the counter
-                i = 0
+            for i in range(k + 1, rows):
+                multiple = smith[i, k] // pivot
+                if multiple:
+                    smith[i, :] = smith[i, :] - multiple * smith[k, :]
+                    row_actions[i, :] = row_actions[i, :] - multiple * row_actions[k, :]
+            for j in range(k + 1, columns):
+                multiple = smith[k, j] // pivot
+                if multiple:
+                    smith[:, j] = smith[:, j] - multiple * smith[:, k]
+                    col_actions[:, j] = col_actions[:, j] - multiple * col_actions[:, k]
+            if not (smith[k + 1:, k].is_zero_matrix and smith[k, k + 1:].is_zero_matrix):
                 continue
 
-            # Add one of column i+1 to column i, and perform a row reduction to get the hcf
-            transformed[:, i] += transformed[:, i+1]
-            col_actions[:, i] += col_actions[:, i+1]
-            assert row_actions * matrix_ * col_actions == transformed
+            undivided = [i for i in range(k + 1, rows) for j in range(k + 1, columns)
+                         if smith[i, j] % pivot]
+            if not undivided:
+                break
+            smith[k, :] = smith[k, :] + smith[undivided[0], :]
+            row_actions[k, :] = row_actions[k, :] + row_actions[undivided[0], :]
 
-            # The Havas-Majewski-Matthews helper again, for the same reason as above: the
-            # reduction that follows reads the pivot at transformed[i, i].
-            transformed, _row_actions = _hnf_row_hmm(transformed)
-            row_actions = _row_actions * row_actions
-            assert row_actions * matrix_ * col_actions == transformed
+        if smith[k, k] < 0:
+            smith[k, :] = -smith[k, :]
+            row_actions[k, :] = -row_actions[k, :]
 
-            # Now subtract the right multiple of column i from column i+1
-            assert (transformed[i, i+1] % transformed[i, i]) == 0
-            multiple = int(transformed[i, i+1] / transformed[i, i])
-            transformed[:, i+1] -= multiple * transformed[:, i]
-            col_actions[:, i+1] -= multiple * col_actions[:, i]
-            assert row_actions * matrix_ * col_actions == transformed
-
-            # Reset the loop, so we check from the beginning of the diagonal.
-            i = 0
-
-    # _prod = row_actions * matrix_ *  col_actions
-    assert row_actions * matrix_ *  col_actions == transformed
-
-    assert is_smith_normal_form(transformed)
-    return transformed, row_actions, col_actions
-
+    return smith, row_actions, col_actions
 
 
 if __name__ == '__main__':

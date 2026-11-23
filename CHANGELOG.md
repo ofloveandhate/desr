@@ -54,6 +54,11 @@ each can be turned off.
   - `expected_variable_count` is right for the dependent-variable scheme
     when an auxiliary is a monomial in the parameters alone and is
     normalised away.  It returned `n` whatever the reduction did.
+  - `ODESystem.from_dict` and `from_equations` accept `initial_conditions`.
+    They raised `TypeError` for any value of it.  `from_dict` no longer
+    adds the independent variable to the dict it is given.
+  - `smith_normal_form` is right for every integer matrix.  It failed an
+    internal assertion on about one small matrix in ten.
 
 ### A translator remembers its system
 

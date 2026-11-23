@@ -8,16 +8,20 @@ provokes one refusal and reads its message.
 '''
 from unittest import TestCase
 
+import numpy as np
 import sympy
 
 from desr.chemical_reaction_network import ChemicalReactionNetwork
-from desr.numerics import NumericTranslator
+from desr.matrix_normal_forms import is_hnf_col
+from desr.numerics import InsufficientKnownValues, NumericTranslator
 from desr.ode_system import ODESystem, parse_de
-from desr.ode_translation import ODETranslator
+from desr.ode_translation import ODETranslator, ReductionScheme
 
 MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
                     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
 HL_6_4 = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+HL_6_6 = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+          'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
 
 
 class TestTranslatorRefusals(TestCase):
@@ -132,3 +136,132 @@ class TestNumericRefusals(TestCase):
             numeric.recover_auxiliaries({}, known_values={'k_0_1': 1.0},
                                         auxiliaries=[1.0, 1.0, 1.0, 1.0])
         self.assertIn('not both', str(caught.exception))
+
+
+class TestMoreTranslatorRefusals(TestCase):
+
+    def test_a_multiplier_that_does_not_give_the_hermite_form(self):
+        # A V = [1, -1] for V = I, which is not [h, 0].
+        with self.assertRaises(ValueError) as caught:
+            ODETranslator(sympy.Matrix([[1, -1]]), hermite_multiplier=sympy.eye(2))
+        self.assertIn('is not in HNF', str(caught.exception))
+        self.assertFalse(is_hnf_col(sympy.Matrix([[1, -1]])))
+
+    def test_the_parameter_substitutions_of_a_system_that_scheme_does_not_fit(self):
+        system = ODESystem.from_equations(HL_6_6)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertNotEqual(ReductionScheme.PARAMETER, translator.scheme())
+        with self.assertRaises(ValueError) as caught:
+            translator.translate_parameter_substitutions(system)
+        self.assertIn('not compatible for parameter translation', str(caught.exception))
+
+    def test_reversing_with_the_wrong_number_of_solutions(self):
+        system = ODESystem.from_equations(HL_6_6)
+        translator = ODETranslator.from_ode_system(system)
+        one = sympy.symbols('a:1')
+        for reverse in (lambda: translator.reverse_translate(one),
+                        lambda: translator.reverse_translate_general(one),
+                        lambda: translator.reverse_translate_dep_var(one, 0)):
+            with self.assertRaises(ValueError) as caught:
+                reverse()
+            self.assertIn('Incorrect number of variables', str(caught.exception))
+
+    def test_a_system_with_a_symbol_more_or_a_symbol_fewer(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        translator = ODETranslator.from_ode_system(system)
+        more = ODESystem.from_equations(MICHAELIS_MENTEN + ['dp/dt = k_2*c - k_3*p'])
+        fewer = ODESystem.from_equations(['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                                          'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c'])
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(more)
+        self.assertIn('has k_3, p instead', str(caught.exception))
+        self.assertNotIn('does not have', str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            translator.translate(fewer)
+        self.assertIn('does not have k_2', str(caught.exception))
+        self.assertNotIn('instead', str(caught.exception))
+
+
+class TestMoreNumericRefusals(TestCase):
+
+    def carrying(self):
+        system = ODESystem.from_equations(HL_6_4)
+        return NumericTranslator(ODETranslator.from_ode_system(system).translate(system))
+
+    def dropping(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        return NumericTranslator(ODETranslator.from_ode_system(system).translate_general(
+            system, include_aux_vars=False))
+
+    def test_a_carried_auxiliary_with_no_value_given(self):
+        numeric = self.carrying()
+        self.assertTrue(numeric.carries_auxiliaries)
+        values = {symbol: 1.0 for symbol in numeric.reduced.symbols
+                  if symbol not in numeric.auxiliary_names}
+        with self.assertRaises(InsufficientKnownValues):
+            numeric.reverse(values)
+
+    def test_auxiliaries_given_as_series(self):
+        numeric = self.dropping()
+        values = {symbol: np.ones(3) for symbol in numeric.reduced.symbols}
+        with self.assertRaises(ValueError) as caught:
+            numeric.reverse(values, auxiliaries=[np.ones(3)] * numeric.r)
+        self.assertIn('single numbers', str(caught.exception))
+
+    def test_recovering_with_no_times_or_with_an_invariant_missing(self):
+        numeric = self.dropping()
+        clock = numeric.reduced.independent_variable
+        values = {symbol: np.ones(3) for symbol in numeric.reduced.symbols}
+        without_clock = {symbol: series for symbol, series in values.items()
+                         if symbol != clock}
+        with self.assertRaises(ValueError) as caught:
+            numeric.recover_auxiliaries(without_clock, auxiliaries=[1.0] * numeric.r)
+        self.assertIn('No values given for {}'.format(clock), str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            numeric.recover_auxiliaries({clock: values[clock]},
+                                        auxiliaries=[1.0] * numeric.r)
+        self.assertIn('No values given for the invariant', str(caught.exception))
+
+
+class TestMultiplierAndSystemEdits(TestCase):
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_adding_a_column_to_itself(self):
+        invariant = list(self.translator.invariant_monomials())[0]
+        with self.assertRaises(ValueError) as caught:
+            self.translator.multiplier_add_columns(invariant, invariant, 1)
+        self.assertIn('to itself', str(caught.exception))
+
+    def test_negating_an_auxiliary_column(self):
+        auxiliary = list(self.translator.auxiliary_monomials())[0]
+        with self.assertRaises(ValueError) as caught:
+            self.translator.multiplier_negate_column(auxiliary)
+        self.assertIn('Cannot negate non-zero column', str(caught.exception))
+
+    def test_negating_an_invariant_column_inverts_that_invariant(self):
+        before = list(self.translator.invariant_monomials())
+        self.translator.multiplier_negate_column(before[0])
+        after = list(self.translator.invariant_monomials())
+        self.assertEqual(1, sympy.simplify(before[0] * after[0]))
+        self.assertEqual(before[1:], after[1:])
+        self.assertTrue(self.translator.is_invariant_expr(after[0]))
+
+    def test_a_constraint_against_zero(self):
+        s, c = sympy.symbols('s c')
+        with self.assertRaises(ValueError) as caught:
+            self.system.add_constraint(s - c, 0)
+        self.assertIn('equality constraint with 0', str(caught.exception))
+
+    def test_a_substitution_that_is_neither_a_value_nor_a_renaming(self):
+        s, c = sympy.symbols('s c')
+        with self.assertRaises(ValueError) as caught:
+            self.system.subs({s: c ** 2 + 1})
+        self.assertIn('unable to make substitution', str(caught.exception))
+
+    def test_translating_no_values_forward(self):
+        numeric = NumericTranslator(self.translator.translate(self.system))
+        with self.assertRaises(ValueError):
+            numeric.forward({})

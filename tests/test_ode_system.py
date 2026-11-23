@@ -7,6 +7,9 @@ from desr.ode_system import ConflictingParameterValues, ODESystem
 from desr.ode_translation import ODETranslator, ReductionScheme
 from desr.sympy_helper import CONSISTENCY_TOLERANCE, monomial_to_powers
 
+MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                    'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+
 
 class TestODESystemScaling(TestCase):
     ''' Test ode_system.py scaling methods '''
@@ -2024,3 +2027,119 @@ class TestDimensionMatrix(TestCase):
             monomial = sympy.prod([name ** matrix[row, column]
                                    for row, name in enumerate(names)])
             self.assertEqual(dimensions[symbol], sympy.simplify(monomial))
+
+
+class TestConstructionEqualityAndSmallMethods(TestCase):
+
+    def test_constraints_must_be_a_list_of_equalities(self):
+        t, x, k = sympy.symbols('t x k')
+        with self.assertRaises(TypeError) as caught:
+            ODESystem([t, x, k], [1, -k * x, None], indep_var=t,
+                      constraints=sympy.Eq(k, 1))
+        self.assertIn('must be a list', str(caught.exception))
+        with self.assertRaises(TypeError) as caught:
+            ODESystem([t, x, k], [1, -k * x, None], indep_var=t, constraints=[k - 1])
+        self.assertIn('is not a sympy equality', str(caught.exception))
+
+    def test_a_symbol_in_an_equation_that_is_not_among_the_variables(self):
+        t, x, k = sympy.symbols('t x k')
+        with self.assertRaises(RuntimeError) as caught:
+            ODESystem([t, x], [1, -k * x], indep_var=t)
+        self.assertIn('not in the list of variables', str(caught.exception))
+
+    def test_a_parameter_against_a_conserved_variable_from_the_other_side(self):
+        x, w, t = sympy.symbols('x w t')
+        conserved = ODESystem([t, w, x], [sympy.Integer(1), sympy.Integer(0), w * x],
+                              indep_var=t)
+        parameter = ODESystem([w, t, x], [None, sympy.Integer(1), w * x], indep_var=t)
+        self.assertNotEqual(parameter, conserved)
+
+    def test_the_same_equations_in_another_independent_variable(self):
+        # dt/dt = 1, ds/dt = 1, dx/dt = x against dt/ds = 1, ds/ds = 1, dx/ds = x: the
+        # same three right-hand sides, and not the same system.
+        t, s, x = sympy.symbols('t s x')
+        one = sympy.Integer(1)
+        in_t = ODESystem([t, s, x], [one, one, x], indep_var=t)
+        in_s = ODESystem([t, s, x], [one, one, x], indep_var=s)
+        self.assertNotEqual(in_t, in_s)
+
+    def test_collecting_terms_does_not_change_the_equations(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        before = system.copy()
+        system.simplify_derivatives()
+        self.assertEqual(before, system)
+        for old, new in zip(before.derivatives, system.derivatives):
+            if old is not None:
+                self.assertEqual(0, sympy.expand(old - new))
+
+    def test_the_same_unit_requirements_are_kept_as_given(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        system.require_same_unit({'s': 'c'})
+        s, c = sympy.symbols('s c')
+        self.assertEqual({s: c}, dict(system.dimension_requirements))
+
+    def test_a_same_unit_requirement_on_a_symbol_the_system_does_not_have(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        with self.assertRaises(ValueError) as caught:
+            system.require_same_unit({'q': 'c'})
+        self.assertIn('The variable q', str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            system.require_same_unit({'s': 'q'})
+        self.assertIn('The symbol q', str(caught.exception))
+
+    def test_the_dimension_of_something_that_is_not_a_monomial(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        with self.assertRaises(ValueError):
+            system.dimension_of('s + c')
+
+    def test_a_system_from_a_dict_with_initial_conditions(self):
+        x, k, x_0, t = sympy.symbols('x k x_0 t')
+        system = ODESystem.from_dict({x: -k * x}, initial_conditions={x: x_0})
+        self.assertEqual({x: x_0}, dict(system.initial_conditions))
+        self.assertIn(x_0, system.symbols)
+        self.assertIn(x_0, system.parameters)
+
+    def test_initial_conditions_at_construction_are_those_given_afterwards(self):
+        # In each form an initial condition may be written.
+        for conditions in ({'x': 'x_0'}, {'x(0)': 'x_0'}, {'x': 2}):
+            with self.subTest(conditions=conditions):
+                afterwards = ODESystem.from_equations(['dx/dt = -k*x'])
+                afterwards.update_initial_conditions(dict(conditions))
+                at_once = ODESystem.from_equations(['dx/dt = -k*x'],
+                                                   initial_conditions=dict(conditions))
+                self.assertEqual(dict(afterwards.initial_conditions),
+                                 dict(at_once.initial_conditions))
+                self.assertEqual(set(afterwards.symbols), set(at_once.symbols))
+                self.assertEqual(afterwards, at_once)
+
+    def test_building_from_a_dict_leaves_the_dict_alone(self):
+        x, k = sympy.symbols('x k')
+        rates = {x: -k * x}
+        ODESystem.from_dict(rates)
+        self.assertEqual([x], list(rates))
+        self.assertEqual(-k * x, rates[x])
+
+    def test_substituting_with_or_without_expanding_gives_the_same_system(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        k_1, k = sympy.symbols('k_1 k')
+        plain = system.subs({k_1: 2 * k})
+        self.assertEqual(plain, system.subs({k_1: 2 * k}, expand_before=True))
+        self.assertEqual(plain, system.subs({k_1: 2 * k}, expand_after=False))
+
+
+class TestWhatASystemPrintsAndFactors(TestCase):
+
+    def test_its_repr_has_the_initial_conditions_and_the_constraints(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        system.update_initial_conditions({'s': 's_0'})
+        e_0, s_0 = sympy.symbols('e_0 s_0')
+        system.add_constraint(e_0, 2 * s_0)
+        lines = repr(system).splitlines()
+        self.assertIn('s(0) = s_0', lines)
+        self.assertIn('e_0 == 2*s_0', lines)
+
+    def test_factoring_after_a_substitution_gives_the_same_system(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        k_1, k = sympy.symbols('k_1 k')
+        self.assertEqual(system.subs({k_1: 2 * k}),
+                         system.subs({k_1: 2 * k}, factor_after=True))
