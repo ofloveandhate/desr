@@ -4,7 +4,7 @@ from collections.abc import MutableMapping
 import sympy
 
 from desr.ode_system import ODESystem
-from desr.sympy_helper import sympify_expression, unique_array_stable
+from desr.sympy_helper import sympify_expression, to_symbol, unique_array_stable
 
 class ChemicalSpecies(object):
     ''' Chemical species, A_i from Harrington paper. Typically represents a single chemical element. '''
@@ -139,7 +139,7 @@ class ChemicalReactionNetwork(object):
             tuple:
                 A differential equation, represented by a sympy.Expression, for the dynamics of each species.
         '''
-        sympy_chem_spec = list(map(lambda x: sympy.var(str(x)), self.chemical_species))
+        sympy_chem_spec = [to_symbol(str(species)) for species in self.chemical_species]
 
         rate_reaction_function = []
         stochiometric_matrix = []
@@ -148,7 +148,7 @@ class ChemicalReactionNetwork(object):
             # Calculate the rate reaction function
             # Create a rate parameter
             i, j = self.complexes.index(reaction.complex1), self.complexes.index(reaction.complex2)
-            rate_constant = sympy.var('k_{}_{}'.format(i, j))
+            rate_constant = to_symbol('k_{}_{}'.format(i, j))
 
             concentration = [spec ** exponent for spec, exponent in
                              zip(sympy_chem_spec, reaction.complex1.as_vector(self.chemical_species))]
@@ -176,7 +176,7 @@ class ChemicalReactionNetwork(object):
         Returns:
             ODESystem: A system describing the current network.
         '''
-        sympy_chem_spec = list(map(lambda x: sympy.var(str(x)), self.chemical_species))
+        sympy_chem_spec = [to_symbol(str(species)) for species in self.chemical_species]
         equations = self.ode_equations()
         deriv_dict = dict(zip(sympy_chem_spec, equations))
         return ODESystem.from_dict(deriv_dict=deriv_dict)

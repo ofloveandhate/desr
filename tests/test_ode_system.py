@@ -2143,3 +2143,57 @@ class TestWhatASystemPrintsAndFactors(TestCase):
         k_1, k = sympy.symbols('k_1 k')
         self.assertEqual(system.subs({k_1: 2 * k}),
                          system.subs({k_1: 2 * k}, factor_after=True))
+
+
+class TestTheShortWays(TestCase):
+    '''
+    `translator` and `reduce_scaling_symmetries` are each defined as the lines they stand
+    for.  They are held to that: the same translator, the same reduced system.
+    '''
+
+    SYSTEMS = {
+        'Michaelis-Menten': MICHAELIS_MENTEN,
+        'Hubert & Labahn 6.4': ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'],
+        'Hubert & Labahn 6.6': ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+                                'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'],
+    }
+
+    def test_the_translator_is_the_one_built_from_the_system(self):
+        for label, equations in self.SYSTEMS.items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                short, long = system.translator(), ODETranslator.from_ode_system(system)
+                self.assertEqual(long.scaling_matrix, short.scaling_matrix)
+                self.assertEqual(long.herm_mult, short.herm_mult)
+                self.assertEqual(long.scheme(), short.scheme())
+
+    def test_its_options_reach_the_translator(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        named = system.translator(naming_scheme={'parameters': 'pi'})
+        self.assertEqual('pi', named.naming_scheme['parameters'])
+
+    def test_the_reduction_is_the_one_the_translator_gives(self):
+        for label, equations in self.SYSTEMS.items():
+            with self.subTest(system=label):
+                system = ODESystem.from_equations(equations)
+                long = ODETranslator.from_ode_system(system).translate(system)
+                short = system.reduce_scaling_symmetries()
+                self.assertEqual(long, short)
+                self.assertEqual(dict(long.named_symbols), dict(short.named_symbols))
+                self.assertEqual(long.scheme, short.scheme)
+
+    def test_its_options_reach_the_reduction(self):
+        system = ODESystem.from_equations(self.SYSTEMS['Hubert & Labahn 6.6'])
+        translator = ODETranslator.from_ode_system(system)
+        for options in ({'normalise_parameters': False}, {'include_aux_vars': False},
+                        {'rescale_clock': False}):
+            with self.subTest(options=options):
+                self.assertEqual(translator.translate(system, **options),
+                                 system.reduce_scaling_symmetries(**options))
+
+    def test_the_system_is_left_as_it_was(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        before = system.copy()
+        system.reduce_scaling_symmetries()
+        self.assertEqual(before, system)
+        self.assertEqual(before.symbols, system.symbols)

@@ -267,7 +267,7 @@ class ODESystem(object):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
-        self._indep_var = sympy.var('t') if indep_var is None else indep_var
+        self._indep_var = to_symbol('t') if indep_var is None else indep_var
 
         # initialize some class member storage
         self._initial_conditions = {}
@@ -703,6 +703,54 @@ class ODESystem(object):
             ODESystem or None
         '''
         return self._original_system
+
+    def translator(self, **options):
+        '''
+        A translator for this system: ``ODETranslator.from_ode_system(self, **options)``,
+        and nothing else.
+
+        Args:
+            **options: As :meth:`~desr.ode_translation.ODETranslator.from_ode_system`
+                takes them, such as ``naming_scheme``.
+
+        Returns:
+            desr.ode_translation.ODETranslator
+
+        >>> system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/K)'])
+        >>> system.translator().invariant_monomials()
+        Matrix([[r*t, n/K]])
+        '''
+        from .ode_translation import ODETranslator
+        return ODETranslator.from_ode_system(self, **options)
+
+    def reduce_scaling_symmetries(self, **options):
+        '''
+        This system with its scaling symmetries removed:
+        ``self.translator().translate(self, **options)``, and nothing else.
+
+        The short way, for when the defaults are what is wanted.  For anything that is
+        set on the translator -- a naming scheme, a choice of invariants,
+        :meth:`~desr.ode_translation.ODETranslator.isolate_clock` -- get the translator
+        from :meth:`translator`, adjust it, and call its
+        :meth:`~desr.ode_translation.ODETranslator.translate`.
+
+        Args:
+            **options: As :meth:`~desr.ode_translation.ODETranslator.translate` takes
+                them: ``include_aux_vars``, ``normalise_parameters``, ``rescale_clock``.
+
+        Returns:
+            ODESystem: the reduced system, which records what each of its symbols
+            stands for in :attr:`named_symbols`.
+
+        >>> system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/K)'])
+        >>> reduced = system.reduce_scaling_symmetries()
+        >>> reduced
+        dtau/dtau = 1
+        dnu0/dtau = -nu0**2 + nu0
+        >>> reduced.named_symbols
+        {tau: r*t, nu0: n/K}
+        '''
+        return self.translator().translate(self, **options)
 
     def numeric_translator(self):
         '''
@@ -1841,7 +1889,7 @@ class ODESystem(object):
         return substituted
 
     @classmethod
-    def from_equations(cls, equations, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False, parameters=None):
+    def from_equations(cls, equations, indep_var=sympy.Symbol('t'), initial_conditions=None, is_reduced=False, parameters=None):
         '''
         Instantiate from multiple equations.
 
@@ -1893,7 +1941,7 @@ class ODESystem(object):
         return system
 
     @classmethod
-    def from_dict(cls, deriv_dict, indep_var=sympy.var('t'), initial_conditions=None, is_reduced=False, parameters=None):
+    def from_dict(cls, deriv_dict, indep_var=sympy.Symbol('t'), initial_conditions=None, is_reduced=False, parameters=None):
         '''
         Instantiate from a text of equations.
 
