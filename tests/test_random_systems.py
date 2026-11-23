@@ -322,15 +322,18 @@ class TestTheClockAndTheParametersOfAGeneralReduction(TestCase):
 
 class TestIsolatingTheClock(TestCase):
     '''
-    `with_isolated_clock` chooses another basis of the same invariants, in which the
-    independent variable appears in at most one.  It is the same scaling, so everything
-    true of a reduction stays true; and where the invariant holding the clock is `k*t`,
-    an autonomous system reduces to an autonomous one.
+    `isolate_clock` puts a translator in another basis of the same invariants, in which
+    the independent variable appears in at most one.  It is the same scaling, so
+    everything true of a reduction stays true; and where the invariant holding the clock
+    is `k*t`, an autonomous system reduces to an autonomous one.
     '''
 
     def isolated(self, shape, seed):
+        ''' The system, its translator as built, and a second one with the clock isolated. '''
         system, translator = case(shape, seed)
-        return system, translator, translator.with_isolated_clock()
+        isolated = ODETranslator.from_ode_system(system)
+        isolated.isolate_clock()
+        return system, translator, isolated
 
     def test_the_clock_is_in_at_most_one_invariant_with_a_positive_power(self):
         rearranged = 0
@@ -369,11 +372,34 @@ class TestIsolatingTheClock(TestCase):
                 self.assertEqual(1, abs(change[r:, r:].det()))
                 self.assertEqual(sympy.eye(r), change[:r, :r])
 
-    def test_this_translator_is_left_as_it_was(self):
+    def test_it_changes_the_translator_it_is_called_on_and_nothing_is_left_stale(self):
+        for shape, seed in CASES[::3]:
+            with self.subTest(shape=shape, seed=seed):
+                system, _ = case(shape, seed)
+                translator = ODETranslator.from_ode_system(system)
+                translator.inv_herm_mult        # computed, and kept, before the change
+                translator.isolate_clock()
+                n = translator.n
+                self.assertEqual(sympy.eye(n),
+                                 translator.inv_herm_mult * translator.herm_mult)
+                # What it reports is what it reduces with.
+                reduced = translator.translate(system)
+                self.assertEqual(dict(translator.named_symbols()),
+                                 dict(reduced.named_symbols))
+
+    def test_doing_it_twice_is_doing_it_once(self):
+        for shape, seed in CASES[::3]:
+            with self.subTest(shape=shape, seed=seed):
+                system, _, isolated = self.isolated(shape, seed)
+                once = isolated.herm_mult.copy()
+                isolated.isolate_clock()
+                self.assertEqual(once, isolated.herm_mult)
+
+    def test_another_translator_for_the_same_system_is_not_touched(self):
         shape, seed = CASES[0]
         system, translator = case(shape, seed)
         before = translator.herm_mult.copy()
-        translator.with_isolated_clock()
+        self.isolated(shape, seed)
         self.assertEqual(before, translator.herm_mult)
 
     def test_every_reduced_equation_is_still_true(self):
@@ -383,16 +409,6 @@ class TestIsolatingTheClock(TestCase):
                 self.assertEqual([], false_equations(system, isolated.translate(system)))
                 self.assertEqual([], false_equations(
                     system, isolated.translate_general(system, normalise_parameters=False)))
-
-    def test_the_flag_is_the_method(self):
-        for shape, seed in CASES[::4]:
-            with self.subTest(shape=shape, seed=seed):
-                system, translator, isolated = self.isolated(shape, seed)
-                self.assertEqual(isolated.translate(system),
-                                 translator.translate(system, isolate_clock=True))
-                self.assertEqual(
-                    isolated.translate_general(system),
-                    translator.translate_general(system, isolate_clock=True))
 
     def test_an_autonomous_system_with_a_rescaled_time_reduces_to_an_autonomous_one(self):
         # The statement the operation is for.  The premise is read off the isolated

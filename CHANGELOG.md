@@ -73,10 +73,11 @@ each can be turned off.
     clock as given, which is the original time only when Hubert & Labahn's
     constant `c` is 1; a reduced solution with another `c` came back with
     the right values against the wrong times.
-  - `translate(..., isolate_clock=True)` and `with_isolated_clock()`
-    choose a basis of the invariants in which the independent variable
-    appears in only one.  Where that one is `k*t`, an autonomous system
-    reduces to an autonomous one.  Off by default.
+  - `ODETranslator.isolate_clock()` puts the translator in a basis of the
+    invariants in which the independent variable appears in only one.
+    Where that one is `k*t`, an autonomous system reduces to an autonomous
+    one.  It changes the translator, as the `multiplier_*` operations do,
+    and is something a caller asks for.
 
 ### A translator remembers its system
 

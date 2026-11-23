@@ -2074,10 +2074,10 @@ class ODETranslator(object):
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
 
-    def with_isolated_clock(self, system=None):
+    def isolate_clock(self, system=None):
         '''
-        A translator for the same scaling whose invariants have the independent variable
-        in only one of them.  This translator is left as it is.
+        Rearrange the invariants so that the independent variable is in only one of
+        them.  Changes this translator, as the ``multiplier_*`` operations do.
 
         The invariants a multiplier lists are one basis among many: multiplying one
         invariant by a power of another gives an invariant, and the new set generates
@@ -2112,8 +2112,9 @@ class ODETranslator(object):
             system (ODESystem, optional): The system, for a translator built from a
                 bare matrix.
 
-        Returns:
-            ODETranslator: with the same scaling matrix, symbols and naming scheme.
+        It is a change to the multiplier, so everything the translator reports
+        afterwards -- its invariants, its names, a reduction, a figure -- is in the new
+        basis.  To keep the original as well, build a second translator.
 
         Hubert & Labahn's example 6.6.  They list the invariants :math:`t z_1^3` and
         :math:`z_1^2 z_2 / t`; the product of the two has no :math:`t`:
@@ -2124,7 +2125,8 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.invariant_monomials()
         Matrix([[t*z1**3, z1**2*z2/t]])
-        >>> translator.with_isolated_clock().invariant_monomials()
+        >>> translator.isolate_clock()
+        >>> translator.invariant_monomials()
         Matrix([[t*z1**3, z1**5*z2]])
 
         An autonomous system.  With its variables in this order the normal multiplier
@@ -2138,11 +2140,12 @@ class ODETranslator(object):
         >>> translator.translate(system)
         dtau/dtau = 1
         dy0/dtau = 2*y0 - y0/tau + 1/tau
-        >>> translator.translate(system, isolate_clock=True)
+        >>> translator.isolate_clock()
+        >>> translator.invariant_monomials()
+        Matrix([[a**2*b**2*u, b**2*t]])
+        >>> translator.translate(system)
         dtau/dtau = 1
         dy0/dtau = 2*y0 + 1
-        >>> translator.with_isolated_clock().invariant_monomials()
-        Matrix([[a**2*b**2*u, b**2*t]])
         '''
         system = self._system_or(system)
         r = self.r
@@ -2177,12 +2180,10 @@ class ODETranslator(object):
                     multiplier[:, column] = (multiplier[:, column]
                                              - multiple * multiplier[:, pivot])
 
-        return ODETranslator(scaling_matrix=self.scaling_matrix,
-                             symbols_domain=self.symbols_domain,
-                             hermite_multiplier=multiplier,
-                             naming_scheme=self.naming_scheme,
-                             new_indices_start_at=self._new_indices_start_at,
-                             system=system)
+        self._herm_mult = multiplier
+        # Blow the cache of the inverse
+        self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
     def multiplier_negate_column(self, i):
         '''
@@ -2266,8 +2267,7 @@ class ODETranslator(object):
         self._dep_var_inv_herm_mult_cache = {}
 
     def translate(self, system=None, include_aux_vars=True,
-                  normalise_parameters=True, rescale_clock=True,
-                  isolate_clock=False):
+                  normalise_parameters=True, rescale_clock=True):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
@@ -2290,19 +2290,9 @@ class ODETranslator(object):
             rescale_clock (bool): Whether to take an invariant that is the
                 independent variable times parameters as the clock.  General scheme only,
                 for the same reason.
-            isolate_clock (bool): Whether to rearrange the invariants first so that the
-                independent variable appears in only one of them.  Shorthand for
-                ``self.with_isolated_clock(system).translate(system, ...)``; see
-                :meth:`with_isolated_clock`.  Off by default, and then the invariants are
-                those of the multiplier as it stands.
 
         :rtype: ODESystem
         '''
-        if isolate_clock:
-            return self.with_isolated_clock(system).translate(
-                system, include_aux_vars=include_aux_vars,
-                normalise_parameters=normalise_parameters,
-                rescale_clock=rescale_clock)
         # A translator built from a bare matrix is handed the system to
         # reduce; bind it, so the reporting methods below have one.
         self = self._for(system)
@@ -2790,8 +2780,7 @@ class ODETranslator(object):
         return reduced
 
     def translate_general(self, system=None, include_aux_vars=True,
-                          normalise_parameters=True, rescale_clock=True,
-                          isolate_clock=False):
+                          normalise_parameters=True, rescale_clock=True):
         '''
         The most general reduction scheme.
         If there are :math:`n` variables (including the independent variable) then there will be a system of
@@ -2836,10 +2825,6 @@ class ODETranslator(object):
                 system can be written against it and then has no :math:`t`.  This does
                 not depend on `normalise_parameters`.  Off, the reduced system keeps
                 :math:`t`, with :math:`k t` beside it as an invariant.
-            isolate_clock (bool): Whether to rearrange the invariants first so that the
-                independent variable appears in only one of them; see
-                :meth:`with_isolated_clock`, for which this is shorthand.  Off by
-                default.
 
         :rtype: ODESystem
 
@@ -2900,12 +2885,6 @@ class ODETranslator(object):
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
         '''
-        if isolate_clock:
-            # See `with_isolated_clock`.  This is that, and nothing else.
-            return self.with_isolated_clock(system).translate_general(
-                system, include_aux_vars=include_aux_vars,
-                normalise_parameters=normalise_parameters,
-                rescale_clock=rescale_clock)
         # A translator built from a bare matrix is handed the system to
         # reduce; bind it, so the reporting methods below have one.
         self = self._for(system)

@@ -54,10 +54,12 @@ which has no :math:`t`.  The pair :math:`(a^2 b^2 u,\ b^2 t)` generates the same
 invariants as the pair :math:`(a^2 u / t,\ b^2 t)`: each can be written as a product of
 integer powers of the other.  In this basis only one invariant contains :math:`t`.
 
-:meth:`~desr.ode_translation.ODETranslator.with_isolated_clock` returns a translator
-that uses it:
+:meth:`~desr.ode_translation.ODETranslator.isolate_clock` puts a translator in that
+basis.  It changes the translator it is called on, as the ``multiplier_*`` operations
+do, so a second translator is built here to keep the first for comparison:
 
-    >>> isolated = translator.with_isolated_clock()
+    >>> isolated = ODETranslator.from_ode_system(system)
+    >>> isolated.isolate_clock()
     >>> isolated.invariant_monomials()
     Matrix([[a**2*b**2*u, b**2*t]])
     >>> isolated.translate(system)
@@ -67,20 +69,15 @@ that uses it:
 Writing :math:`\nu = a^2 b^2 u` and :math:`\tau = b^2 t`, this is
 :math:`d\nu/d\tau = 2\nu + 1`, which is autonomous.
 
-The original translator is not changed:
+Everything the translator reports afterwards is in the new basis: its invariants, the
+names it gives them, a reduction, a figure.  There is one multiplier, and it is the one
+the reduction uses.
+
+It is something you ask for.  A translator that has not been asked uses the normal
+Hermite multiplier:
 
     >>> translator.invariant_monomials()
     Matrix([[a**2*u/t, b**2*t]])
-
-The same thing can be asked for when reducing.  ``isolate_clock=True`` is shorthand
-for calling ``with_isolated_clock`` and reducing with the result:
-
-    >>> translator.translate(system, isolate_clock=True)
-    dtau/dtau = 1
-    dy0/dtau = 2*y0 + 1
-
-It is off by default.  With it off, the invariants are those of the multiplier as it
-stands.
 
 What the operation does
 -------------------------
@@ -147,7 +144,8 @@ Labahn's example 6.6 is such a system.  Its invariants are :math:`t z_1^3` and
     >>> translator = ODETranslator.from_ode_system(hl66)
     >>> translator.invariant_monomials()
     Matrix([[t*z1**3, z1**2*z2/t]])
-    >>> translator.with_isolated_clock().invariant_monomials()
+    >>> translator.isolate_clock()
+    >>> translator.invariant_monomials()
     Matrix([[t*z1**3, z1**5*z2]])
 
 No invariant here is :math:`t` times parameters, so the reduction keeps :math:`t` as
@@ -162,11 +160,11 @@ It works with the invariants the multiplier lists.  It does not look for an inva
 It does not change which scalings the system has, the auxiliaries' scaling, or the
 number of symbols in the reduced system.
 
-Why it is not the default
----------------------------
+Why it is something you ask for
+---------------------------------
 
 The invariants it produces are not the ones the normal Hermite multiplier gives, and so
-not the ones Hubert & Labahn print for their examples.  With the option off, a
-reduction uses the multiplier as it stands, and what
-:meth:`~desr.ode_translation.ODETranslator.invariant_monomials` reports is what the
-reduction is written in.
+not the ones Hubert & Labahn print for their examples.  A translator as built uses the
+normal multiplier, and what
+:meth:`~desr.ode_translation.ODETranslator.invariant_monomials` reports is always what
+a reduction is written in.
