@@ -2256,7 +2256,7 @@ class ODETranslator(object):
         scheme                                     variables
         =========================================  ===========================
         parameter                                  :math:`n - r`
-        dependent-variable                         :math:`n`
+        dependent-variable                         :math:`n - r'`
         general, with auxiliaries                  :math:`1 + (r - r') + (n - r - c)`
         general, neither step                      :math:`n + 1`
         general, ``include_aux_vars=False``        :math:`n - r + 1`
@@ -2302,8 +2302,15 @@ class ODETranslator(object):
                 different count.  Inferring where the caller had already chosen is a
                 mistake that produces a plausible wrong number rather than an error, and it
                 has been made twice in this library's history.
-            include_aux_vars (bool): Whether the auxiliaries will be kept.  Only the general
-                scheme has any, so this is ignored by the other two.
+            include_aux_vars (bool): Whether the auxiliaries will be kept.  Only
+                :meth:`translate_general` has that choice, so this is ignored by the
+                other two.
+            normalise_parameters (bool): Whether the auxiliaries that are monomials in
+                the parameters alone will be set to 1; that is what makes :math:`r'`
+                nonzero.
+            identify_indep_var (bool): Whether an invariant that is the independent
+                variable times a monomial in the parameters will be identified with it;
+                that is what makes :math:`c` nonzero.
 
         Returns:
             int
@@ -2353,18 +2360,20 @@ class ODETranslator(object):
 
         if scheme == ReductionScheme.PARAMETER:
             return n - self.r
-        if scheme == ReductionScheme.DEP_VAR:
-            return n
-        if not include_aux_vars:
+        if scheme == ReductionScheme.GENERAL and not include_aux_vars:
             return n - self.r + 1
 
         # Read off `_dropped_columns` rather than recomputed, so the count and the
         # reduction cannot disagree about how many columns were spent.  Three ways to
         # spend one: normalised to 1, an invariant identified with the clock, or an
-        # auxiliary that is the clock.
+        # auxiliary that is the clock.  The dependent-variable scheme can only spend
+        # one the first way.
         normalised, identified, clock_auxiliaries = self._dropped_columns(
-            system, scheme, include_aux_vars, normalise_parameters, identify_indep_var)
-        return n + 1 - len(normalised) - len(identified) - len(clock_auxiliaries)
+            system, scheme, True, normalise_parameters, identify_indep_var)
+        spent = len(normalised) + len(identified) + len(clock_auxiliaries)
+        if scheme == ReductionScheme.DEP_VAR:
+            return n - spent
+        return n + 1 - spent
 
 
 

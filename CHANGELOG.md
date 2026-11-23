@@ -51,6 +51,9 @@ each can be turned off.
     other than the independent variable, as the same scaling with a zero
     column there.  This raised `IndexError` before.  A matrix of any other
     width is refused with a message that says so.
+  - `expected_variable_count` is right for the dependent-variable scheme
+    when an auxiliary is a monomial in the parameters alone and is
+    normalised away.  It returned `n` whatever the reduction did.
 
 ### A translator remembers its system
 
