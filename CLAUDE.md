@@ -126,3 +126,9 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   2.0: its order followed the variable order, which changed, so re-reading it would have
   silently re-pointed every entry.
 - `exponent_matrix` was previously called `power_matrix` — watch for stale references in docs/comments.
+
+## Writing for GitHub
+
+**Do not hard-wrap prose in pull request bodies, issue bodies, or comments.** Write each paragraph as one line and let GitHub wrap it. GitHub renders a newline inside a paragraph as a line break in comments and as ragged text elsewhere, so manually wrapped lines read badly online. The same goes for list items: one line each.
+
+This is about text that GitHub renders. Commit messages are read in a terminal and keep their usual wrapping; code blocks and tables keep whatever layout they need.
