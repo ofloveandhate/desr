@@ -47,6 +47,10 @@ each can be turned off.
     reduces to itself.  An auxiliary is always given a new name.  Setting
     `rename_unchanged_symbols` to `True` in the naming scheme gives every
     invariant a generated name instead.
+  - `translate_dep_var` accepts a scaling matrix written over the symbols
+    other than the independent variable, as the same scaling with a zero
+    column there.  This raised `IndexError` before.  A matrix of any other
+    width is refused with a message that says so.
 
 ### A translator remembers its system
 

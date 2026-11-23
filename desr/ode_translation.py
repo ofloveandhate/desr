@@ -879,22 +879,61 @@ class ODETranslator(object):
         '''
         index = system.independent_variable_index
         scaling_matrix = self.scaling_matrix.copy()
+        scaling_matrix.col_del(index)
         hermite_multiplier = self.dep_var_herm_mult(indep_var_index=index)
-        if self.n == len(system.symbols):
-            scaling_matrix.col_del(index)
-        else:
-            hermite_multiplier.col_del(index)
-            hermite_multiplier.row_del(index)
 
-        if self.symbols_domain is not None:
-            symbols_domain = list(self.symbols_domain)
+        symbols_domain = self.symbols_domain
+        if symbols_domain is not None:
+            symbols_domain = list(symbols_domain)
             symbols_domain.pop(index)
-        else:
-            symbols_domain = None
 
         return ODETranslator(scaling_matrix=scaling_matrix,
                              symbols_domain=symbols_domain,
                              hermite_multiplier=hermite_multiplier)
+
+    def _with_independent_variable(self, system):
+        '''
+        This translator with a column for the independent variable of `system`, for a
+        translator whose scaling matrix was written over the other symbols only.
+
+        A scaling written without the independent variable does not act on it, and in
+        the full matrix that is a zero column.  So the column is inserted, and the
+        independent variable becomes an invariant in its own right: a unit column of the
+        multiplier, placed first among the invariants.  The other columns keep their
+        entries, with a zero in the new row, so :meth:`dep_var_herm_mult` of the result
+        is this translator's multiplier, and the two choose the same auxiliaries and
+        invariants.
+
+        Hubert & Labahn's example 6.4, whose scaling they write as :math:`A = [1, -1]`
+        on :math:`(z_1, z_2)`:
+
+        >>> system = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
+        ...                                    'dz2/dt = z2*(1/t - z1*z2)'])
+        >>> short = ODETranslator(sympy.Matrix([[1, -1]]))
+        >>> full = short._with_independent_variable(system)
+        >>> full.scaling_matrix
+        Matrix([[0, 1, -1]])
+        >>> full.dep_var_herm_mult(system.independent_variable_index) == short.herm_mult
+        True
+        '''
+        index = system.independent_variable_index
+        scaling_matrix = self.scaling_matrix.col_insert(index, sympy.zeros(self.r, 1))
+
+        hermite_multiplier = self.herm_mult.row_insert(index, sympy.zeros(1, self.n))
+        unit_column = sympy.zeros(self.n + 1, 1)
+        unit_column[index] = 1
+        hermite_multiplier = hermite_multiplier.col_insert(self.r, unit_column)
+
+        symbols_domain = self.symbols_domain
+        if symbols_domain is not None:
+            symbols_domain = list(symbols_domain)
+            symbols_domain.insert(index, system.independent_variable)
+
+        return ODETranslator(scaling_matrix=scaling_matrix,
+                             symbols_domain=symbols_domain,
+                             hermite_multiplier=hermite_multiplier,
+                             naming_scheme=self.naming_scheme,
+                             new_indices_start_at=self._new_indices_start_at)
 
     def dimensions_of(self):
         '''
@@ -2488,25 +2527,42 @@ class ODETranslator(object):
         dt/dt = 1
         dx0/dt = x0*(-y0 - 1)
         dy0/dt = y0*(1 + 1/t)
+
+        The scaling matrix may be written over the symbols other than the independent
+        variable, as Hubert & Labahn write this example's.  That is the same scaling
+        as the one with a zero column for the independent variable.  The invariant is the
+        same; the auxiliary here is :math:`z_1` where the one above is :math:`1/z_1`,
+        because each translator's multiplier is the normal one for its own matrix:
+
+        >>> ODETranslator(sympy.Matrix([[1, -1]])).translate_dep_var(system)
+        dt/dt = 1
+        dx0/dt = x0*(y0 + 1)
+        dy0/dt = y0*(1 + 1/t)
         '''
+        system = self._system_or(system)
+        if self.n == len(system.symbols) - 1:
+            # A scaling written over the symbols other than the independent variable.
+            # It is the same scaling as the one with a zero column there.
+            return self._with_independent_variable(system).translate_dep_var(
+                system, normalise_parameters=normalise_parameters,
+                identify_indep_var=identify_indep_var)
+        if self.n != len(system.symbols):
+            raise ValueError(
+                'The scaling matrix has {} columns and the system has {} symbols.  It '
+                'needs one column for each symbol, or one for each symbol other than '
+                'the independent variable.'.format(self.n, len(system.symbols)))
         # A translator built from a bare matrix is handed the system to
         # reduce; bind it, so the reporting methods below have one.
         self = self._for(system)
-        system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
         if system.initial_conditions:
             raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
-        # First check that our scaling action doesn't act on the independent variable
-        if self.n == len(system.symbols):
-            if not self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix:
-                raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
-        else:
-            assert self.scaling_matrix.shape[1] == len(system.symbols) - 1
-            assert self.dep_var_herm_mult(
-                indep_var_index=system.independent_variable_index)[-1, :].is_zero_matrix
+        # This scheme is for a scaling that does not act on the independent variable.
+        if not self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix:
+            raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
 
-        # silviana says: i think it is weird that an ODETranslator is made here.  we're already in one.  why make another one?
+        # The same scaling over the symbols other than the independent variable.
         reduced_scaling = self._dep_var_translator(system)
 
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
