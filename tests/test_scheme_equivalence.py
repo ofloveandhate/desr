@@ -10,7 +10,7 @@ steps off it is Hubert & Labahn's reduction, checked here against their printed 
 "The same up to names" is decided through the monomials: two reduced symbols are the
 same quantity when they denote the same monomial in the original symbols.
 '''
-from unittest import TestCase, expectedFailure
+from unittest import TestCase
 
 import sympy
 
@@ -133,13 +133,64 @@ class TestATranslatorBuiltWithoutTheClocksColumn(TestCase):
     scaling matrix written over the dependents only -- Hubert & Labahn's `A = [1, -1]`
     for their 6.4 -- says the same thing without the clock's zero column.
 
-    `translate_dep_var` has a branch for exactly this, and it does not work: it raises
-    an IndexError from `_dep_var_translator`.  Nothing had ever run it.  Marked as an
-    expected failure, in the convention of `test_edge_cases.py`, so that it turns into
-    a failure when the branch is fixed or removed.
+    `translate_dep_var` takes such a matrix to be the full one with that zero column.
     '''
 
-    @expectedFailure
+    HL_6_4 = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    def test_hubert_and_labahns_own_matrix_for_6_4(self):
+        # They give A = [1, -1] on (z1, z2), and the reduced equation dy/dt = y (1 + 1/t)
+        # for the invariant y = z1 z2.
+        system = ODESystem.from_equations(self.HL_6_4)
+        reduced = ODETranslator(sympy.Matrix([[1, -1]])).translate_dep_var(
+            system, normalise_parameters=False)
+        self.assertEqual([], false_equations(system, reduced))
+        t, z1, z2 = system.symbols
+        name = {monomial: symbol for symbol, monomial in reduced.named_symbols.items()}
+        y = name[z1 * z2]
+        rates = dict(zip(reduced.symbols, reduced.derivatives))
+        self.assertEqual(0, sympy.simplify(rates[y] - y * (1 + 1 / t)))
+
+    def test_the_clock_need_not_be_the_first_symbol(self):
+        # The zero column goes where the independent variable is, not at the front.
+        # The auxiliary may differ from the full translator's -- z1 or 1/z1 both carry
+        # the scaling -- so what is required is a true reduction with n - r invariants,
+        # the clock among them.
+        system = ODESystem.from_equations(self.HL_6_4)
+        system.reorder_variables('z1 t z2')
+        self.assertEqual(1, system.independent_variable_index)
+        full = ODETranslator.from_ode_system(system)
+        reduced = ODETranslator(sympy.Matrix([[1, -1]])).translate_dep_var(system)
+        self.assertEqual([], false_equations(system, reduced))
+        monomials = list(reduced.named_symbols.values())
+        invariant = [m for m in monomials if full.is_invariant_expr(m)]
+        self.assertEqual(len(system.symbols) - full.r, len(invariant))
+        self.assertIn(system.independent_variable, invariant)
+
+    def test_a_multiplier_given_with_the_short_matrix_is_the_one_used(self):
+        # V = [[0, 1], [-1, 1]] is unimodular with A V = [1, 0] for A = [1, -1]: auxiliary
+        # 1/z2, invariant z1 z2.  The normal multiplier takes z1 as the auxiliary.
+        system = ODESystem.from_equations(self.HL_6_4)
+        t, z1, z2 = system.symbols
+        short = sympy.Matrix([[1, -1]])
+        by_default = ODETranslator(short).translate_dep_var(system)
+        self.assertIn(z1, by_default.named_symbols.values())
+
+        chosen = ODETranslator(short, hermite_multiplier=sympy.Matrix([[0, 1], [-1, 1]]))
+        reduced = chosen.translate_dep_var(system)
+        self.assertEqual([], false_equations(system, reduced))
+        self.assertIn(1 / z2, reduced.named_symbols.values())
+        self.assertNotIn(z1, reduced.named_symbols.values())
+
+    def test_a_matrix_of_any_other_width_is_refused(self):
+        system = ODESystem.from_equations(self.HL_6_4)
+        for width in (1, 4):
+            with self.subTest(width=width):
+                with self.assertRaises(ValueError) as caught:
+                    ODETranslator(sympy.ones(1, width)).translate_dep_var(system)
+                self.assertIn('{} columns and the system has 3 symbols'.format(width),
+                              str(caught.exception))
+
     def test_it_reduces_to_the_same_system(self):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])
