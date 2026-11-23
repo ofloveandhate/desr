@@ -212,7 +212,7 @@ class ODESystem(object):
             old name for now; it is the `symbols` of the constructed system.
         derivatives (tuple of sympy.Expression): Ordered tuple of derivatives, :const:`None` for a parameter.
         indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
-        initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
+        initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
         same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
         parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
             discarding the zero equations they were given.
@@ -1848,7 +1848,7 @@ class ODESystem(object):
         Args:
             equations (str, iter of str): Equations of the form "dx/dt = expr", optionally seperated by :code:`\\n`.
             indep_var (sympy.Symbol): The independent variable, usually :code:`t`.
-            initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
+            initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
             parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
                 discarding the zero equations they were given.
 
@@ -1901,7 +1901,7 @@ class ODESystem(object):
             deriv_dict (dict): {variable: derivative} mapping.  A variable absent from the
                 mapping, but appearing in the expressions, is a parameter.
             indep_var (sympy.Symbol): Independent variable, that the derivatives are with respect to.
-            initial_conditions (tuple of sympy.Symbol): The initial values of dependent variables
+            initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
             parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
                 discarding the zero equations they were given.
 
@@ -1925,13 +1925,15 @@ class ODESystem(object):
         dz/dx = c_1*z**2*(1 - y)
         parameters: c_0, c_1
         '''
-        # Make a tuple of all variables.
+        # Make a tuple of all variables.  A symbol that appears only in an initial
+        # condition is added by `update_initial_conditions`, which the constructor calls
+        # and which reads every way an initial condition may be written.
         variables = set(expressions_to_variables(deriv_dict.values())).union(set(deriv_dict.keys()))
-        if initial_conditions is not None:
-            variables.update(map(expressions_to_variables, initial_conditions.values()))
         variables = tuple(variables.union(set([indep_var])))
 
         assert ((deriv_dict.get(indep_var) is None) or (deriv_dict.get(indep_var) == 1))
+        # A copy, so that the caller's dict does not gain an entry for the clock.
+        deriv_dict = dict(deriv_dict)
         deriv_dict[indep_var] = sympy.sympify(1)
 
         system = cls(variables,
