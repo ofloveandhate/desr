@@ -1,0 +1,19 @@
+# Coverage of the library, by the three things that execute it: tests/, the module
+# doctests, and the Sphinx doctests in docs/source.  Each writes its own data file and
+# they are combined, so the report can say which of the three reached a line.
+#
+#   python -m coverage run --data-file=.coverage.tests   -m pytest tests/
+#   python -m coverage run --data-file=.coverage.modules -m pytest --doctest-modules desr/
+#   python -m coverage run --data-file=.coverage.sphinx  -m sphinx -b doctest docs/source <out>
+#   python -m coverage combine --keep .coverage.tests .coverage.modules .coverage.sphinx
+#   python -m coverage report
+[run]
+branch = True
+source = desr
+
+[report]
+show_missing = True
+skip_covered = False
+exclude_also =
+    raise NotImplementedError
+    if __name__ == .__main__.:
