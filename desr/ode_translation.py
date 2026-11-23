@@ -882,11 +882,10 @@ class ODETranslator(object):
         scaling_matrix.col_del(index)
         hermite_multiplier = self.dep_var_herm_mult(indep_var_index=index)
 
-        if self.symbols_domain is not None:
-            symbols_domain = list(self.symbols_domain)
+        symbols_domain = self.symbols_domain
+        if symbols_domain is not None:
+            symbols_domain = list(symbols_domain)
             symbols_domain.pop(index)
-        else:
-            symbols_domain = None
 
         return ODETranslator(scaling_matrix=scaling_matrix,
                              symbols_domain=symbols_domain,
@@ -925,11 +924,10 @@ class ODETranslator(object):
         unit_column[index] = 1
         hermite_multiplier = hermite_multiplier.col_insert(self.r, unit_column)
 
-        if self.symbols_domain is not None:
-            symbols_domain = list(self.symbols_domain)
+        symbols_domain = self.symbols_domain
+        if symbols_domain is not None:
+            symbols_domain = list(symbols_domain)
             symbols_domain.insert(index, system.independent_variable)
-        else:
-            symbols_domain = None
 
         return ODETranslator(scaling_matrix=scaling_matrix,
                              symbols_domain=symbols_domain,
