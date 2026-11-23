@@ -32,6 +32,32 @@ class TestPublicNames(TestCase):
         from desr import sympify_expression, to_symbol
         self.assertEqual(to_symbol('S'), sympify_expression('S'))
 
+    def test_every_exception_the_library_defines_is_exported(self):
+        # Found by looking, not listed: a new exception class is caught by this test
+        # until it is exported too.
+        import inspect
+
+        import desr.numerics
+        defined = set()
+        for module in (desr.ode_system, desr.ode_translation, desr.numerics,
+                       desr.tex_tools, desr.sympy_helper, desr.matrix_normal_forms,
+                       desr.chemical_reaction_network):
+            for name, value in vars(module).items():
+                if (inspect.isclass(value) and issubclass(value, Exception)
+                        and value.__module__ == module.__name__):
+                    defined.add(name)
+        self.assertEqual({'ConflictingKnownValues', 'ConflictingParameterValues',
+                          'InsufficientKnownValues', 'TexParseError'}, defined)
+        for name in defined:
+            self.assertIn(name, desr.__all__)
+            self.assertTrue(issubclass(getattr(desr, name), ValueError))
+
+    def test_an_exception_is_the_same_class_from_either_place(self):
+        from desr import ConflictingParameterValues, TexParseError
+        self.assertIs(ConflictingParameterValues,
+                      desr.ode_system.ConflictingParameterValues)
+        self.assertIs(TexParseError, desr.tex_tools.TexParseError)
+
     def test_the_numeric_names_resolve_through_the_package(self):
         from desr import (ConflictingKnownValues, InsufficientKnownValues,
                           NumericTranslator)
