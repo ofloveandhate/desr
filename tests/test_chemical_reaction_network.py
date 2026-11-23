@@ -97,3 +97,24 @@ class TestSpeciesNames(TestCase):
         self.assertIn(E, system.dependents)
         self.assertNotIn(E, system.parameters)
         self.assertEqual(0, system.derivative_dict[E])
+
+
+class TestBuildingASystemLeavesNoNamesBehind(TestCase):
+    '''
+    A symbol is made with the library's own `to_symbol`.  It used to be made with
+    `sympy.var`, which also writes the name into the calling module's globals.
+    '''
+
+    def test_the_species_and_rate_constants_are_not_written_into_the_module(self):
+        import desr.chemical_reaction_network as module
+        before = set(vars(module))
+        system = ChemicalReactionNetwork.from_diagram(
+            'qqa + qqb -> qqc\nqqc -> qqa').to_ode_system()
+        self.assertIn('qqa', {str(symbol) for symbol in system.symbols})
+        self.assertEqual(before, set(vars(module)))
+
+    def test_a_system_built_with_the_default_clock_leaves_none_either(self):
+        import desr.ode_system as module
+        before = set(vars(module))
+        ODESystem.from_equations(['dqqx/dt = -qqk*qqx'])
+        self.assertEqual(before, set(vars(module)))

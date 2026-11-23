@@ -3512,7 +3512,7 @@ class ODETranslator(object):
             if use_domain_var and (self.symbols_domain is not None):
                 variables = self.symbols_domain
             else:
-                variables = sympy.var(', '.join('{}{}'.format(stem, i) for i in range(num_var)))
+                variables = tuple(to_symbol('{}{}'.format(stem, i)) for i in range(num_var))
 
         if len(variables) != num_var:
             raise ValueError('Expecting {} variables not {}'.format(num_var, variables))

@@ -143,6 +143,18 @@ each can be turned off.
   - `units_and_dimensions` is `num_units_and_dimensions`, because it counts.
   - `r` keeps working, and `num_scaling_symmetries` says what it is.
 
+### The short ways
+
+  - `system.reduce_scaling_symmetries()` is
+    `ODETranslator.from_ode_system(system).translate(system)`, and
+    `system.translator()` is the translator.  Each is exactly the lines it
+    stands for.
+  - `ConflictingParameterValues` and `TexParseError` are exported from the
+    package, with the two numeric exceptions, so every exception the
+    library defines can be caught with one import.
+  - Symbols are made with `to_symbol` throughout.  `sympy.var`, which
+    also writes each name into a module's globals, is no longer used.
+
 ### Packaging
 
   - Two optional extras.  `pip install desr[numerics]` adds numpy and scipy

@@ -32,9 +32,10 @@ from . import tex_tools
 
 from .chemical_reaction_network import (ChemicalReactionNetwork, ChemicalSpecies, Complex,
                                         Reaction)
-from .ode_system import ODESystem
+from .ode_system import ConflictingParameterValues, ODESystem
 from .ode_translation import ODETranslator, ReductionScheme, scale_action
 from .sympy_helper import sympify_expression, to_symbol
+from .tex_tools import TexParseError
 
 # desr.numerics needs numpy and scipy, which are optional for using the rest of the
 # library.  Importing it here would make them mandatory for `import desr`, so the numeric
@@ -86,6 +87,10 @@ __all__ = [
     'Reaction',
     # Numerical translation (needs numpy and scipy; imported on first access)
     'NumericTranslator',
+    # Every exception the library defines, so that one can be caught without knowing
+    # which module raises it.  The two numeric ones are imported on first access.
+    'ConflictingParameterValues',
+    'TexParseError',
     'InsufficientKnownValues',
     'ConflictingKnownValues',
     # The one place text becomes sympy
