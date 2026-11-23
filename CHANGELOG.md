@@ -68,6 +68,11 @@ each can be turned off.
   - An invariant built from the parameters alone is named from the naming
     scheme's `parameters` entry, `kappa` by default, under every scheme.
     The general and dependent-variable schemes used to call it `y`.
+  - `NumericTranslator.reverse` returns the original time the reduced
+    values determine.  Where the reduced clock denotes `t` it returned the
+    clock as given, which is the original time only when Hubert & Labahn's
+    constant `c` is 1; a reduced solution with another `c` came back with
+    the right values against the wrong times.
   - `translate(..., isolate_clock=True)` and `with_isolated_clock()`
     choose a basis of the invariants in which the independent variable
     appears in only one.  Where that one is `k*t`, an autonomous system
