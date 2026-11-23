@@ -636,15 +636,18 @@ class TestInvariantClassification(TestCase):
         self.assertEqual(('kappa0', 'kappa1', 'kappa2', 'tau', 'nu0', 'nu1'),
                          tuple(str(n) for n in inferred))
         # `tau` under both schemes, and the same monomial under both: the general scheme
-        # identifies the clock invariant `k*t/h` with its clock, which is the quantity the
-        # parameter scheme's `tau` already was.
-        self.assertEqual(('tau', 'y0', 'y1', 'y2', 'y4', 'y5'),
+        # takes the clock invariant `k*t/h` as its clock, which is the quantity the
+        # parameter scheme's `tau` already was.  The dimensionless parameters are `kappa`
+        # under both too.  What differs is the stem for the rest, and the general
+        # scheme's index, which is the column's.
+        self.assertEqual(('tau', 'kappa0', 'kappa1', 'kappa2', 'y4', 'y5'),
                          tuple(str(n) for n in general))
-        self.assertEqual(inferred[sympy.Symbol('tau')], general[sympy.Symbol('tau')])
+        for shared in ('tau', 'kappa0', 'kappa1', 'kappa2'):
+            self.assertEqual(inferred[sympy.Symbol(shared)], general[sympy.Symbol(shared)])
         faithful = translator.translate_general(
             self.prey_predator, normalise_parameters=False,
             identify_indep_var=False).named_symbols
-        self.assertEqual(('t', 'x0', 'x1', 'x2', 'y0', 'y1', 'y2', 'y3', 'y4', 'y5'),
+        self.assertEqual(('t', 'x0', 'x1', 'x2', 'kappa0', 'kappa1', 'kappa2', 'y3', 'y4', 'y5'),
                          tuple(str(n) for n in faithful))
 
 
@@ -1043,8 +1046,8 @@ class TestParameterValuesThroughTranslation(TestCase):
         system = self.system()
         system.update_parameter_values({'k_1': 2, 'k_2': 3, 'k_m1': 4, 'e_0': 5})
         reduced = ODETranslator.from_ode_system(system).translate_general(system)
-        # y0 = k_2/(e_0*k_1) = 3/10
-        self.assertEqual(reduced.parameter_values[sympy.Symbol('y0')],
+        # kappa0 = k_2/(e_0*k_1) = 3/10
+        self.assertEqual(reduced.parameter_values[sympy.Symbol('kappa0')],
                          sympy.Rational(3, 10))
 
     def test_the_general_scheme_values_its_auxiliaries(self):
@@ -1080,7 +1083,7 @@ class TestParameterValuesThroughTranslation(TestCase):
         reduced = ODETranslator.from_ode_system(system).translate_general(
             system, include_aux_vars=False)
         self.assertNotIn(sympy.Symbol('x1'), reduced.parameter_values)
-        self.assertIn(sympy.Symbol('y0'), reduced.parameter_values)
+        self.assertIn(sympy.Symbol('kappa0'), reduced.parameter_values)
 
     def test_the_parameter_scheme_records_the_units_it_chose(self):
         # It normalises every auxiliary, so it has the most to record, not the least.
@@ -1147,8 +1150,8 @@ class TestParameterValuesThroughTranslation(TestCase):
         renaming = ODETranslator.from_ode_system(
             system, naming_scheme={'rename_unchanged_symbols': True})
         renamed = renaming.translate_dep_var(system)
-        self.assertEqual(a, renamed.named_symbols[sympy.Symbol('y0')])
-        self.assertEqual(renamed.parameter_values[sympy.Symbol('y0')], sympy.Integer(7))
+        self.assertEqual(a, renamed.named_symbols[sympy.Symbol('kappa0')])
+        self.assertEqual(renamed.parameter_values[sympy.Symbol('kappa0')], sympy.Integer(7))
 
     def test_every_scheme_values_exactly_its_known_parameters(self):
         # The invariant across all three: a reduced parameter has a value exactly when the
@@ -2261,24 +2264,32 @@ class TestWhatTheReducedClockDenotes(TestCase):
         t = system.independent_variable
         k_2_3 = sympy.Symbol('k_2_3')
 
-        # Nothing is normalised, so no invariant becomes the clock: the reduced system
-        # carries the original t, and k_2_3*t stands beside it as an invariant of its own.
+        # Told not to change the clock, the reduced system carries the original t, and
+        # k_2_3*t stands beside it as an invariant of its own.
+        kept = translator.translate_general(normalise_parameters=False,
+                                            identify_indep_var=False)
+        self.assertEqual({}, dict(kept.normalisations))
+        self.assertEqual(t, self.denotation(kept))
+        self.assertIn(k_2_3 * t, set(kept.named_symbols.values()))
+
+        # k_2_3*t is the independent variable times a parameter, so it is taken as the
+        # clock.  That is a change of independent variable and does not wait on the
+        # normalisation: the clock means k_2_3*t whether or not k_2_3 is set to 1.
         untouched = translator.translate_general(normalise_parameters=False)
         self.assertEqual({}, dict(untouched.normalisations))
-        self.assertEqual(t, self.denotation(untouched))
-        self.assertIn(k_2_3 * t, set(untouched.named_symbols.values()))
+        self.assertEqual(k_2_3 * t, self.denotation(untouched))
+        self.assertNotIn(t, set(untouched.named_symbols.values()))
 
-        # Normalising k_2_3 to 1 turns that invariant into t, which the reduced system
-        # already has, so the two are identified and the clock means k_2_3*t.
         normalised = translator.translate_general(normalise_parameters=True)
         self.assertEqual(sympy.Integer(1), normalised.normalisations[k_2_3])
         self.assertEqual(k_2_3 * t, self.denotation(normalised))
 
         # Two quantities, two spellings.  The clock that denotes `t` keeps the name, and
         # the one that does not is named for what it is -- a rescaled time.
-        self.assertEqual(t, untouched.independent_variable)
-        self.assertEqual(sympy.Symbol('tau'), normalised.independent_variable)
-        self.assertNotIn(t, normalised.symbols)
+        self.assertEqual(t, kept.independent_variable)
+        for changed in (untouched, normalised):
+            self.assertEqual(sympy.Symbol('tau'), changed.independent_variable)
+            self.assertNotIn(t, changed.symbols)
 
     def test_a_general_reduction_that_identifies_nothing_keeps_the_clock(self):
         # The case that makes this a rule about what the clock denotes rather than a rule

@@ -642,8 +642,18 @@ class NumericTranslator(object):
                     # by the same multiplier, keeping the auxiliaries, to recover it.
                     if carrier is None:
                         carrier = self._auxiliary_carrier()
+                        # The carrier names its symbols by its own defaults.  Read its
+                        # equations in this reduction's symbols, matched by the monomial
+                        # each one denotes.
+                        mine = {monomial: symbol for symbol, monomial
+                                in self.reduced.named_symbols.items()}
+                        to_mine = {symbol: mine[monomial] for symbol, monomial
+                                   in carrier.named_symbols.items()
+                                   if monomial in mine and mine[monomial] != symbol}
                     kept = carrier.auxiliary_names[column]
-                    rates.append(sympy.simplify(carrier.derivative_dict[kept] / kept))
+                    rates.append(sympy.simplify(
+                        carrier.derivative_dict[kept] / kept).subs(
+                            to_mine, simultaneous=True))
                     named.append(kept)
 
                 for rate, name in zip(rates, self._auxiliaries):
@@ -678,9 +688,12 @@ class NumericTranslator(object):
             raise ValueError(
                 'This reduction has {} scaling symmetries and the system has {}, so the '
                 'auxiliaries it dropped cannot be recovered.'.format(self.r, translator.r))
-        return translator.translate_general(include_aux_vars=True,
-                                            normalise_parameters=False,
-                                            identify_indep_var=False)
+        # Against the same clock as this reduction, so that the rates read off it are
+        # rates along the series this translator is given.
+        clock = self.reduced.named_symbols[self.reduced.independent_variable]
+        return translator.translate_general(
+            include_aux_vars=True, normalise_parameters=False,
+            identify_indep_var=clock != self.system.independent_variable)
 
     def recover_auxiliaries(self, values, known_values=None, auxiliaries=None,
                             invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,

@@ -3,13 +3,11 @@ The three reduction schemes agree where more than one applies.
 
 The general scheme always applies.  Its two further steps -- normalising the constant
 auxiliaries and identifying a clock invariant with the clock -- are what the other
-schemes do by construction.  On a dependent-variable system the general scheme gives the
-same reduced system up to the names of its symbols.  On a parameter-scheme system it
-does so when normalising the auxiliaries makes the rescaled clock `k*t` equal to `t`, as
-it does for the systems here; when `k` is left as a combination of the invariant
-parameters, the general scheme keeps `t` beside the rescaled clock, and
-`test_random_systems.py` checks that case.  With both steps off it is Hubert & Labahn's
-reduction, checked here against their printed examples.
+schemes do by construction, so on a system one of those fits, the general scheme with
+both steps gives the same reduced system up to the names of its symbols.  The second
+step is a change of independent variable: an invariant that is the clock times
+parameters is taken as the clock, whatever the first step did.  With both steps off it
+is Hubert & Labahn's reduction, checked here against their printed examples.
 
 "The same up to names" is decided through the monomials: two reduced symbols are the
 same quantity when they denote the same monomial in the original symbols.

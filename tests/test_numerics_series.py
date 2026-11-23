@@ -316,8 +316,10 @@ class TestASeriesThatStartsAtZero(SeriesCase):
     '''
     Hubert & Labahn write a system as `t dz/dt = z * F`, so a reduction kept in their form
     has a `1/t` in every rate.  For the enzyme chain that is only how the form writes it:
-    the invariant `y0 = k_2_3*t` sits beside it and the quotient is a constant.  For Hubert
-    & Labahn 6.6 the `1/t` is in the equations and the system is singular at zero.
+    the invariant `k_2_3*t` is a clock, and the reduction takes it as one unless it is told
+    not to, which leaves no `1/t` at all.  Told not to, the invariant sits beside `t` and
+    the quotient is a constant.  For Hubert & Labahn 6.6 the `1/t` is in the equations and
+    the system is singular at zero.
 
     Either way the solver must not be handed a rate that is not finite, because it does
     not fail on one -- it never returns.
@@ -329,12 +331,39 @@ class TestASeriesThatStartsAtZero(SeriesCase):
         case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
         original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
         numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+            system).translate_general(system, include_aux_vars=False,
+                                      identify_indep_var=False))
 
         # The rate really does divide by the clock, and the series really does start there.
         clock = numeric.reduced.independent_variable
+        self.assertEqual(system.independent_variable, clock)
         self.assertTrue(any(sympy.denom(sympy.together(rate)).has(clock)
                             for rate in numeric.auxiliary_growth_rates()))
+        self.assertEqual(0.0, original[system.independent_variable][0])
+
+        known = dict(case.PARAMETERS)
+        known[S('x')] = case.START[S('x')]
+        forward = numeric.forward(original)
+        auxiliaries = numeric.auxiliaries_from(first_point(forward), known)
+        with time_limit(60):
+            recovered = numeric.reverse(forward, auxiliaries=auxiliaries)
+        self.assert_recovers(original, recovered, rtol=1e-6)
+
+    def test_with_the_change_of_clock_there_is_nothing_to_remove(self):
+        # The default: k_2_3*t is the clock, no rate divides by it, and a series that
+        # starts at zero comes back.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
+        original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
+        numeric = NumericTranslator(ODETranslator.from_ode_system(
+            system).translate_general(system, include_aux_vars=False))
+
+        clock = numeric.reduced.independent_variable
+        self.assertEqual(S('k_2_3') * system.independent_variable,
+                         numeric.reduced.named_symbols[clock])
+        self.assertFalse(any(sympy.denom(sympy.together(rate)).has(clock)
+                             for rate in numeric.auxiliary_growth_rates()))
         self.assertEqual(0.0, original[system.independent_variable][0])
 
         known = dict(case.PARAMETERS)

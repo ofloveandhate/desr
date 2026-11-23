@@ -59,6 +59,19 @@ each can be turned off.
     adds the independent variable to the dict it is given.
   - `smith_normal_form` is right for every integer matrix.  It failed an
     internal assertion on about one small matrix in ten.
+  - The general scheme takes an invariant `k*t`, with `k` a monomial in the
+    parameters, as its clock `tau` whenever there is one, and the reduced
+    system then has no `t`.  This is a change of independent variable and
+    no longer waits on the normalisation making `k` equal to 1.  With it
+    the general scheme gives the parameter scheme's system wherever that
+    scheme applies.  `identify_indep_var=False` keeps `t`.
+  - An invariant built from the parameters alone is named from the naming
+    scheme's `parameters` entry, `kappa` by default, under every scheme.
+    The general and dependent-variable schemes used to call it `y`.
+  - `translate(..., isolate_clock=True)` and `with_isolated_clock()`
+    choose a basis of the invariants in which the independent variable
+    appears in only one.  Where that one is `k*t`, an autonomous system
+    reduces to an autonomous one.  Off by default.
 
 ### A translator remembers its system
 

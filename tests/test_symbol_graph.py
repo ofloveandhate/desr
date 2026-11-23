@@ -546,13 +546,18 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
         self.translator.translate(self.system)
         before = {str(symbol) for (layer, symbol) in symbol_graph(
             self.translator, self.system).nodes if layer == REDUCED}
-        self.assertIn('kappa0', before)
+        # `nu` is the parameter scheme's stem for a reduced dependent and `y` the general
+        # scheme's.  `kappa` would not tell them apart: a dimensionless parameter is
+        # `kappa` under every scheme.
+        self.assertIn('nu0', before)
+        self.assertFalse(any(name.startswith('y') for name in before))
 
         self.move_the_clock_invariant()
         after = {str(symbol) for (layer, symbol) in symbol_graph(
             self.translator, self.system).nodes if layer == REDUCED}
-        self.assertNotIn('kappa0', after)
-        self.assertIn('y0', after)
+        self.assertNotIn('nu0', after)
+        self.assertTrue(any(name.startswith('y') for name in after))
+        self.assertIn('kappa0', after)
 
     def test_normalisation_follows_the_column_and_not_the_scheme(self):
         # It used to be read off the scheme -- all of them under the parameter scheme,
