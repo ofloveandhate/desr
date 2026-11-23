@@ -58,7 +58,7 @@ def case(shape, seed):
 def general(shape, seed, normalise, identify):
     system, translator = case(shape, seed)
     return translator.translate_general(system, normalise_parameters=normalise,
-                                        identify_indep_var=identify)
+                                        rescale_clock=identify)
 
 
 @functools.lru_cache(maxsize=None)
@@ -483,7 +483,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                         len(general(shape, seed, normalise, identify).symbols),
                         translator.expected_variable_count(
                             system, scheme=ReductionScheme.GENERAL,
-                            normalise_parameters=normalise, identify_indep_var=identify))
+                            normalise_parameters=normalise, rescale_clock=identify))
 
     def test_the_count_under_the_dependent_variable_scheme(self):
         for shape, seed in cases_under(ReductionScheme.DEP_VAR):

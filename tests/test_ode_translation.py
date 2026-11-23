@@ -514,7 +514,7 @@ class TestInvariantClassification(TestCase):
 
         reductions = (
             ('parameter', {}, 'independent'),
-            ('general, not identified', {'identify_indep_var': False}, 'dependent'),
+            ('general, not identified', {'rescale_clock': False}, 'dependent'),
             ('general', {}, 'independent'))
         for label, options, expected in reductions:
             with self.subTest(reduction=label):
@@ -542,7 +542,7 @@ class TestInvariantClassification(TestCase):
         '''
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
-        faithful = {'normalise_parameters': False, 'identify_indep_var': False}
+        faithful = {'normalise_parameters': False, 'rescale_clock': False}
         for system in (self.prey_predator, self.hl66, catalyst):
             with self.subTest(variables=tuple(map(str, system.symbols))):
                 translator = ODETranslator.from_ode_system(system)
@@ -646,7 +646,7 @@ class TestInvariantClassification(TestCase):
             self.assertEqual(inferred[sympy.Symbol(shared)], general[sympy.Symbol(shared)])
         faithful = translator.translate_general(
             self.prey_predator, normalise_parameters=False,
-            identify_indep_var=False).named_symbols
+            rescale_clock=False).named_symbols
         self.assertEqual(('t', 'x0', 'x1', 'x2', 'kappa0', 'kappa1', 'kappa2', 'y3', 'y4', 'y5'),
                          tuple(str(n) for n in faithful))
 
@@ -2267,7 +2267,7 @@ class TestWhatTheReducedClockDenotes(TestCase):
         # Told not to change the clock, the reduced system carries the original t, and
         # k_2_3*t stands beside it as an invariant of its own.
         kept = translator.translate_general(normalise_parameters=False,
-                                            identify_indep_var=False)
+                                            rescale_clock=False)
         self.assertEqual({}, dict(kept.normalisations))
         self.assertEqual(t, self.denotation(kept))
         self.assertIn(k_2_3 * t, set(kept.named_symbols.values()))

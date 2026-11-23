@@ -113,7 +113,7 @@ class TestWithBothStepsOffItIsHubertAndLabahn(TestCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         reduced = ODETranslator.from_ode_system(system).translate_general(
-            system, normalise_parameters=False, identify_indep_var=False)
+            system, normalise_parameters=False, rescale_clock=False)
         t, z1, z2 = system.symbols
         name = {monomial: symbol for symbol, monomial in reduced.named_symbols.items()}
         y1, y2 = name[t * z1 ** 3], name[z1 ** 2 * z2 / t]

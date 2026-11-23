@@ -716,7 +716,7 @@ class NumericTranslator(object):
         clock = self.reduced.named_symbols[self.reduced.independent_variable]
         return translator.translate_general(
             include_aux_vars=True, normalise_parameters=False,
-            identify_indep_var=clock != self.system.independent_variable)
+            rescale_clock=clock != self.system.independent_variable)
 
     def recover_auxiliaries(self, values, known_values=None, auxiliaries=None,
                             invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,

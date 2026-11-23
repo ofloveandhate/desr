@@ -80,7 +80,7 @@ class TestODESystemScaling(TestCase):
         ## Check our answer using the general translation.  The paper's answer, so
         ## both of the further steps are turned off: they are departures from it.
         translated = translator.translate_general(system, normalise_parameters=False,
-                                                  identify_indep_var=False)
+                                                  rescale_clock=False)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0*y1 + y0)/t\ndy0/dt = y0/t\ndy1/dt = y1*(y0 + 1)/t')
         self.assertEqual(translated, answer)
 
@@ -189,7 +189,7 @@ class TestODESystemScaling(TestCase):
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
         translated = translator.translate_general(system, normalise_parameters=False,
-                                                  identify_indep_var=False)
+                                                  rescale_clock=False)
         self.assertEqual(('t', 'x0', 'x1', 'y0', 'y1'),
                          tuple(map(str, translated.symbols)))
         # x0 and x1 are monomials in the original parameters alone, so they are parameters
@@ -222,7 +222,7 @@ class TestODESystemScaling(TestCase):
         # Same multiplier, so the same reduced system as the one checked above -- asked
         # for the same way, since `translated` above is the paper's reduction.
         self.assertEqual(translator.translate_general(system, normalise_parameters=False,
-                                                      identify_indep_var=False),
+                                                      rescale_clock=False),
                          translated)
         general_soln = translator.reverse_translate_general(reduced_solutions,
                                                             system_indep_var_index=2)

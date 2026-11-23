@@ -133,7 +133,7 @@ class TestTheReducedSystemIsTheDynamicsOfItsMonomials(SeriesCase):
         yield 'translate()', translator.translate(system)
         yield ("Hubert & Labahn's form",
                translator.translate_general(system, normalise_parameters=False,
-                                            identify_indep_var=False))
+                                            rescale_clock=False))
 
     @staticmethod
     def disagreement(original, reduced, denotes):
@@ -332,7 +332,7 @@ class TestASeriesThatStartsAtZero(SeriesCase):
         original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
         numeric = NumericTranslator(ODETranslator.from_ode_system(
             system).translate_general(system, include_aux_vars=False,
-                                      identify_indep_var=False))
+                                      rescale_clock=False))
 
         # The rate really does divide by the clock, and the series really does start there.
         clock = numeric.reduced.independent_variable

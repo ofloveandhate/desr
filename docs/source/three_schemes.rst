@@ -150,7 +150,7 @@ is the same invariant:
 Declining the step keeps the original clock, with :math:`k_{23} t` beside it as an
 invariant of its own, which is Hubert & Labahn's form:
 
-    >>> kept = translator.translate_general(enzyme, identify_indep_var=False)
+    >>> kept = translator.translate_general(enzyme, rescale_clock=False)
     >>> kept.independent_variable
     t
     >>> k_2_3, t = sympy.symbols('k_2_3 t')
@@ -164,7 +164,7 @@ The rule is about denotation and not about which scheme ran:
 Under the dependent-variable scheme that is always, because the scaling leaves the
 clock alone.  Under the general scheme it holds when no invariant is :math:`k t` —
 systems like 6.6, whose invariants containing :math:`t` all involve a dependent
-variable as well — and for every reduction run with ``identify_indep_var=False``.
+variable as well — and for every reduction run with ``rescale_clock=False``.
 Under the parameter scheme it never holds.
 
 An invariant such as :math:`k t^2` or :math:`k/t` is not taken as the clock.  It is

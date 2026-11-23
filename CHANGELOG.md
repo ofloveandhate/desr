@@ -15,7 +15,7 @@ each can be turned off.
 
   - `translate_general` normalises the parameter auxiliaries and identifies a
     clock invariant with the independent variable, both by default, both
-    controlled by `normalise_parameters` and `identify_indep_var`.  Passing
+    controlled by `normalise_parameters` and `rescale_clock`.  Passing
     `False` to each reproduces Hubert & Labahn's reduction exactly.  The
     options reach `translate` and `translate_dep_var` too.
   - An auxiliary that is a monomial in the original parameters alone is
@@ -64,7 +64,7 @@ each can be turned off.
     system then has no `t`.  This is a change of independent variable and
     no longer waits on the normalisation making `k` equal to 1.  With it
     the general scheme gives the parameter scheme's system wherever that
-    scheme applies.  `identify_indep_var=False` keeps `t`.
+    scheme applies.  `rescale_clock=False` keeps `t`.
   - An invariant built from the parameters alone is named from the naming
     scheme's `parameters` entry, `kappa` by default, under every scheme.
     The general and dependent-variable schemes used to call it `y`.
@@ -123,6 +123,10 @@ each can be turned off.
 
 ### Renames
 
+  - The option `identify_indep_var` is `rescale_clock`, on `translate`,
+    `translate_general`, `translate_dep_var` and `expected_variable_count`.
+    The step takes an invariant `k*t` as the clock; it no longer identifies
+    an invariant with `t`.  There is no alias.
   - `NumericTranslation` is `NumericTranslator`, and is built from a reduced
     system rather than from a system and a translator.
     `ODESystem.numeric_translator()` is the short way to one.

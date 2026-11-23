@@ -160,7 +160,7 @@ class TestASystemWithNoScalingSymmetry(TestCase):
             with self.subTest(system=label):
                 system = build()
                 reduced = ODETranslator.from_ode_system(system).translate_general(
-                    system, normalise_parameters=False, identify_indep_var=False)
+                    system, normalise_parameters=False, rescale_clock=False)
                 self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
                 self.assertEqual([], false_equations(system, reduced))
                 self.assertEqual(len(system.symbols) + 1, len(reduced.symbols))
@@ -302,7 +302,7 @@ class TestAScalingMatrixMustHaveFullRowRank(TestCase):
         # by it alone is a true reduction that leaves the other symmetry in place.
         translator = ODETranslator(self.real.row(0), symbols_domain=self.system.symbols)
         reduced = translator.translate_general(
-            self.system, normalise_parameters=False, identify_indep_var=False)
+            self.system, normalise_parameters=False, rescale_clock=False)
         self.assertEqual(1, translator.num_scaling_symmetries)
         self.assertEqual([], false_equations(self.system, reduced))
 
@@ -313,7 +313,7 @@ class TestAScalingMatrixMustHaveFullRowRank(TestCase):
                                    symbols_domain=self.system.symbols)
         self.assertEqual(0, translator.num_scaling_symmetries)
         reduced = translator.translate_general(
-            self.system, normalise_parameters=False, identify_indep_var=False)
+            self.system, normalise_parameters=False, rescale_clock=False)
         self.assertEqual([], false_equations(self.system, reduced))
         self.assertEqual(len(self.system.symbols) + 1, len(reduced.symbols))
 

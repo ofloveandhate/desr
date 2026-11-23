@@ -171,7 +171,7 @@ class TestWhatDoesNot(TestCase):
         # two variables, so that invariant keeps its generated name.
         system = SYSTEMS['Hubert & Labahn 6.4']()
         translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate_general(system, identify_indep_var=False)
+        reduced = translator.translate_general(system, rescale_clock=False)
         t = system.independent_variable
         denoting_t = [symbol for symbol, monomial in reduced.named_symbols.items()
                       if monomial == t]

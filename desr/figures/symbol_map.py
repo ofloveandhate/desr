@@ -1,7 +1,7 @@
 """A reduction drawn as a chain of systems, with each map written out above it.
 
     original -> reduced -> normalised -> nondimensionalised -> original
-      forward   adopt units   identify t        reverse
+      forward   adopt units   rescale clock     reverse
 
 Five systems in a row, an arrow between each pair naming what that step does, and above
 them the maps themselves.  The systems sit at the seams, because the column a map ends
@@ -9,8 +9,8 @@ on is the column the next one begins from, and that shared column *is* the syste
 share.
 
 The two outer maps are changes of coordinates, drawn as the exponent graphs that realise
-them.  The two middle maps are one table, read downwards: adopting the units is what
-makes the clock identifiable, so the two steps are one table and not two panels.
+them.  The two middle maps are one table, read downwards: both act on the reduced
+system's own symbols, the first on its auxiliaries and the second on its clock.
 
 What each stage is
 -------------------
@@ -28,8 +28,9 @@ constant, so each is set to 1.  That is an adoption of units rather than an assu
 :math:`x_0 = 1/k_{23}` becomes the unit of time, after which the model's own
 characteristic time measures 1 by definition.
 
-**nondimensionalised** -- an invariant that is the clock measured in a unit now equal to
-1 is identified with the clock.  The second step, and a consequence of the first.
+**nondimensionalised** -- an invariant that is the clock times parameters,
+:math:`\\tau = k t`, is taken as the clock in place of :math:`t`.  That is a change of
+independent variable, and it does not depend on the first step.
 
 This system is nondimensionalised whichever scheme ran, because invariants are exactly
 the dimensionless quantities and it is built from them.  What varies is whether anything
@@ -147,31 +148,27 @@ def normalise_pairs(translator, system, reduced, normalised):
             for symbol in reduced.symbols if symbol not in survivors]
 
 
-def identify_pairs(translator, system, reduced, normalised, final):
+def rescale_pairs(translator, system, reduced, normalised, final):
     """
-    The second of the two middle maps: an invariant that *is* the clock is identified
-    with it.
+    The second of the two middle maps: an invariant that is the clock times parameters
+    is taken as the clock.
 
-    **Nothing is ever asserted about a rate constant.**  It is tempting to say the
-    invariant :math:`k_{23} t` becomes :math:`t` "because :math:`k_{23} = 1`", and that
-    is false -- :math:`k_{23}` is whatever the model says it is.  What is true is this:
+    **Nothing is asserted about a rate constant.**  The invariant :math:`k_{23} t` is
+    not :math:`t` "because :math:`k_{23} = 1`"; :math:`k_{23}` is whatever the model
+    says it is.  The invariant is the clock measured in a unit: where :math:`t` divided
+    by it is one of the auxiliaries :math:`x_0`,
 
     .. math::  y_c = t / x_0
 
-    where :math:`x_0` is an auxiliary with the dimensions of time, the system's
-    **characteristic time**.  That relation holds from the start; it is what the
-    invariant *is*, not something normalisation does to it.  The invariant is the clock
-    measured in units of the characteristic time, and a quantity measured in units of
-    itself is 1, so choosing :math:`x_0` as the unit makes the two numbers agree.
-
-    Checked across five systems, ``t`` divided by the clock invariant is always a
-    monomial in the auxiliaries alone -- never one that touches an invariant -- which is
-    why the identification can be read off the units and never needs the parameters.
+    and :math:`x_0`, which has the dimensions of time, is the system's
+    **characteristic time**.  The entry is written that way when it can be.  The unit
+    need not be a single auxiliary -- it can be an auxiliary times a dimensionless
+    parameter -- and then the entry is the invariant's monomial in the caller's own
+    symbols.
 
     Returns:
-        list: ``(symbol, image, what it equals, 'identify')``, where "what it equals" is
-        written in the reduced symbols, because that is the coordinate system the
-        normalisation acts in.
+        list: ``(symbol, image, what it equals, 'rescale')``, where "what it equals" is
+        written in the reduced symbols where that is possible.
     """
     import sympy
 
@@ -196,14 +193,14 @@ def identify_pairs(translator, system, reduced, normalised, final):
             reads_as = clock / units[characteristic]
         else:
             reads_as = monomial
-        pairs.append((symbol, clock, reads_as, 'identify'))
+        pairs.append((symbol, clock, reads_as, 'rescale'))
     return pairs
 
 
 
 #: An arrow here is grey rather than coloured, because the two middle steps do not
 #: divide the way the symbols do: normalising touches every rust symbol, while
-#: identifying the clock touches one blue one and makes it the independent variable,
+#: rescaling the clock touches one blue one and makes it the independent variable,
 #: which is the one thing blue does not mean.  The palest grey is a step that does
 #: nothing.  See :mod:`desr.figures._palette` for the rest.
 
@@ -442,7 +439,7 @@ def step_labels(normalised, identified):
 
     Args:
         normalised (set): The auxiliaries this reduction sets to 1.
-        identified (dict): ``{invariant: the symbol it is identified with}``.
+        identified (dict): ``{invariant: the clock it becomes}``.
 
     Returns:
         tuple: four labels, one line each.
@@ -456,10 +453,10 @@ def step_labels(normalised, identified):
         # it whenever the reduced clock is renamed -- the system's own `t` goes there
         # alongside the invariant that is now the same quantity -- and listing one name
         # per source would print it twice.
-        clock = 'identify ' + ', '.join(
+        clock = 'clock ' + ', '.join(
             sorted({'$' + expr_to_tex(image) + '$' for image in identified.values()}))
     else:
-        clock = 'no clock to identify'
+        clock = 'clock unchanged'
     return ('forward', units, clock, 'reverse')
 
 
@@ -542,11 +539,10 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     notes = dict(notes or {})
     translator = ODETranslator.from_ode_system(system)
     reduced = translator.translate_general(system, normalise_parameters=False,
-                                           identify_indep_var=False)
-    # The step between: units chosen, but the clock not yet identified.  Skipping it
-    # would make the identification look like a second kind of substitution rather than
-    # what it is -- a consequence of the first.
-    normalised = translator.translate_general(system, identify_indep_var=False)
+                                           rescale_clock=False)
+    # The step between: units chosen, the clock not yet rescaled.  Drawn so that the
+    # two steps can be told apart.
+    normalised = translator.translate_general(system, rescale_clock=False)
     final = translator.translate_general(system)
     forward = symbol_graph(translator, system)
     reverse = symbol_graph(translator, system, direction='reverse')
@@ -588,11 +584,11 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     normalised_symbols = {symbol for symbol, _, _, _
                           in normalise_pairs(translator, system, reduced, normalised)}
     identified = {symbol: image for symbol, image, _, _
-                  in identify_pairs(translator, system, reduced, normalised, final)}
+                  in rescale_pairs(translator, system, reduced, normalised, final)}
 
     # The forward graph spans the first seam and the reverse graph the last.  The table
-    # spans both middle seams, because choosing the units is what makes the clock
-    # identifiable: the two steps are one table read downwards, not two panels.
+    # spans both middle seams: the two steps act on the same symbols, so they are one
+    # table read downwards, not two panels.
     panels = [('forward', 0, 1), ('dimensions, units, and normalisation', 1, 3),
               ('reverse', 3, 4)]
     for name, start, end in panels:
