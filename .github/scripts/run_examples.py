@@ -3,7 +3,7 @@
 
 Nothing else runs most of these.  Two are referenced by `.. plot::` directives and so are
 exercised by the HTML docs build; the other six are exercised by nothing at all, which is
-how a parameter-ordering bug survived until examples/linear_compartment.py tripped over it.
+how a parameter-ordering bug survived until one of them tripped over it.
 
 They can be run unattended: with the Agg backend `plt.show()` is a no-op.
 

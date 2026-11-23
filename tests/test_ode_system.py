@@ -1670,8 +1670,10 @@ class TestADimensionallyConsistentChangeOfVariables(TestCase):
         self.assertEqual(1, self.count(ODESystem.from_tex(self.AS_WRITTEN)))
 
     def test_substituting_silently_invents_a_second(self):
-        # The reduction is larger, and wrong: nothing in the model says b and c scale
-        # independently, only the substitution's silence does.
+        # It is a symmetry of dx/dt = c x + b taken alone.  It rescales b and leaves
+        # c alone, which is no change of units for a model in which c = a + b: nothing
+        # in the model says b and c scale independently, only the substitution's
+        # silence does.
         self.assertEqual(2, self.count(ODESystem.from_tex(self.SUBSTITUTED)))
 
     def test_requiring_the_same_unit_puts_it_back(self):
@@ -2197,3 +2199,79 @@ class TestTheShortWays(TestCase):
         system.reduce_scaling_symmetries()
         self.assertEqual(before, system)
         self.assertEqual(before.symbols, system.symbols)
+
+
+class TestTheTwoCompartmentModel(TestCase):
+    '''
+    What `docs/source/examples/linear_compartment.rst` shows.  Replacing the total loss
+    rate `a_2 + a_12` by one symbol removes the sum that made `a_12` a rate, and the
+    reduction then finds a third symmetry and a second unit of material.
+    '''
+
+    AS_WRITTEN = r'''
+    \frac{dz_1}{dt} &= -a_1 z_1 + a_12 z_2\\
+    \frac{dz_2}{dt} &= -(a_2 + a_12) z_2 + u_2
+    '''
+    LUMPED = r'''
+    \frac{dz_1}{dt} &= -a_1 z_1 + a_12 z_2\\
+    \frac{dz_2}{dt} &= -b_22 z_2 + u_2
+    '''
+
+    def test_as_written_it_has_two_symmetries_and_one_unit_of_material(self):
+        system = ODESystem.from_tex(self.AS_WRITTEN)
+        self.assertEqual(2, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+        dimensions = system.dimensions_of()
+        z_1, z_2 = sympy.symbols('z_1 z_2')
+        self.assertEqual(dimensions[z_1], dimensions[z_2])
+        self.assertEqual(2, len(system.reduce_scaling_symmetries().parameters))
+
+    def test_lumped_it_has_three_and_two_units(self):
+        system = ODESystem.from_tex(self.LUMPED)
+        self.assertEqual(3, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+        dimensions = system.dimensions_of()
+        z_1, z_2 = sympy.symbols('z_1 z_2')
+        self.assertNotEqual(dimensions[z_1], dimensions[z_2])
+        self.assertEqual(1, len(system.reduce_scaling_symmetries().parameters))
+
+    def test_the_lumped_reduction_is_true_of_the_model_as_written(self):
+        # Put b_22 = a_2 + a_12 into what each reduced symbol denotes.  The reduced
+        # equations must then hold along the model as written, by the chain rule.
+        model = ODESystem.from_tex(self.AS_WRITTEN)
+        reduced = ODESystem.from_tex(self.LUMPED).reduce_scaling_symmetries()
+        a_2, a_12, b_22 = sympy.symbols('a_2 a_12 b_22')
+        denotes = {symbol: monomial.subs(b_22, a_2 + a_12)
+                   for symbol, monomial in reduced.named_symbols.items()}
+        rates = {symbol: (sympy.Integer(0) if rate is None else rate)
+                 for symbol, rate in zip(model.symbols, model.derivatives)}
+
+        def rate_of(expression):
+            return sum(sympy.diff(expression, symbol) * rate
+                       for symbol, rate in rates.items())
+
+        clock = reduced.independent_variable
+        clock_rate = rate_of(denotes[clock])
+        checked = 0
+        for symbol, rate in zip(reduced.symbols, reduced.derivatives):
+            if symbol == clock or rate is None:
+                continue
+            claimed = rate.subs(denotes, simultaneous=True) * clock_rate
+            self.assertEqual(0, sympy.simplify(rate_of(denotes[symbol]) - claimed))
+            checked += 1
+        self.assertEqual(2, checked)
+        # And the parameter it depends on is not a monomial in the model's own.
+        kappa = next(iter(reduced.parameters))
+        self.assertEqual((a_2 + a_12) / sympy.Symbol('a_1'), denotes[kappa])
+
+    def test_the_relation_or_the_same_unit_gives_two_symmetries_back(self):
+        related = ODESystem.from_tex(self.LUMPED)
+        related.add_constraint(lhs='b_22', rhs='a_2 + a_12')
+        same_unit = ODESystem.from_tex(self.LUMPED)
+        same_unit.require_same_unit({'b_22': 'a_12'})
+        z_1, z_2 = sympy.symbols('z_1 z_2')
+        for system in (related, same_unit):
+            self.assertEqual(
+                2, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+            dimensions = system.dimensions_of()
+            self.assertEqual(dimensions[z_1], dimensions[z_2])
+        self.assertEqual(3, len(related.reduce_scaling_symmetries().parameters))
+        self.assertEqual(2, len(same_unit.reduce_scaling_symmetries().parameters))
