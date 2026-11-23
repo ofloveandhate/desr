@@ -193,7 +193,7 @@ alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
 :attr:`~desr.ode_system.ODESystem.auxiliary_names`.
 
     >>> max_scal2.translate(original_system, normalise_parameters=False,
-    ...                     identify_indep_var=False)
+    ...                     rescale_clock=False)
     dt/dt = 1
     dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
     dy1/dt = y0*y1*y2/(t*y4)

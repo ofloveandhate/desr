@@ -131,4 +131,6 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
 
 **Do not hard-wrap prose in pull request bodies, issue bodies, or comments.** Write each paragraph as one line and let GitHub wrap it. GitHub renders a newline inside a paragraph as a line break in comments and as ragged text elsewhere, so manually wrapped lines read badly online. The same goes for list items: one line each.
 
-This is about text that GitHub renders. Commit messages are read in a terminal and keep their usual wrapping; code blocks and tables keep whatever layout they need.
+Commit messages too: GitHub shows them, and a body wrapped at 72 columns reads there as ragged short lines. Write each paragraph of a commit body as one line. The subject line stays short.
+
+Code blocks and tables keep whatever layout they need.

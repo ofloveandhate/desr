@@ -1199,7 +1199,7 @@ class ODETranslator(object):
         return {'units': self.r, 'dimensions': exponents.rank()}
 
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
-                         normalise_parameters=True, identify_indep_var=True):
+                         normalise_parameters=True, rescale_clock=True):
         '''
         Which multiplier columns a reduction does not keep as variables of its own.
 
@@ -1231,8 +1231,15 @@ class ODETranslator(object):
         its multiplier is written in the symbols other than the independent variable, so
         no column of it mentions the clock and none can turn out to be it.
         '''
-        if scheme == ReductionScheme.PARAMETER or not include_aux_vars:
+        if scheme == ReductionScheme.PARAMETER:
             return set(), set(), set()
+
+        if scheme == ReductionScheme.GENERAL and not include_aux_vars:
+            # No auxiliary is kept, so none is normalised and none is the clock.  The
+            # change of clock is still made: it needs no auxiliary.
+            identified = (set(self._rescaled_clock_columns(system, {}))
+                          if rescale_clock else set())
+            return set(), identified, set()
 
         if scheme == ReductionScheme.DEP_VAR:
             deflated = self._dep_var_translator(system)
@@ -1246,12 +1253,14 @@ class ODETranslator(object):
         normalised = (set(self._parameter_auxiliary_columns(system))
                       if normalise_parameters else set())
         applied = self.normalisations() if normalised else {}
-        if identify_indep_var:
-            identified = set(self._identified_indep_var_columns(system, applied))
+        if rescale_clock:
+            identified = set(self._rescaled_clock_columns(system, applied))
             # Minus the normalised ones: a column cannot both be set to 1 and be the
             # clock, and if one ever matched both tests the normalisation is the error.
-            clock_auxiliaries = set(
-                self._identified_indep_var_auxiliaries(system, applied)) - normalised
+            # And none at all when an invariant is taken as the clock: the reduced
+            # system then has no `t` for an auxiliary to be.
+            clock_auxiliaries = set() if identified else set(
+                self._clock_auxiliary_columns(system, applied)) - normalised
         else:
             identified, clock_auxiliaries = set(), set()
         return normalised, identified, clock_auxiliaries
@@ -1618,7 +1627,7 @@ class ODETranslator(object):
                                    self._new_indices_start_at)
         return tuple(auxiliaries) + self._invariant_names_for(
             self._system_or(None), scheme, normalise_parameters=False,
-            identify_indep_var=False)
+            rescale_clock=False)
 
     def column_kinds(self, scheme=None):
         '''
@@ -1656,7 +1665,7 @@ class ODETranslator(object):
         roles = self._symbol_kinds_for(self._system_or(None), scheme,
                                        include_aux_vars=True,
                                        normalise_parameters=False,
-                                       identify_indep_var=False)
+                                       rescale_clock=False)
         return tuple('auxiliary' if column < self.r else roles[name]
                      for column, name in enumerate(names))
 
@@ -2065,6 +2074,117 @@ class ODETranslator(object):
         self._inv_herm_mult = None
         self._dep_var_inv_herm_mult_cache = {}
 
+    def isolate_clock(self, system=None):
+        '''
+        Rearrange the invariants so that the independent variable is in only one of
+        them.  Changes this translator, as the ``multiplier_*`` operations do.
+
+        The invariants a multiplier lists are one basis among many: multiplying one
+        invariant by a power of another gives an invariant, and the new set generates
+        the same ones.  The normal Hermite multiplier's basis may spread the
+        independent variable over several invariants, and then a reduced system that
+        could have been autonomous is written with :math:`1/t` or :math:`1/\\tau` in
+        it.  This chooses a basis in which it is not.
+
+        **What it does.**  Each invariant has an integer power of :math:`t`.  The
+        invariant with the smallest nonzero power -- one with no dependent variable in
+        it, where there is a choice -- is used to divide that power out of the others,
+        and the step repeats until one invariant has :math:`t` and the rest do not.
+        This is Euclid's algorithm on the row of :math:`t`.  The same invariant then
+        divides :math:`t` out of the auxiliaries as far as it goes, and is inverted if
+        its power of :math:`t` is negative.
+
+        Every step multiplies a column of the multiplier by an integer power of an
+        invariant column, so :math:`A V = [H, 0]` still holds with the same :math:`H`,
+        and :math:`V` is still unimodular.
+
+        **What it gives.**  If the invariant left holding :math:`t` is :math:`k t`, with
+        :math:`k` a monomial in the parameters, the reduction takes it as its clock and
+        nothing else in the reduced system involves time: an autonomous system reduces
+        to an autonomous one.  If it involves a dependent variable, as in Hubert &
+        Labahn 6.6, the reduction keeps :math:`t`, with one invariant carrying it
+        instead of several.
+
+        It does not search for an invariant :math:`k t` that is a product of the listed
+        ones without being one of them.
+
+        Args:
+            system (ODESystem, optional): The system, for a translator built from a
+                bare matrix.
+
+        It is a change to the multiplier, so everything the translator reports
+        afterwards -- its invariants, its names, a reduction, a figure -- is in the new
+        basis.  To keep the original as well, build a second translator.
+
+        Hubert & Labahn's example 6.6.  They list the invariants :math:`t z_1^3` and
+        :math:`z_1^2 z_2 / t`; the product of the two has no :math:`t`:
+
+        >>> system = ODESystem.from_equations(
+        ...     ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+        ...      'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.invariant_monomials()
+        Matrix([[t*z1**3, z1**2*z2/t]])
+        >>> translator.isolate_clock()
+        >>> translator.invariant_monomials()
+        Matrix([[t*z1**3, z1**5*z2]])
+
+        An autonomous system.  With its variables in this order the normal multiplier
+        puts :math:`t` in both invariants:
+
+        >>> system = ODESystem.from_equations(['du/dt = 2*b**2*u + 1/a**2'])
+        >>> system.reorder_variables(['t', 'u', 'a', 'b'])
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator.invariant_monomials()
+        Matrix([[a**2*u/t, b**2*t]])
+        >>> translator.translate(system)
+        dtau/dtau = 1
+        dy0/dtau = 2*y0 - y0/tau + 1/tau
+        >>> translator.isolate_clock()
+        >>> translator.invariant_monomials()
+        Matrix([[a**2*b**2*u, b**2*t]])
+        >>> translator.translate(system)
+        dtau/dtau = 1
+        dy0/dtau = 2*y0 + 1
+        '''
+        system = self._system_or(system)
+        r = self.r
+        clock = system.independent_variable_index
+        dependent_rows = [index for index, symbol in enumerate(system.symbols)
+                          if symbol in set(system.dependents)]
+        multiplier = self.herm_mult.copy()
+        invariant_columns = range(r, multiplier.cols)
+
+        def carrying():
+            return [column for column in invariant_columns if multiplier[clock, column] != 0]
+
+        def preference(column):
+            involves_dependent = any(multiplier[row, column] != 0 for row in dependent_rows)
+            return (abs(multiplier[clock, column]), involves_dependent, column)
+
+        while len(carrying()) > 1:
+            pivot = min(carrying(), key=preference)
+            for column in carrying():
+                if column != pivot:
+                    multiple = multiplier[clock, column] // multiplier[clock, pivot]
+                    multiplier[:, column] = (multiplier[:, column]
+                                             - multiple * multiplier[:, pivot])
+
+        if carrying():
+            pivot = carrying()[0]
+            if multiplier[clock, pivot] < 0:
+                multiplier[:, pivot] = -multiplier[:, pivot]
+            for column in range(r):
+                multiple = multiplier[clock, column] // multiplier[clock, pivot]
+                if multiple:
+                    multiplier[:, column] = (multiplier[:, column]
+                                             - multiple * multiplier[:, pivot])
+
+        self._herm_mult = multiplier
+        # Blow the cache of the inverse
+        self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
+
     def multiplier_negate_column(self, i):
         '''
         Negate column i:
@@ -2147,7 +2267,7 @@ class ODETranslator(object):
         self._dep_var_inv_herm_mult_cache = {}
 
     def translate(self, system=None, include_aux_vars=True,
-                  normalise_parameters=True, identify_indep_var=True):
+                  normalise_parameters=True, rescale_clock=True):
         '''
         Translate an :class:`ode_system.ODESystem` into a reduced system.
 
@@ -2167,8 +2287,9 @@ class ODETranslator(object):
                 General scheme only -- the parameter scheme normalises all of its
                 auxiliaries whatever this says, and the dependent-variable scheme is
                 passed it for the cases where it has one to spend.
-            identify_indep_var (bool): Whether to identify an invariant that has become the
-                independent variable with it.  General scheme only, for the same reason.
+            rescale_clock (bool): Whether to take an invariant that is the
+                independent variable times parameters as the clock.  General scheme only,
+                for the same reason.
 
         :rtype: ODESystem
         '''
@@ -2185,11 +2306,11 @@ class ODETranslator(object):
             return self.translate_dep_var(
                 system=system,
                 normalise_parameters=normalise_parameters,
-                identify_indep_var=identify_indep_var)
+                rescale_clock=rescale_clock)
 
         return self.translate_general(system=system, include_aux_vars=include_aux_vars,
                                       normalise_parameters=normalise_parameters,
-                                      identify_indep_var=identify_indep_var)
+                                      rescale_clock=rescale_clock)
 
     def scheme(self):
         '''
@@ -2244,7 +2365,7 @@ class ODETranslator(object):
         raise ValueError("System doesn't have the right number of variables for translation")
 
     def expected_variable_count(self, system, scheme=None, include_aux_vars=True,
-                                normalise_parameters=True, identify_indep_var=True):
+                                normalise_parameters=True, rescale_clock=True):
         '''
         How many variables the reduction of `system` will have.
 
@@ -2259,12 +2380,13 @@ class ODETranslator(object):
         dependent-variable                         :math:`n - r'`
         general, with auxiliaries                  :math:`1 + (r - r') + (n - r - c)`
         general, neither step                      :math:`n + 1`
-        general, ``include_aux_vars=False``        :math:`n - r + 1`
+        general, ``include_aux_vars=False``        :math:`n - r + 1 - c`
         =========================================  ===========================
 
         where :math:`r'` is how many auxiliaries are monomials in the parameters alone and
-        so are normalised away, and :math:`c` how many invariants are then identified with
-        the independent variable.
+        so are normalised away, and :math:`c` is 1 when an invariant is taken as the
+        clock in place of the independent variable -- one that is :math:`k t`, with
+        :math:`k` a monomial in the parameters -- and 0 otherwise.
 
         **Where the general scheme's extra one comes from, and where it goes.**  It keeps
         the original independent variable, and that is the :math:`+1`.  The remaining
@@ -2277,7 +2399,7 @@ class ODETranslator(object):
         so :math:`c = 1` makes the general scheme's :math:`+1` a :math:`+0`.  Under the
         parameter scheme that always happens, which is the sense in which that scheme is
         the case where nothing is left over; under the general scheme it is a fact to be
-        computed, and :meth:`_identified_indep_var_columns` computes it.
+        computed, and :meth:`_rescaled_clock_columns` computes it.
 
         The parameter scheme has no :math:`+1` because nothing is kept: its :math:`r`
         auxiliaries are normalised to 1 and discarded, and the invariant that is a rescaled
@@ -2308,8 +2430,8 @@ class ODETranslator(object):
             normalise_parameters (bool): Whether the auxiliaries that are monomials in
                 the parameters alone will be set to 1; that is what makes :math:`r'`
                 nonzero.
-            identify_indep_var (bool): Whether an invariant that is the independent
-                variable times a monomial in the parameters will be identified with it;
+            rescale_clock (bool): Whether an invariant that is the independent
+                variable times a monomial in the parameters will be taken as the clock;
                 that is what makes :math:`c` nonzero.
 
         Returns:
@@ -2338,15 +2460,15 @@ class ODETranslator(object):
 
         >>> translator.expected_variable_count(system, scheme='general',
         ...                                    normalise_parameters=False,
-        ...                                    identify_indep_var=False)
+        ...                                    rescale_clock=False)
         10
         >>> len(translator.translate_general(system, normalise_parameters=False,
-        ...                                  identify_indep_var=False).symbols)
+        ...                                  rescale_clock=False).symbols)
         10
         >>> translator.expected_variable_count(system, scheme='general', include_aux_vars=False)
-        7
+        6
         >>> len(translator.translate_general(system, include_aux_vars=False).symbols)
-        7
+        6
         '''
         # A translator built from a bare matrix is handed the system to
         # reduce; bind it, so the reporting methods below have one.
@@ -2360,19 +2482,19 @@ class ODETranslator(object):
 
         if scheme == ReductionScheme.PARAMETER:
             return n - self.r
-        if scheme == ReductionScheme.GENERAL and not include_aux_vars:
-            return n - self.r + 1
-
         # Read off `_dropped_columns` rather than recomputed, so the count and the
         # reduction cannot disagree about how many columns were spent.  Three ways to
-        # spend one: normalised to 1, an invariant identified with the clock, or an
-        # auxiliary that is the clock.  The dependent-variable scheme can only spend
-        # one the first way.
+        # spend one: normalised to 1, an invariant taken as the clock, or an auxiliary
+        # that is the clock.  The dependent-variable scheme can only spend one the
+        # first way.
         normalised, identified, clock_auxiliaries = self._dropped_columns(
-            system, scheme, True, normalise_parameters, identify_indep_var)
+            system, scheme, include_aux_vars or scheme != ReductionScheme.GENERAL,
+            normalise_parameters, rescale_clock)
         spent = len(normalised) + len(identified) + len(clock_auxiliaries)
         if scheme == ReductionScheme.DEP_VAR:
             return n - spent
+        if not include_aux_vars:
+            return n - self.r + 1 - spent
         return n + 1 - spent
 
 
@@ -2513,7 +2635,7 @@ class ODETranslator(object):
 
 
     def translate_dep_var(self, system=None, normalise_parameters=True,
-                          identify_indep_var=True):
+                          rescale_clock=True):
         '''
         Given a system of ODEs, translate the system into a simplified version. Assume we are only working on
         dependent variables, not the independent variable.
@@ -2522,10 +2644,10 @@ class ODETranslator(object):
             system (ODESystem): System to reduce.
             normalise_parameters (bool): Whether to set the parameter auxiliaries to 1, as
                 :meth:`translate_general` describes.
-            identify_indep_var (bool): Accepted so that :meth:`translate` can pass it on,
-                and **never does anything here**: this scheme's multiplier is written in
-                the symbols other than the independent variable, so no invariant of it
-                mentions the clock and none can turn out to be it.
+            rescale_clock (bool): Accepted so that :meth:`translate` can pass it on,
+                and **never does anything here**: under this scheme the scaling leaves
+                the independent variable alone, so the clock is already invariant and
+                there is nothing to rescale it to.
 
         :rtype: ODESystem
 
@@ -2554,7 +2676,7 @@ class ODETranslator(object):
             # It is the same scaling as the one with a zero column there.
             return self._with_independent_variable(system).translate_dep_var(
                 system, normalise_parameters=normalise_parameters,
-                identify_indep_var=identify_indep_var)
+                rescale_clock=rescale_clock)
         if self.n != len(system.symbols):
             raise ValueError(
                 'The scaling matrix has {} columns and the system has {} symbols.  It '
@@ -2582,7 +2704,7 @@ class ODETranslator(object):
         # nothing, so none is left out.
         invariant_names = list(self._invariant_names_for(
             system, ReductionScheme.DEP_VAR, normalise_parameters=normalise_parameters,
-            identify_indep_var=False))
+            rescale_clock=False))
 
         # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
@@ -2613,7 +2735,7 @@ class ODETranslator(object):
         normalised_columns, _, _ = self._dropped_columns(
             system, ReductionScheme.DEP_VAR,
             normalise_parameters=normalise_parameters,
-            identify_indep_var=identify_indep_var)
+            rescale_clock=rescale_clock)
         applied = (_pinned_by(reduced_scaling.inv_herm_mult, system_var_no_indep,
                               normalised_columns)
                    if normalised_columns else {})
@@ -2640,11 +2762,11 @@ class ODETranslator(object):
                             named_symbols=self._named_symbols_for(
                                 system, ReductionScheme.DEP_VAR,
                                 normalise_parameters=normalise_parameters,
-                                identify_indep_var=identify_indep_var),
+                                rescale_clock=rescale_clock),
                             symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.DEP_VAR,
                                 normalise_parameters=normalise_parameters,
-                                identify_indep_var=identify_indep_var),
+                                rescale_clock=rescale_clock),
                             original_system=system.copy(),
                             forward_monomials=aux_monomials + inv_monomials)
         # This scheme identifies nothing with the clock -- its multiplier is written in the
@@ -2658,7 +2780,7 @@ class ODETranslator(object):
         return reduced
 
     def translate_general(self, system=None, include_aux_vars=True,
-                          normalise_parameters=True, identify_indep_var=True):
+                          normalise_parameters=True, rescale_clock=True):
         '''
         The most general reduction scheme.
         If there are :math:`n` variables (including the independent variable) then there will be a system of
@@ -2676,7 +2798,7 @@ class ODETranslator(object):
         parameters of a system whose equations never mention them.
 
         **Identifying a clock invariant with the independent variable**
-        (`identify_indep_var`).  Once the units are chosen an invariant such as
+        (`rescale_clock`).  Once the units are chosen an invariant such as
         :math:`k_{23} t` may *be* :math:`t`, and then it is a second name for a variable
         the reduced system already carries.  Its equation reads :math:`dt/dt = 1`, which
         the system already has.  The two names become one, which is what removes the
@@ -2697,8 +2819,12 @@ class ODETranslator(object):
                 run, and the count is :math:`n - r + 1` -- discussed in remark 3.2 of the
                 second arXiv version of desr's own paper.
             normalise_parameters (bool): Whether to set the parameter auxiliaries to 1.
-            identify_indep_var (bool): Whether to identify an invariant that has become the
-                independent variable with it.
+            rescale_clock (bool): Whether to take an invariant that is the
+                independent variable times parameters as the clock.  Such an invariant
+                :math:`\\tau = k t` has :math:`t\\,d/dt = \\tau\\,d/d\\tau`, so the reduced
+                system can be written against it and then has no :math:`t`.  This does
+                not depend on `normalise_parameters`.  Off, the reduced system keeps
+                :math:`t`, with :math:`k t` beside it as an invariant.
 
         :rtype: ODESystem
 
@@ -2707,15 +2833,16 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
 
         All three auxiliaries are monomials in the original parameters, so all three are
-        normalised, and the clock invariant `k*t/h` is then identified with the clock.
+        normalised.  The invariant `k*t/h` is the clock times parameters, so it is taken
+        as the clock.
         What is left is autonomous, its equations use every parameter it reports, and it
         is integrated against `tau`, which is what `k*t/h` is now called:
 
         >>> translator.translate_general(system=system)
         dtau/dtau = 1
-        dy4/dtau = -y1*y4**2 + y1*y4 - y4*y5/(y0 + y4)
-        dy5/dtau = y2*y5 - y2*y5**2/y4
-        parameters: y0, y1, y2
+        dy4/dtau = -kappa1*y4**2 + kappa1*y4 - y4*y5/(kappa0 + y4)
+        dy5/dtau = kappa2*y5 - kappa2*y5**2/y4
+        parameters: kappa0, kappa1, kappa2
 
         The units that were chosen are recorded, in the caller's own symbols:
 
@@ -2736,19 +2863,18 @@ class ODETranslator(object):
         carried and reported among the reduced system's parameters:
 
         >>> translator.translate_general(system=system, normalise_parameters=False,
-        ...                              identify_indep_var=False)
+        ...                              rescale_clock=False)
         dt/dt = 1
         dy3/dt = y3/t
-        dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
-        dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
-        parameters: x0, x1, x2, y0, y1, y2
+        dy4/dt = y4*(-kappa1*y3*y4 + kappa1*y3 - y3*y5/(kappa0 + y4))/t
+        dy5/dt = y5*(kappa2*y3 - kappa2*y3*y5/y4)/t
+        parameters: x0, x1, x2, kappa0, kappa1, kappa2
 
         >>> translator.translate_general(system=system, include_aux_vars=False)
-        dt/dt = 1
-        dy3/dt = y3/t
-        dy4/dt = y4*(-y1*y3*y4 + y1*y3 - y3*y5/(y0 + y4))/t
-        dy5/dt = y5*(y2*y3 - y2*y3*y5/y4)/t
-        parameters: y0, y1, y2
+        dtau/dtau = 1
+        dy4/dtau = -kappa1*y4**2 + kappa1*y4 - y4*y5/(kappa0 + y4)
+        dy5/dtau = kappa2*y5 - kappa2*y5**2/y4
+        parameters: kappa0, kappa1, kappa2
 
         The auxiliaries a reduction keeps are recorded whatever kind they turn out to be:
 
@@ -2774,7 +2900,7 @@ class ODETranslator(object):
         # nothing identified, because the columns left out are decided further down.
         invariant_names = list(self._invariant_names_for(
             system, ReductionScheme.GENERAL, normalise_parameters=False,
-            identify_indep_var=False))
+            rescale_clock=False))
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
@@ -2804,22 +2930,44 @@ class ODETranslator(object):
         normalised_columns, identified_columns, clock_auxiliary_columns = (
             self._dropped_columns(
                 system, ReductionScheme.GENERAL, include_aux_vars,
-                normalise_parameters, identify_indep_var))
+                normalise_parameters, rescale_clock))
         applied = self.normalisations() if normalised_columns else {}
 
-        # An identified column and the retained independent variable are one quantity, so
-        # every mention of the column becomes a mention of the clock.  Both blocks can
-        # hold one.
-        to_indep = {invariant_names[column]: system.independent_variable
-                    for column in identified_columns}
-        to_indep.update({auxiliary_names[column]: system.independent_variable
-                         for column in clock_auxiliary_columns})
+        # An auxiliary that is the clock outright and the retained independent variable
+        # are one quantity, so every mention of the one becomes a mention of the other.
+        to_indep = {auxiliary_names[column]: system.independent_variable
+                    for column in clock_auxiliary_columns}
+
+        # An invariant taken as the clock is a change of independent variable.  With
+        # tau = k t^e the rates above are d/dt = (e tau / t) d/dtau, so each is divided
+        # by e tau / t.  They are y F(y) / t, so the t cancels and none is left.  From
+        # there on the old clock's symbol stands for tau, until the system is renamed.
+        new_clock = None
+        if identified_columns:
+            column = min(identified_columns)
+            new_clock = invariant_names[column]
+            exponent = self.herm_mult_n[system.independent_variable_index, column]
+            clock_rate = exponent * new_clock / system.independent_variable
+            if sympy.simplify(dydt[column] - clock_rate) != 0:
+                raise AssertionError(
+                    'the invariant {} taken as the clock has rate {}, not {}'.format(
+                        new_clock, dydt[column], clock_rate))
 
         def substitute_identified_invariants(rate):
-            '''Substitute, then expand: the rates carry a 1/t that the substitution gives
-            a numerator to cancel against, and sympy will not distribute over the sum by
-            itself.  Expanding is what makes the system visibly autonomous rather than
-            autonomous once a reader cancels the ts.'''
+            '''Change the clock, or substitute the clock auxiliary, then expand: sympy
+            will not cancel the 1/t the rates carry without distributing over the sum.
+            Expanding is what makes the system visibly autonomous.'''
+            if rate is None:
+                return rate
+            if new_clock is not None:
+                rate = (rate / clock_rate).expand()
+                if rate.has(system.independent_variable):
+                    rate = sympy.simplify(rate)
+                if rate.has(system.independent_variable):
+                    raise AssertionError(
+                        'the rate {} still involves {} after the change of clock'.format(
+                            rate, system.independent_variable))
+                return rate.subs(new_clock, system.independent_variable).expand()
             return rate.subs(to_indep).expand() if to_indep else rate
 
         # scale_action against system.symbols, not the *_monomials() accessors:
@@ -2862,7 +3010,7 @@ class ODETranslator(object):
         assert len(new_variables) == len(rates) + 1 == self.expected_variable_count(
             system, ReductionScheme.GENERAL, include_aux_vars,
             normalise_parameters=normalise_parameters,
-            identify_indep_var=identify_indep_var)
+            rescale_clock=rescale_clock)
 
         new_derivatives = ([sympy.sympify(1)]
                            + _classify_reduced_derivatives(named, monomials, rates, dynamic))
@@ -2875,10 +3023,10 @@ class ODETranslator(object):
                             normalisations=applied,
                             named_symbols=self._named_symbols_for(
                                 system, ReductionScheme.GENERAL, include_aux_vars,
-                                normalise_parameters, identify_indep_var),
+                                normalise_parameters, rescale_clock),
                             symbol_kinds=self._symbol_kinds_for(
                                 system, ReductionScheme.GENERAL, include_aux_vars,
-                                normalise_parameters, identify_indep_var),
+                                normalise_parameters, rescale_clock),
                             original_system=system.copy(),
                             forward_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, self._clock_name_for(
@@ -3823,19 +3971,19 @@ class ODETranslator(object):
         >>> translator.invariant_names()
         (kappa0, kappa1, kappa2, tau, nu0, nu1)
         >>> translator.invariant_names(scheme='general')
-        (y0, y1, y2, y4, y5)
+        (kappa0, kappa1, kappa2, y4, y5)
         '''
         return self._invariant_names_for(self._system_or(None), scheme)
 
     def _invariant_names_for(self, system=None, scheme=None, normalise_parameters=True,
-                             identify_indep_var=True, include_aux_vars=True):
+                             rescale_clock=True, include_aux_vars=True):
         '''
         The names the reduction gives the invariants **it keeps**, in the column order of
         :meth:`invariant_monomials`.
 
         An invariant that is identified with the independent variable is not named, because
         the reduced system already has a name for that quantity -- its own clock.  Pass
-        ``identify_indep_var=False`` to name every column.
+        ``rescale_clock=False`` to name every column.
 
         Args:
             system (ODESystem): The system being reduced.
@@ -3845,8 +3993,8 @@ class ODETranslator(object):
                 its parameter auxiliaries.  It bears on the invariants because which ones
                 become the independent variable depends on which parameters were
                 normalised.
-            identify_indep_var (bool): Whether the reduction being described identifies an
-                invariant with the independent variable.
+            rescale_clock (bool): Whether the reduction being described takes an
+                invariant :math:`k t` as its clock.
 
         Returns:
             tuple of sympy.Symbol: Names -- :math:`\\kappa_0`, :math:`\\tau`,
@@ -3864,10 +4012,10 @@ class ODETranslator(object):
         name of its own:
 
         >>> translator._invariant_names_for(system, scheme='general')
-        (y0, y1, y2, y4, y5)
+        (kappa0, kappa1, kappa2, y4, y5)
         >>> translator._invariant_names_for(system, scheme='general',
-        ...                                 identify_indep_var=False)
-        (y0, y1, y2, y3, y4, y5)
+        ...                                 rescale_clock=False)
+        (kappa0, kappa1, kappa2, y3, y4, y5)
         '''
         if scheme is None:
             scheme = self.scheme()
@@ -3892,6 +4040,25 @@ class ODETranslator(object):
             naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
             names = _names_for(naming['dependents'], count,
                                self._new_indices_start_at, 'invariants')
+            if (isinstance(naming['dependents'], str)
+                    and isinstance(naming['parameters'], str)):
+                # An invariant built from the parameters alone is a parameter of the
+                # reduced system, and is named as one.  Hubert & Labahn call every
+                # invariant y, drawing no line between the two until their section on
+                # parameters; the line is there to draw, and the name shows it.
+                if scheme == ReductionScheme.DEP_VAR:
+                    built_from = self._dep_var_blocks(system)[1]
+                else:
+                    built_from = list(scale_action(system.symbols, self.herm_mult_n))
+                parameters = set(system.parameters)
+                constant = [column for column, monomial in enumerate(built_from)
+                            if monomial.free_symbols
+                            and monomial.free_symbols <= parameters]
+                names = list(names)
+                for column, name in zip(constant, _names_for(
+                        naming['parameters'], len(constant),
+                        self._new_indices_start_at, 'parameter invariants')):
+                    names[column] = name
             if self._keeps_unchanged_names() and isinstance(naming['dependents'], str):
                 # A pattern spells what is new; an invariant that is one of the original
                 # symbols is not, and keeps its name.  The independent variable is left
@@ -3913,7 +4080,7 @@ class ODETranslator(object):
         _, identified, _ = self._dropped_columns(
             system, scheme, include_aux_vars,
             normalise_parameters=normalise_parameters,
-            identify_indep_var=identify_indep_var)
+            rescale_clock=rescale_clock)
         return tuple(name for column, name in enumerate(names)
                      if column not in identified)
 
@@ -3975,7 +4142,7 @@ class ODETranslator(object):
         return self._auxiliary_names_for(self._system_or(None), scheme)
 
     def _auxiliary_names_for(self, system=None, scheme=None, normalise_parameters=True,
-                             identify_indep_var=True):
+                             rescale_clock=True):
         '''
         The names the reduction gives the auxiliaries **it keeps**, in the column order of
         :meth:`auxiliary_monomials`.
@@ -4033,7 +4200,7 @@ class ODETranslator(object):
         # Both ways an auxiliary column leaves: set to 1, or identified with the clock.
         normalised, _, clock_auxiliaries = self._dropped_columns(
             system, scheme, normalise_parameters=normalise_parameters,
-            identify_indep_var=identify_indep_var)
+            rescale_clock=rescale_clock)
         dropped = normalised | clock_auxiliaries
         return tuple(name for column, name in enumerate(names)
                      if column not in dropped)
@@ -4293,15 +4460,15 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.symbol_kinds(scheme='general')
-        {tau: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
+        {tau: 'independent', kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', y4: 'dependent', y5: 'dependent'}
         >>> translator.translate_general(
         ...     system, normalise_parameters=False).symbol_kinds
-        {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
+        {tau: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', y4: 'dependent', y5: 'dependent'}
         '''
         return self._symbol_kinds_for(self._system_or(None), scheme, include_aux_vars)
 
     def _symbol_kinds_for(self, system, scheme=None, include_aux_vars=True,
-                          normalise_parameters=True, identify_indep_var=True):
+                          normalise_parameters=True, rescale_clock=True):
         '''
         What kind of symbol each variable of the reduced system is.
 
@@ -4354,8 +4521,8 @@ class ODETranslator(object):
 
         >>> translator._symbol_kinds_for(system, scheme='general',
         ...                              normalise_parameters=False,
-        ...                              identify_indep_var=False)
-        {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', y0: 'parameter', y1: 'parameter', y2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
+        ...                              rescale_clock=False)
+        {t: 'independent', x0: 'auxiliary', x1: 'auxiliary', x2: 'auxiliary', kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', y3: 'dependent', y4: 'dependent', y5: 'dependent'}
 
         By default all three are normalised, and `y3` -- the rescaled clock -- is
         identified with the clock, so neither `y3` nor `t` is a symbol of the reduced
@@ -4363,12 +4530,12 @@ class ODETranslator(object):
         rescaled clock gets:
 
         >>> translator._symbol_kinds_for(system, scheme='general')
-        {tau: 'independent', y0: 'parameter', y1: 'parameter', y2: 'parameter', y4: 'dependent', y5: 'dependent'}
+        {tau: 'independent', kappa0: 'parameter', kappa1: 'parameter', kappa2: 'parameter', y4: 'dependent', y5: 'dependent'}
 
         Which is what the reduced system turns out to have:
 
         >>> translator.translate_general(system).symbols
-        (tau, y0, y1, y2, y4, y5)
+        (tau, kappa0, kappa1, kappa2, y4, y5)
 
         Hubert & Labahn 6.6 has no invariant that is a rescaled clock alone -- both involve
         a dependent variable -- but the reduction still integrates against `t`:
@@ -4382,12 +4549,12 @@ class ODETranslator(object):
         ()
         '''
         names = list(self._named_symbols_for(system, scheme, include_aux_vars,
-                                             normalise_parameters, identify_indep_var))
+                                             normalise_parameters, rescale_clock))
         return dict(zip(names, self._kind_by_variable(
-            system, scheme, include_aux_vars, normalise_parameters, identify_indep_var)))
+            system, scheme, include_aux_vars, normalise_parameters, rescale_clock)))
 
     def _kind_by_variable(self, system, scheme=None, include_aux_vars=True,
-                          normalise_parameters=True, identify_indep_var=True):
+                          normalise_parameters=True, rescale_clock=True):
         '''
         The kind of each variable of the reduced system, in its variable order.
         '''
@@ -4404,7 +4571,7 @@ class ODETranslator(object):
             return invariant_kinds
 
         normalised, identified, clock_auxiliaries = self._dropped_columns(
-            system, scheme, include_aux_vars, normalise_parameters, identify_indep_var)
+            system, scheme, include_aux_vars, normalise_parameters, rescale_clock)
 
         # The general and dependent-variable schemes keep the original independent variable
         # and prepend it, then the auxiliaries, then the invariants.  So an invariant that
@@ -4586,32 +4753,44 @@ class ODETranslator(object):
         return tuple(invariants[column]
                      for column in self._indep_var_invariant_columns(self._system_or(None)))
 
-    def _identified_indep_var_columns(self, system, normalisations):
+    def _rescaled_clock_columns(self, system, normalisations):
         '''
-        The columns of :attr:`herm_mult_n` whose invariant *is* the independent variable
-        once `normalisations` is substituted into it.
+        The column of :attr:`herm_mult_n` that the reduced system takes as its clock: the
+        first invariant that is the independent variable, to the first power, times
+        parameters and nothing else.  A list with that one column, or empty when there
+        is none.
 
-        This is the exact form of "an invariant that turns out to be a clock in disguise".
-        The invariant :math:`k_{23} t` is a variable of its own only while :math:`k_{23}`
-        is; pin :math:`k_{23}` to 1 and the monomial is :math:`t`, which the reduced system
-        already carries.  Its equation then reads :math:`dt/dt = 1`, which the system
-        already has, so the two are one quantity under two names.
+        Such an invariant :math:`\\tau = k t` satisfies :math:`t\\,d\\tau/dt = \\tau`,
+        so :math:`t\\,d/dt = \\tau\\,d/d\\tau`.  Hubert & Labahn's reduced system (21)
+        involves :math:`t` only through :math:`t\\,d/dt`, so it can be written against
+        :math:`\\tau` instead, and then it has no :math:`t` in it at all.  That is a
+        change of independent variable, and it needs nothing of the normalisation:
+        whether :math:`k` happens to become 1 under the chosen units does not matter.
 
-        A clock invariant need not survive this test -- :math:`d k t / (K h)` becomes
-        :math:`d t`, not :math:`t`, when only :math:`K`, :math:`h` and :math:`k` are
-        pinned -- so the test is made against the substitution that was actually applied,
-        never against the one that could have been.
+        Only the first power, because that is a rescaled time.  :math:`k t^2` or
+        :math:`k / t` is invariant and could serve as an independent variable, but it
+        is not time in other units, and a reduction that used it would turn an
+        autonomous system into one that is not.  With such a column and no other the
+        original clock is kept; :meth:`multiplier_negate_column` turns :math:`k/t`
+        into :math:`t/k` for a caller who wants it as the clock.
+
+        One column, because a system has one independent variable.  A multiplier
+        adjusted by hand may hold a second such invariant; it stays a variable of the
+        reduced system, with its own equation.
+
+        `normalisations` is not used.  It is accepted because the auxiliary block's
+        version of this question does depend on it.
         '''
-        invariants = list(scale_action(system.symbols, self.herm_mult_n))
+        clock = system.independent_variable_index
         return [column for column in self._indep_var_invariant_columns(system)
-                if invariants[column].subs(normalisations) == system.independent_variable]
+                if self.herm_mult_n[clock, column] == 1][:1]
 
-    def _identified_indep_var_auxiliaries(self, system, normalisations):
+    def _clock_auxiliary_columns(self, system, normalisations):
         '''
         The columns of :attr:`herm_mult_i` whose auxiliary *is* the independent variable
         once `normalisations` is substituted into it.
 
-        The same question as :meth:`_identified_indep_var_columns`, asked of the other
+        The same question as :meth:`_rescaled_clock_columns`, asked of the other
         block.  It needs asking because the general scheme applies when the scaling moves
         the clock, and a basis for the directions it moves may simply contain :math:`t`.
         ``dz/dt = c*z**3`` is the smallest case: :math:`V_i`'s columns are :math:`t` and
@@ -4620,7 +4799,7 @@ class ODETranslator(object):
         Args:
             system (ODESystem): The system being reduced.
             normalisations (dict): The substitution the reduction actually applied, as for
-                :meth:`_identified_indep_var_columns`.
+                :meth:`_rescaled_clock_columns`.
 
         Returns:
             list of int: columns of :math:`V_i`.
@@ -4691,7 +4870,7 @@ class ODETranslator(object):
         return self._named_symbols_for(self._system_or(None), scheme, include_aux_vars)
 
     def _named_symbols_for(self, system, scheme=None, include_aux_vars=True,
-                           normalise_parameters=True, identify_indep_var=True):
+                           normalise_parameters=True, rescale_clock=True):
         '''
         What each variable of the reduced system stands for.
 
@@ -4737,8 +4916,8 @@ class ODETranslator(object):
 
         >>> translator._named_symbols_for(system, scheme='general',
         ...                               normalise_parameters=False,
-        ...                               identify_indep_var=False)
-        {t: t, x0: h/k, x1: K, x2: K/h, y0: d/K, y1: h*r/k, y2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
+        ...                               rescale_clock=False)
+        {t: t, x0: h/k, x1: K, x2: K/h, kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, y3: k*t/h, y4: n/K, y5: h*p/K}
 
         By default there is no `t` at all.  The clock invariant `k*t/h` has been identified
         with the clock, so the reduced system's clock *is* that rescaled clock, exactly as
@@ -4746,7 +4925,7 @@ class ODETranslator(object):
         make the one symbol whose meaning changed the one this map spells wrongly:
 
         >>> translator._named_symbols_for(system, scheme='general')
-        {tau: k*t/h, y0: d/K, y1: h*r/k, y2: h*s/k, y4: n/K, y5: h*p/K}
+        {tau: k*t/h, kappa0: d/K, kappa1: h*r/k, kappa2: h*s/k, y4: n/K, y5: h*p/K}
         '''
         if scheme is None:
             scheme = self.scheme()
@@ -4754,14 +4933,14 @@ class ODETranslator(object):
             scheme = ReductionScheme(scheme)
 
         normalised, identified, clock_auxiliaries = self._dropped_columns(
-            system, scheme, include_aux_vars, normalise_parameters, identify_indep_var)
+            system, scheme, include_aux_vars, normalise_parameters, rescale_clock)
         dropped_auxiliaries = normalised | clock_auxiliaries
 
         # Built from the per-block accessors rather than repeating their naming logic, so
         # that the pairing here cannot disagree with what invariant_names and
         # auxiliary_names say on their own.
         invariant_names = list(self._invariant_names_for(
-            system, scheme, normalise_parameters, identify_indep_var, include_aux_vars))
+            system, scheme, normalise_parameters, rescale_clock, include_aux_vars))
         if scheme == ReductionScheme.DEP_VAR:
             # Written in the symbols other than the independent variable, and one shorter.
             dep_var_auxiliaries, all_invariant_monomials = self._dep_var_blocks(system)
@@ -4779,7 +4958,7 @@ class ODETranslator(object):
             # auxiliaries, then the invariants.
             if include_aux_vars:
                 auxiliary_names = list(self._auxiliary_names_for(
-                    system, scheme, normalise_parameters, identify_indep_var))
+                    system, scheme, normalise_parameters, rescale_clock))
                 all_auxiliary_monomials = (dep_var_auxiliaries
                                            if dep_var_auxiliaries is not None
                                            else list(self.auxiliary_monomials()))

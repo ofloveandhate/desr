@@ -133,7 +133,7 @@ class TestTheReducedSystemIsTheDynamicsOfItsMonomials(SeriesCase):
         yield 'translate()', translator.translate(system)
         yield ("Hubert & Labahn's form",
                translator.translate_general(system, normalise_parameters=False,
-                                            identify_indep_var=False))
+                                            rescale_clock=False))
 
     @staticmethod
     def disagreement(original, reduced, denotes):
@@ -316,8 +316,10 @@ class TestASeriesThatStartsAtZero(SeriesCase):
     '''
     Hubert & Labahn write a system as `t dz/dt = z * F`, so a reduction kept in their form
     has a `1/t` in every rate.  For the enzyme chain that is only how the form writes it:
-    the invariant `y0 = k_2_3*t` sits beside it and the quotient is a constant.  For Hubert
-    & Labahn 6.6 the `1/t` is in the equations and the system is singular at zero.
+    the invariant `k_2_3*t` is a clock, and the reduction takes it as one unless it is told
+    not to, which leaves no `1/t` at all.  Told not to, the invariant sits beside `t` and
+    the quotient is a constant.  For Hubert & Labahn 6.6 the `1/t` is in the equations and
+    the system is singular at zero.
 
     Either way the solver must not be handed a rate that is not finite, because it does
     not fail on one -- it never returns.
@@ -329,12 +331,39 @@ class TestASeriesThatStartsAtZero(SeriesCase):
         case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
         original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
         numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+            system).translate_general(system, include_aux_vars=False,
+                                      rescale_clock=False))
 
         # The rate really does divide by the clock, and the series really does start there.
         clock = numeric.reduced.independent_variable
+        self.assertEqual(system.independent_variable, clock)
         self.assertTrue(any(sympy.denom(sympy.together(rate)).has(clock)
                             for rate in numeric.auxiliary_growth_rates()))
+        self.assertEqual(0.0, original[system.independent_variable][0])
+
+        known = dict(case.PARAMETERS)
+        known[S('x')] = case.START[S('x')]
+        forward = numeric.forward(original)
+        auxiliaries = numeric.auxiliaries_from(first_point(forward), known)
+        with time_limit(60):
+            recovered = numeric.reverse(forward, auxiliaries=auxiliaries)
+        self.assert_recovers(original, recovered, rtol=1e-6)
+
+    def test_with_the_change_of_clock_there_is_nothing_to_remove(self):
+        # The default: k_2_3*t is the clock, no rate divides by it, and a series that
+        # starts at zero comes back.
+        system = ChemicalReactionNetwork.from_diagram(
+            'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
+        case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
+        original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
+        numeric = NumericTranslator(ODETranslator.from_ode_system(
+            system).translate_general(system, include_aux_vars=False))
+
+        clock = numeric.reduced.independent_variable
+        self.assertEqual(S('k_2_3') * system.independent_variable,
+                         numeric.reduced.named_symbols[clock])
+        self.assertFalse(any(sympy.denom(sympy.together(rate)).has(clock)
+                             for rate in numeric.auxiliary_growth_rates()))
         self.assertEqual(0.0, original[system.independent_variable][0])
 
         known = dict(case.PARAMETERS)
@@ -386,3 +415,82 @@ class TestASeriesUnderTheDependentVariableScheme(SeriesCase):
         np.testing.assert_array_equal(forward[reduced.independent_variable],
                                       original[system.independent_variable])
         self.assert_recovers(original, numeric.reverse(forward), rtol=1e-12)
+
+
+class TestAReducedSolutionWhoseClockIsNotTheOriginalTime(SeriesCase):
+    '''
+    Hubert & Labahn's reduced system, their (21) and (22), involves `t` only as `t d/dt`.
+    So if `(x(t), y(t))` solves it, `(x(c t), y(c t))` solves it too, for any constant
+    `c`.  Their Theorem 6.5 carries this constant: from a reduced solution the original
+    one is recovered at time `t / c`.
+
+    Nothing in a reduced solution says `c` is 1.  It is 1 when the solution was made by
+    translating an original trajectory forward, and anything when the reduced system was
+    integrated from initial values of its own.  The reduced values determine the original
+    time through its monomial, whatever `c` is, and that is the time `reverse` must give.
+    '''
+
+    HL_6_6 = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
+              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
+    START = {S('z1'): 0.9, S('z2'): 0.6}
+
+    def setUp(self):
+        self.system = ODESystem.from_equations(self.HL_6_6)
+        self.reduced = ODETranslator.from_ode_system(self.system).translate(self.system)
+        self.numeric = NumericTranslator(self.reduced)
+        self.clock = self.reduced.independent_variable
+        self.t = self.system.independent_variable
+        self.assertEqual(self.t, self.reduced.named_symbols[self.clock])
+        self.assertTrue(self.numeric.carries_auxiliaries)
+
+    def rescaled(self, c, times):
+        '''
+        The reduced curve `(x(c t), y(c t))` sampled at `times`, with the original
+        trajectory it came from, sampled at `c * times`.
+        '''
+        original = trajectory(self.system, {}, self.START, (c * times[0], c * times[-1]),
+                              points=len(times))
+        np.testing.assert_allclose(c * times, original[self.t], rtol=1e-12)
+        curve = dict(self.numeric.forward(original))
+        curve[self.clock] = times
+        return curve, original
+
+    def test_the_rescaled_curve_solves_the_reduced_system(self):
+        # The premise.  Each reduced rate, evaluated along the curve, against the
+        # curve's own slope.
+        times = np.linspace(1.0, 2.0, 2001)
+        curve, _ = self.rescaled(2.0, times)
+        symbols = list(self.reduced.symbols)
+        for symbol, rate in zip(symbols, self.reduced.derivatives):
+            if symbol == self.clock:
+                continue
+            claimed = sympy.lambdify(symbols, rate, modules='numpy')(
+                *[curve[each] for each in symbols])
+            slope = np.gradient(curve[symbol], times, edge_order=2)
+            # An absolute tolerance too, for where a slope passes through zero.
+            np.testing.assert_allclose(slope[5:-5], claimed[5:-5], rtol=1e-4,
+                                       atol=1e-6 * np.max(np.abs(claimed)))
+
+    def test_with_c_one_the_clock_comes_back_as_given(self):
+        times = np.linspace(1.0, 2.0, 9)
+        curve, original = self.rescaled(1.0, times)
+        recovered = self.numeric.reverse(curve)
+        self.assertTrue(np.array_equal(times, recovered[self.t]))
+        self.assert_recovers(original, recovered, rtol=1e-9)
+
+    def test_with_another_c_the_original_time_is_c_times_the_clock(self):
+        times = np.linspace(1.0, 2.0, 9)
+        for c in (2.0, 0.5):
+            with self.subTest(c=c):
+                curve, original = self.rescaled(c, times)
+                recovered = self.numeric.reverse(curve)
+                np.testing.assert_allclose(c * times, recovered[self.t], rtol=1e-9)
+                # And with that time, it is the original trajectory.
+                self.assert_recovers(original, recovered, rtol=1e-9)
+
+    def test_a_single_point_is_treated_the_same_way(self):
+        times = np.linspace(1.0, 2.0, 9)
+        curve, original = self.rescaled(2.0, times)
+        point = {symbol: float(series[3]) for symbol, series in curve.items()}
+        recovered = self.numeric.reverse(point)
+        self.assertAlmostEqual(2.0 * times[3], float(recovered[self.t]), places=9)

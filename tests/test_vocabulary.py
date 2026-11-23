@@ -466,7 +466,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
         '''
         reduced = self.translator.translate_general(self.system,
                                                     normalise_parameters=False,
-                                                    identify_indep_var=False)
+                                                    rescale_clock=False)
         self.assertEqual(6, self.system.num_parameters)
         self.assertEqual(6, reduced.num_parameters)
         self.assertEqual(3, reduced.num_dependents)

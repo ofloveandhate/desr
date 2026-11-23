@@ -58,7 +58,7 @@ def case(shape, seed):
 def general(shape, seed, normalise, identify):
     system, translator = case(shape, seed)
     return translator.translate_general(system, normalise_parameters=normalise,
-                                        identify_indep_var=identify)
+                                        rescale_clock=identify)
 
 
 @functools.lru_cache(maxsize=None)
@@ -201,46 +201,14 @@ class TestEveryReducedEquationIsTrue(TestCase):
 class TestTheSchemesAgree(TestCase):
     ''' Up to names, compared through the monomial each reduced symbol denotes. '''
 
-    def split_by_clock(self):
-        '''
-        The parameter-scheme cases, by whether the general scheme ends with one clock
-        or keeps `t` beside a rescaled one.
-        '''
-        one, two = [], []
+    def test_the_general_scheme_with_both_steps_is_the_parameter_scheme(self):
+        with_symmetry = 0
         for shape, seed in cases_under(ReductionScheme.PARAMETER):
-            system, _ = case(shape, seed)
-            monomials = set(general(shape, seed, True, True).named_symbols.values())
-            rescaled = [monomial for monomial in monomials
-                        if monomial != system.independent_variable
-                        and system.independent_variable in monomial.free_symbols]
-            (two if rescaled and system.independent_variable in monomials
-             else one).append((shape, seed))
-        return one, two
-
-    def test_the_general_scheme_with_one_clock_is_the_parameter_scheme(self):
-        one, _ = self.split_by_clock()
-        self.assertGreaterEqual(len(one), 10)
-        for shape, seed in one:
             with self.subTest(shape=shape, seed=seed):
                 self.assertEqual([], disagreements(general(shape, seed, True, True),
                                                    parameter(shape, seed)))
-
-    def test_the_general_scheme_with_two_clocks_is_the_parameter_scheme_and_t(self):
-        # The parameter scheme takes the rescaled clock k*t as its clock and has no t.
-        # The general scheme identifies k*t with t only when normalising the auxiliaries
-        # makes k equal to 1.  When k is left as a combination of the invariant
-        # parameters it keeps both: the parameter scheme's symbols, and t.  Both are
-        # true reductions, which `TestEveryReducedEquationIsTrue` checks; this checks
-        # that t is the whole of the difference.
-        _, two = self.split_by_clock()
-        self.assertGreaterEqual(len(two), 3)
-        for shape, seed in two:
-            with self.subTest(shape=shape, seed=seed):
-                system, _ = case(shape, seed)
-                by_general = set(general(shape, seed, True, True).named_symbols.values())
-                by_parameter = set(parameter(shape, seed).named_symbols.values())
-                self.assertEqual(by_parameter | {system.independent_variable}, by_general)
-                self.assertNotIn(system.independent_variable, by_parameter)
+                with_symmetry += bool(case(shape, seed)[1].r)
+        self.assertGreaterEqual(with_symmetry, 15)
 
     def test_the_general_scheme_is_the_dependent_variable_scheme(self):
         # Whether or not it is asked to identify a clock invariant: the scaling leaves
@@ -252,6 +220,225 @@ class TestTheSchemesAgree(TestCase):
                     self.assertEqual([], disagreements(
                         general(shape, seed, normalise, identify),
                         dep_var(shape, seed, normalise)))
+
+
+class TestTheClockAndTheParametersOfAGeneralReduction(TestCase):
+    '''
+    One clock.  If some invariant is the independent variable times parameters and
+    nothing else, the reduced system is written against it and the original clock is
+    gone; otherwise the original clock stays.  Whether the auxiliaries were normalised
+    does not come into it.  And an invariant built from parameters alone is a parameter
+    of the reduced system, named as one.
+    '''
+
+    def test_a_rescaled_time_is_the_clock_and_t_is_not(self):
+        changed = kept = autonomous = 0
+        for shape, seed in CASES:
+            system, translator = case(shape, seed)
+            t = system.independent_variable
+            parameters = set(system.parameters)
+            # k*t with k a monomial in the parameters: t to the first power, by
+            # differentiating, and nothing else that moves.
+            rescaled = [monomial for monomial in translator.invariant_monomials()
+                        if monomial != t and sympy.simplify(
+                            t * sympy.diff(monomial, t) - monomial) == 0
+                        and monomial.free_symbols <= parameters | {t}]
+            for normalise in (True, False):
+                with self.subTest(shape=shape, seed=seed, normalise=normalise):
+                    reduced = general(shape, seed, normalise, True)
+                    denotes = reduced.named_symbols
+                    clock = reduced.independent_variable
+                    if not rescaled:
+                        # The original clock, under its own name.  One exception, which
+                        # needs the normalisation: an auxiliary t/p whose p is set to 1
+                        # is then the clock itself, and the clock is named for it.
+                        if denotes[clock] != t:
+                            self.assertTrue(normalise)
+                            self.assertIn(denotes[clock],
+                                          list(translator.auxiliary_monomials()))
+                            self.assertEqual('tau', str(clock))
+                        else:
+                            self.assertEqual(t, clock)
+                        kept += 1
+                        continue
+                    changed += 1
+                    self.assertEqual(rescaled[0], denotes[clock])
+                    self.assertEqual('tau', str(clock))
+                    # The original clock is no invariant of the reduced system.  It can
+                    # still be an auxiliary the system carries.
+                    carried = set(reduced.auxiliary_names)
+                    self.assertNotIn(t, {monomial for symbol, monomial in denotes.items()
+                                         if symbol not in carried})
+                    # Where the original is autonomous and the clock is the only reduced
+                    # symbol built with t, the reduced system is autonomous too.
+                    others = [monomial for symbol, monomial in denotes.items()
+                              if symbol != clock]
+                    if (not any(rate.has(t) for rate in system.derivatives
+                                if rate is not None)
+                            and not any(monomial.has(t) for monomial in others)):
+                        autonomous += 1
+                        for rate in reduced.derivatives:
+                            if rate is not None:
+                                self.assertFalse(rate.has(clock))
+        self.assertGreaterEqual(changed, 40)
+        self.assertGreaterEqual(kept, 40)
+        self.assertGreaterEqual(autonomous, 20)
+
+    def test_declining_the_change_keeps_the_original_clock(self):
+        for shape, seed in CASES:
+            with self.subTest(shape=shape, seed=seed):
+                system, _ = case(shape, seed)
+                reduced = general(shape, seed, True, False)
+                self.assertEqual(system.independent_variable,
+                                 reduced.named_symbols[reduced.independent_variable])
+
+    def test_an_invariant_in_the_parameters_alone_is_a_kappa(self):
+        seen = 0
+        for shape, seed in CASES:
+            system, translator = case(shape, seed)
+            parameters = set(system.parameters)
+            reductions = [general(shape, seed, True, True)]
+            if translator.scheme() == ReductionScheme.DEP_VAR:
+                reductions.append(dep_var(shape, seed, True))
+            for reduced in reductions:
+                with self.subTest(shape=shape, seed=seed, scheme=reduced.scheme.name):
+                    for symbol, monomial in reduced.named_symbols.items():
+                        constant = bool(monomial.free_symbols) and \
+                            monomial.free_symbols <= parameters
+                        named_as_one = str(symbol).startswith('kappa')
+                        if symbol == monomial:
+                            continue  # an original symbol left unchanged keeps its name
+                        if symbol in reduced.auxiliary_names:
+                            continue  # an auxiliary is named as an auxiliary
+                        self.assertEqual(constant, named_as_one,
+                                         '{} denotes {}'.format(symbol, monomial))
+                        seen += constant
+                    self.assertEqual(
+                        {symbol for symbol in reduced.symbols
+                         if str(symbol).startswith('kappa')} - set(reduced.parameters),
+                        set())
+        self.assertGreaterEqual(seen, 40)
+
+
+class TestIsolatingTheClock(TestCase):
+    '''
+    `isolate_clock` puts a translator in another basis of the same invariants, in which
+    the independent variable appears in at most one.  It is the same scaling, so
+    everything true of a reduction stays true; and where the invariant holding the clock
+    is `k*t`, an autonomous system reduces to an autonomous one.
+    '''
+
+    def isolated(self, shape, seed):
+        ''' The system, its translator as built, and a second one with the clock isolated. '''
+        system, translator = case(shape, seed)
+        isolated = ODETranslator.from_ode_system(system)
+        isolated.isolate_clock()
+        return system, translator, isolated
+
+    def test_the_clock_is_in_at_most_one_invariant_with_a_positive_power(self):
+        rearranged = 0
+        for shape, seed in CASES:
+            with self.subTest(shape=shape, seed=seed):
+                system, translator, isolated = self.isolated(shape, seed)
+                t = system.independent_variable
+                holding = [monomial for monomial in isolated.invariant_monomials()
+                           if monomial.has(t)]
+                self.assertLessEqual(len(holding), 1)
+                for monomial in holding:
+                    self.assertGreater(sympy.degree(monomial, t), 0)
+                before = [m for m in translator.invariant_monomials() if m.has(t)]
+                self.assertEqual(bool(before), bool(holding))
+                rearranged += len(before) > 1
+        self.assertGreaterEqual(rearranged, 15)
+
+    def test_it_is_the_same_scaling_and_the_same_invariants(self):
+        # Each new invariant is invariant, and each old one is a product of integer
+        # powers of the new: the multiplier of the one in terms of the other is an
+        # integer matrix of determinant +-1.
+        for shape, seed in CASES:
+            with self.subTest(shape=shape, seed=seed):
+                system, translator, isolated = self.isolated(shape, seed)
+                self.assertEqual(translator.scaling_matrix, isolated.scaling_matrix)
+                self.assertEqual(translator.herm_form, isolated.herm_form)
+                self.assertEqual(1, abs(isolated.herm_mult.det()))
+                for monomial in isolated.invariant_monomials():
+                    self.assertTrue(translator.is_invariant_expr(monomial))
+                # V' = V C.  The new invariants are products of the old invariants alone,
+                # by a unimodular block; each new auxiliary is the old one times
+                # invariants, so it scales as it did.
+                change = translator.inv_herm_mult * isolated.herm_mult
+                r = translator.r
+                self.assertTrue(change[:r, r:].is_zero_matrix)
+                self.assertEqual(1, abs(change[r:, r:].det()))
+                self.assertEqual(sympy.eye(r), change[:r, :r])
+
+    def test_it_changes_the_translator_it_is_called_on_and_nothing_is_left_stale(self):
+        for shape, seed in CASES[::3]:
+            with self.subTest(shape=shape, seed=seed):
+                system, _ = case(shape, seed)
+                translator = ODETranslator.from_ode_system(system)
+                translator.inv_herm_mult        # computed, and kept, before the change
+                translator.isolate_clock()
+                n = translator.n
+                self.assertEqual(sympy.eye(n),
+                                 translator.inv_herm_mult * translator.herm_mult)
+                # What it reports is what it reduces with.
+                reduced = translator.translate(system)
+                self.assertEqual(dict(translator.named_symbols()),
+                                 dict(reduced.named_symbols))
+
+    def test_doing_it_twice_is_doing_it_once(self):
+        for shape, seed in CASES[::3]:
+            with self.subTest(shape=shape, seed=seed):
+                system, _, isolated = self.isolated(shape, seed)
+                once = isolated.herm_mult.copy()
+                isolated.isolate_clock()
+                self.assertEqual(once, isolated.herm_mult)
+
+    def test_another_translator_for_the_same_system_is_not_touched(self):
+        shape, seed = CASES[0]
+        system, translator = case(shape, seed)
+        before = translator.herm_mult.copy()
+        self.isolated(shape, seed)
+        self.assertEqual(before, translator.herm_mult)
+
+    def test_every_reduced_equation_is_still_true(self):
+        for shape, seed in CASES:
+            with self.subTest(shape=shape, seed=seed):
+                system, translator, isolated = self.isolated(shape, seed)
+                self.assertEqual([], false_equations(system, isolated.translate(system)))
+                self.assertEqual([], false_equations(
+                    system, isolated.translate_general(system, normalise_parameters=False)))
+
+    def test_an_autonomous_system_with_a_rescaled_time_reduces_to_an_autonomous_one(self):
+        # The statement the operation is for.  The premise is read off the isolated
+        # multiplier: the invariant holding t is k*t, with k in the parameters.
+        checked = were_not = 0
+        for shape, seed in CASES:
+            system, translator, isolated = self.isolated(shape, seed)
+            t = system.independent_variable
+            if any(rate.has(t) for rate in system.derivatives if rate is not None):
+                continue
+            holding = [monomial for monomial in isolated.invariant_monomials()
+                       if monomial.has(t)]
+            if not holding or holding[0].free_symbols - set(system.parameters) - {t} \
+                    or sympy.degree(holding[0], t) != 1:
+                continue
+            with self.subTest(shape=shape, seed=seed):
+                reduced = isolated.translate_general(system)
+                clock = reduced.independent_variable
+                self.assertEqual(holding[0], reduced.named_symbols[clock])
+                for rate in reduced.derivatives:
+                    if rate is not None:
+                        self.assertFalse(rate.has(clock))
+                checked += 1
+                plain = general(shape, seed, True, True)
+                were_not += any(rate is not None and rate.has(plain.independent_variable)
+                                and symbol != plain.independent_variable
+                                for symbol, rate in zip(plain.symbols, plain.derivatives))
+        self.assertGreaterEqual(checked, 40)
+        # And it changes something: some of these were not autonomous without it.
+        self.assertGreaterEqual(were_not, 5)
 
 
 class TestTheReportsDescribeTheReduction(TestCase):
@@ -312,7 +499,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                         len(general(shape, seed, normalise, identify).symbols),
                         translator.expected_variable_count(
                             system, scheme=ReductionScheme.GENERAL,
-                            normalise_parameters=normalise, identify_indep_var=identify))
+                            normalise_parameters=normalise, rescale_clock=identify))
 
     def test_the_count_under_the_dependent_variable_scheme(self):
         for shape, seed in cases_under(ReductionScheme.DEP_VAR):

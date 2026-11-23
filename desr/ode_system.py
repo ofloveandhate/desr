@@ -410,7 +410,7 @@ class ODESystem(object):
 
         to_sub = {self._indep_var:new_indep}
         
-        self._derivatives = [d.subs(to_sub) if d else d for d in self._derivatives]
+        self._derivatives = tuple(d.subs(to_sub) if d else d for d in self._derivatives)
         self._constraints = [c.subs(to_sub) for c in self.constraints]
         self._initial_conditions = {k:v.subs(to_sub) for k,v in self._initial_conditions.items()}
 

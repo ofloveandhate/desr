@@ -73,6 +73,19 @@ def _first(value):
     return value.reshape(-1)[0] if value.ndim else value[()]
 
 
+def _agree(first, second, tolerance):
+    '''
+    Whether two values, or two series, are the same to a relative `tolerance`.
+
+    Relative to the larger of the two series overall, so that a series passing through
+    zero is not held to an absolute tolerance of nothing at that one sample.
+    '''
+    first = np.asarray(first, dtype=float)
+    second = np.asarray(second, dtype=float)
+    scale = max(float(np.max(np.abs(first))), float(np.max(np.abs(second))))
+    return bool(np.all(np.abs(first - second) <= tolerance * scale))
+
+
 def _eval_monomial(values, exponents, column):
     '''
     Evaluate one monomial: the product of ``values`` raised to the powers in one column.
@@ -340,10 +353,20 @@ class NumericTranslator(object):
         ordered = list(found) + [values.get(v) for v in self._invariants]
         result = self._evaluate(ordered, self._inv_herm_mult, self._acted)
         if self._shares_indep_var and values.get(self.reduced.independent_variable) is not None:
-            # `_shares_indep_var` says the reduced clock denotes the original one, so take
-            # it as given rather than reconstructing it -- the monomial would agree, but
-            # only to the accuracy of everything that went into it.
-            result[self.system.independent_variable] = values[self.reduced.independent_variable]
+            # The reduced clock denotes the original one, and the other reduced values
+            # determine the original time as well, through its monomial.  Where the two
+            # agree, the clock is returned as given, since the monomial is only as
+            # accurate as everything that went into it.
+            #
+            # They need not agree.  Hubert & Labahn's reduced system (21)-(22) involves t
+            # only as t d/dt, so if (x(t), y(t)) solves it then so does (x(c t), y(c t))
+            # for any constant c, and nothing about a reduced solution says c is 1.
+            # Their Theorem 6.5 has this constant: the original solution is at time
+            # t / c.  The monomial gives that time, so it is what is returned.
+            given = values[self.reduced.independent_variable]
+            rebuilt = result.get(self.system.independent_variable)
+            if rebuilt is None or _agree(rebuilt, given, tolerance):
+                result[self.system.independent_variable] = given
 
         if not result:
             raise ValueError(
@@ -642,8 +665,18 @@ class NumericTranslator(object):
                     # by the same multiplier, keeping the auxiliaries, to recover it.
                     if carrier is None:
                         carrier = self._auxiliary_carrier()
+                        # The carrier names its symbols by its own defaults.  Read its
+                        # equations in this reduction's symbols, matched by the monomial
+                        # each one denotes.
+                        mine = {monomial: symbol for symbol, monomial
+                                in self.reduced.named_symbols.items()}
+                        to_mine = {symbol: mine[monomial] for symbol, monomial
+                                   in carrier.named_symbols.items()
+                                   if monomial in mine and mine[monomial] != symbol}
                     kept = carrier.auxiliary_names[column]
-                    rates.append(sympy.simplify(carrier.derivative_dict[kept] / kept))
+                    rates.append(sympy.simplify(
+                        carrier.derivative_dict[kept] / kept).subs(
+                            to_mine, simultaneous=True))
                     named.append(kept)
 
                 for rate, name in zip(rates, self._auxiliaries):
@@ -678,9 +711,12 @@ class NumericTranslator(object):
             raise ValueError(
                 'This reduction has {} scaling symmetries and the system has {}, so the '
                 'auxiliaries it dropped cannot be recovered.'.format(self.r, translator.r))
-        return translator.translate_general(include_aux_vars=True,
-                                            normalise_parameters=False,
-                                            identify_indep_var=False)
+        # Against the same clock as this reduction, so that the rates read off it are
+        # rates along the series this translator is given.
+        clock = self.reduced.named_symbols[self.reduced.independent_variable]
+        return translator.translate_general(
+            include_aux_vars=True, normalise_parameters=False,
+            rescale_clock=clock != self.system.independent_variable)
 
     def recover_auxiliaries(self, values, known_values=None, auxiliaries=None,
                             invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,

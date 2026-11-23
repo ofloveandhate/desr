@@ -155,10 +155,10 @@ So the table has an occupant where Michaelis-Menten had a hole:
      - *empty*
    * - dependent
      - :math:`x_3`
-     - :math:`y_0 \ldots y_4`
+     - :math:`y_1 \ldots y_4`
    * - independent
      - *empty*
-     - *empty*
+     - :math:`\tau`
 
 and a reduction told to keep every auxiliary sorts them the same way, three into the
 parameters and one into the dependents:
@@ -169,15 +169,22 @@ parameters and one into the dependents:
     >>> reduced.parameters
     (x0, x1, x2)
     >>> reduced.dependents
-    (x3, y0, y1, y2, y3, y4)
+    (x3, y1, y2, y3, y4)
 
 :math:`x_3` is the one with an equation, and it is the only auxiliary that has one:
 
     >>> reduced.derivative_dict[sympy.Symbol('x3')]
-    x3*(-y0*y1 + y0*y2*y4)/t
+    -x3*y1 + x3*y2*y4
 
-The independent variable's row is empty on both sides here because this scheme keeps the
-system's own :math:`t` rather than making a new one.
+The independent variable's row has an occupant on the fixed side: the invariant
+:math:`k_{23} t` is the clock times a parameter, so the reduction takes it as its clock
+and calls it :math:`\tau`.  The system's own :math:`t` is moved by the scaling and is
+not in the reduced system.
+
+    >>> reduced.independent_variable
+    tau
+    >>> reduced.named_symbols[reduced.independent_variable]
+    k_2_3*t
 
 
 Which row an auxiliary is in decides what becomes of it

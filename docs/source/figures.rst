@@ -56,8 +56,9 @@ the Hermite multiplier; the middle two are substitutions, because by then the ch
 coordinates is already made and what remains is a choice of units acting on the reduced
 symbols.
 
-Between them sits the unit table from :ref:`dimensions`, which spans both middle maps,
-since choosing the units is what makes the clock identifiable at all.
+Between them sits the unit table from :ref:`dimensions`, which spans both middle maps:
+the first sets the constant auxiliaries to 1, and the second takes an invariant
+:math:`k t` as the clock in place of :math:`t`.
 
 .. code-block:: python
 

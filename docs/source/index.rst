@@ -14,6 +14,7 @@ Contents
    examples/example_index
    symbol_kinds
    three_schemes
+   isolating_the_clock
    no_symmetry
    idempotent
    dimensions

@@ -121,13 +121,13 @@ Turning both off reproduces Hubert & Labahn exactly.
 **Normalising** sets every constant auxiliary to 1, which is the choice of units
 described in :ref:`dimensions`.
 
-**Identifying** is the one that touches the clock.  Once the units are chosen, an
-invariant such as :math:`k_{23} t` may *be* :math:`t` — and then it is a second name
-for a variable the reduced system already carries, whose equation reads
-:math:`dt/dt = 1`, which the system already has.  The two become one quantity.
-
-From that moment the reduced system is integrated against :math:`k_{23} t` rather than
-:math:`t`, so it is a rescaled time and takes the name a rescaled time gets:
+**Changing the clock** is the other.  Hubert & Labahn's reduced system is written
+against the original :math:`t`, which appears in it only as :math:`t\,d/dt`.  When one
+of the invariants is :math:`\tau = k t`, with :math:`k` a monomial in the parameters,
+that invariant satisfies :math:`t\,d\tau/dt = \tau`, so
+:math:`t\,d/dt = \tau\,d/d\tau` and the system can be written against :math:`\tau`
+instead.  The reduced system then has one clock, it is dimensionless, and :math:`t`
+does not appear.  It is a rescaled time and takes the name a rescaled time gets:
 
     >>> enzyme = ChemicalReactionNetwork.from_diagram(
     ...     'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
@@ -138,27 +138,37 @@ From that moment the reduced system is integrated against :math:`k_{23} t` rathe
     >>> reduced.named_symbols[reduced.independent_variable]
     k_2_3*t
 
-Ask for no normalisation and nothing becomes :math:`t`, so nothing is identified, and
-the clock is the system's own — with :math:`k_{23} t` standing beside it as an
-invariant with a name of its own:
+The change does not depend on the normalisation.  With nothing normalised the clock
+is the same invariant:
 
     >>> untouched = translator.translate_general(enzyme, normalise_parameters=False)
     >>> untouched.independent_variable
-    t
+    tau
     >>> untouched.named_symbols[untouched.independent_variable]
-    t
+    k_2_3*t
 
-This is why the rule is about denotation and not about which scheme ran:
+Declining the step keeps the original clock, with :math:`k_{23} t` beside it as an
+invariant of its own, which is Hubert & Labahn's form:
+
+    >>> kept = translator.translate_general(enzyme, rescale_clock=False)
+    >>> kept.independent_variable
+    t
+    >>> k_2_3, t = sympy.symbols('k_2_3 t')
+    >>> k_2_3 * t in kept.named_symbols.values()
+    True
+
+The rule is about denotation and not about which scheme ran:
 
     **The reduced clock is called** :math:`t` **only when it denotes** :math:`t`.
 
-Under the dependent-variable scheme that is always, because its multiplier is written
-in the symbols other than the clock, so none of its invariants can turn out to be one.
-Under the general scheme it holds whenever nothing was identified — which includes
-every reduction that normalises nothing, every one run with
-``identify_indep_var=False``, and systems like 6.6 whose clock invariants all involve a
-dependent variable.  Under the parameter scheme it never holds, and that scheme has
-always said so.
+Under the dependent-variable scheme that is always, because the scaling leaves the
+clock alone.  Under the general scheme it holds when no invariant is :math:`k t` —
+systems like 6.6, whose invariants containing :math:`t` all involve a dependent
+variable as well — and for every reduction run with ``rescale_clock=False``.
+Under the parameter scheme it never holds.
+
+An invariant such as :math:`k t^2` or :math:`k/t` is not taken as the clock.  It is
+invariant, but it is not time in other units.
 
 So if you are moving numbers between a reduced system and the original, the question to
 ask is not which scheme ran but what the clock denotes.

@@ -15,7 +15,7 @@ each can be turned off.
 
   - `translate_general` normalises the parameter auxiliaries and identifies a
     clock invariant with the independent variable, both by default, both
-    controlled by `normalise_parameters` and `identify_indep_var`.  Passing
+    controlled by `normalise_parameters` and `rescale_clock`.  Passing
     `False` to each reproduces Hubert & Labahn's reduction exactly.  The
     options reach `translate` and `translate_dep_var` too.
   - An auxiliary that is a monomial in the original parameters alone is
@@ -59,6 +59,25 @@ each can be turned off.
     adds the independent variable to the dict it is given.
   - `smith_normal_form` is right for every integer matrix.  It failed an
     internal assertion on about one small matrix in ten.
+  - The general scheme takes an invariant `k*t`, with `k` a monomial in the
+    parameters, as its clock `tau` whenever there is one, and the reduced
+    system then has no `t`.  This is a change of independent variable and
+    no longer waits on the normalisation making `k` equal to 1.  With it
+    the general scheme gives the parameter scheme's system wherever that
+    scheme applies.  `rescale_clock=False` keeps `t`.
+  - An invariant built from the parameters alone is named from the naming
+    scheme's `parameters` entry, `kappa` by default, under every scheme.
+    The general and dependent-variable schemes used to call it `y`.
+  - `NumericTranslator.reverse` returns the original time the reduced
+    values determine.  Where the reduced clock denotes `t` it returned the
+    clock as given, which is the original time only when Hubert & Labahn's
+    constant `c` is 1; a reduced solution with another `c` came back with
+    the right values against the wrong times.
+  - `ODETranslator.isolate_clock()` puts the translator in a basis of the
+    invariants in which the independent variable appears in only one.
+    Where that one is `k*t`, an autonomous system reduces to an autonomous
+    one.  It changes the translator, as the `multiplier_*` operations do,
+    and is something a caller asks for.
 
 ### A translator remembers its system
 
@@ -105,6 +124,10 @@ each can be turned off.
 
 ### Renames
 
+  - The option `identify_indep_var` is `rescale_clock`, on `translate`,
+    `translate_general`, `translate_dep_var` and `expected_variable_count`.
+    The step takes an invariant `k*t` as the clock; it no longer identifies
+    an invariant with `t`.  There is no alias.
   - `NumericTranslation` is `NumericTranslator`, and is built from a reduced
     system rather than from a system and a translator.
     `ODESystem.numeric_translator()` is the short way to one.
