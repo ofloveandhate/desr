@@ -24,6 +24,11 @@ from desr.ode_translation import ODETranslator, ReductionScheme
 from oracles import false_equations
 
 
+MICHAELIS_MENTEN = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+                    'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
+HL_6_4 = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+
 def disagreements(first, second):
     '''
     Where two reductions of one system differ, compared quantity by quantity.
@@ -208,3 +213,32 @@ class TestATranslatorBuiltWithoutTheClocksColumn(TestCase):
         reduced = short.translate_dep_var(system)
         self.assertEqual([], false_equations(system, reduced))
         self.assertEqual([], disagreements(reduced, full.translate_dep_var(system)))
+
+
+class TestAShortScalingMatrixWithItsSymbolsNamed(TestCase):
+
+    def test_the_independent_variable_is_added_to_the_symbols_too(self):
+        system = ODESystem.from_equations(HL_6_4)
+        t, z1, z2 = system.symbols
+        short = ODETranslator(sympy.Matrix([[1, -1]]), symbols_domain=[z1, z2])
+        full = short._with_independent_variable(system)
+        self.assertEqual((t, z1, z2), tuple(full.symbols_domain))
+        self.assertEqual([], false_equations(system, short.translate_dep_var(system)))
+
+
+class TestTheOrderOfTheSymbolsDoesNotChangeTheTruth(TestCase):
+    '''
+    The parameter scheme needs the parameters first.  In another order the system is the
+    same system, `translate` takes another scheme, and the reduction is still true.
+    '''
+
+    def test_michaelis_menten_with_a_dependent_first(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        self.assertEqual(ReductionScheme.PARAMETER,
+                         ODETranslator.from_ode_system(system).scheme())
+        symbols = list(system.symbols)
+        system.reorder_variables([symbols[-1]] + symbols[:-1])
+        self.assertIn(system.symbols[0], system.dependents)
+        translator = ODETranslator.from_ode_system(system)
+        self.assertNotEqual(ReductionScheme.PARAMETER, translator.scheme())
+        self.assertEqual([], false_equations(system, translator.translate(system)))

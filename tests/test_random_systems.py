@@ -278,6 +278,22 @@ class TestTheReportsDescribeTheReduction(TestCase):
                 self.assertEqual(tuple(reduced.symbols), tuple(reported))
                 self.assertEqual(dict(reduced.named_symbols), dict(reported))
 
+    def test_the_names_by_role_are_the_reduced_systems_symbols_in_order(self):
+        # The dependent-variable scheme's names are held to its own layout in
+        # `test_vocabulary.py`.
+        for shape, seed, scheme, reduced in self.reductions():
+            if scheme == ReductionScheme.DEP_VAR:
+                continue
+            with self.subTest(shape=shape, seed=seed, scheme=scheme.name):
+                _, translator = case(shape, seed)
+                if scheme == ReductionScheme.PARAMETER:
+                    expected = tuple(translator.invariant_names(scheme))
+                else:
+                    expected = ((reduced.independent_variable,)
+                                + tuple(translator.auxiliary_names(scheme))
+                                + tuple(translator.invariant_names(scheme)))
+                self.assertEqual(expected, tuple(reduced.symbols))
+
     def test_exactly_one_symbol_is_the_one_to_integrate_against(self):
         for shape, seed, scheme, reduced in self.reductions():
             with self.subTest(shape=shape, seed=seed, scheme=scheme.name):
