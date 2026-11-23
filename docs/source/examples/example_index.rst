@@ -12,3 +12,4 @@ Examples
    quadrature_round_trip
    dimensional_consistency
    linear_compartment
+   signalling_networks

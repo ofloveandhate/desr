@@ -1,51 +1,28 @@
 """
-The reaction networks in ``examples/chemical_reaction_networks.py``, reduced.
+The five signalling networks in `example_networks.py`, reduced.
 
-They are the largest systems in the repository -- the two-step phosphorelay has ten
-symbols -- and until now nothing checked their reductions.  The script prints them, and
-CI checked only that it exited zero, so a change of convention could have altered every
-one of these answers without anything saying so.
-
-These are properties rather than printed output: that the reduction is the size the
-translator predicts, that the invariants really are invariant, and that the round trip
-returns the symbols it started from.  A convention that drifts breaks at least one of
-them, and none of them has to be rewritten when a naming scheme changes.
+They are the largest systems in the repository.  These are properties rather than
+printed output: that the reduction is the size the translator predicts, that the
+invariants really are invariant, that the round trip returns the symbols it started
+from, and that the numbers tabulated in
+`docs/source/examples/signalling_networks.rst` are the ones the library gives.
 """
 
-import os
-import sys
 from unittest import TestCase
 
 import sympy
 
-from desr.ode_translation import ODETranslator
+from desr.ode_translation import ODETranslator, ReductionScheme
 
-# examples/ is not part of the installed package, so it is reached by path rather than
-# by import.  If those scripts move, this moves with them.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))))
-
-from examples import chemical_reaction_networks as networks    # noqa: E402
+from example_networks import NETWORKS
+from oracles import false_equations
 
 
 class TestTheExampleReactionNetworks(TestCase):
 
-    BUILDERS = (
-        ('two step phosphorelay', networks.example_two_step_phosphorelay),
-        ('one site modification', networks.example_one_site_modification),
-        ('two site modification', networks.example_two_site_modification),
-        ('two substrate modification', networks.example_two_substrate_modification),
-        ('two layer cascade', networks.example_two_layer_cascade),
-    )
-
     def systems(self):
-        import warnings
-        for label, build in self.BUILDERS:
-            with warnings.catch_warnings():
-                # The phosphorelay warns that conservation forces km5 == km6, which is
-                # a statement about the model and not something to hear in a test run.
-                warnings.simplefilter('ignore', UserWarning)
-                yield label, build()
+        for label, build in NETWORKS.items():
+            yield label, build()
 
     def test_every_one_of_them_reduces(self):
         for label, system in self.systems():
@@ -92,3 +69,42 @@ class TestTheExampleReactionNetworks(TestCase):
                     sympy.simplify(monomial.subs(forward, simultaneous=True))
                     for monomial in translator.reverse_monomials()]
                 self.assertEqual(list(system.symbols), recovered)
+
+    def test_every_reduced_equation_is_true(self):
+        for label, system in self.systems():
+            with self.subTest(network=label):
+                self.assertEqual([], false_equations(
+                    system, system.reduce_scaling_symmetries()))
+
+    #: network: (dependent variables, rate constants, rate constants left)
+    TABULATED = {
+        'one-site modification': (6, 6, 4),
+        'two-step phosphorelay': (10, 10, 8),
+        'two-site modification': (11, 12, 10),
+        'two-substrate modification': (11, 12, 10),
+        'two-layer cascade': (11, 12, 10),
+    }
+
+    def test_the_table_on_the_documentation_page(self):
+        self.assertEqual(set(NETWORKS), set(self.TABULATED))
+        for label, system in self.systems():
+            with self.subTest(network=label):
+                translator = ODETranslator.from_ode_system(system)
+                reduced = translator.translate(system)
+                self.assertEqual(self.TABULATED[label],
+                                 (len(system.dependents), len(system.parameters),
+                                  len(reduced.parameters)))
+                self.assertEqual(2, translator.num_scaling_symmetries)
+                self.assertEqual(ReductionScheme.PARAMETER, translator.scheme())
+
+    def test_they_all_choose_the_same_two_units(self):
+        # Time in 1/k2, and every concentration in k2/k1.
+        t, k1, k2 = sympy.symbols('t k1 k2')
+        for label, system in self.systems():
+            with self.subTest(network=label):
+                reduced = system.reduce_scaling_symmetries()
+                denotes = reduced.named_symbols
+                self.assertEqual(k2 * t, denotes[reduced.independent_variable])
+                for symbol in reduced.dependents:
+                    species = sympy.simplify(denotes[symbol] * k2 / k1)
+                    self.assertIn(species, system.dependents)
