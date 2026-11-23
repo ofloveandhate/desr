@@ -120,8 +120,8 @@ each can be turned off.
     neither, and CI proves it on a bare install.
   - `desr.figures` ships with the package.
 
-Tested on 693 unit tests over 1016 subtests, 131 module doctests, 1369
+Tested on 809 unit tests over 1271 subtests, 133 module doctests, 1509
 documentation doctests, an HTML documentation build with warnings as errors,
 the example scripts, and both figures rendered for four systems each.
 
-See pull requests #40, #41 and #44 for what this is made of.
+See pull requests #40, #41 and #44 through #56 for what this is made of.
