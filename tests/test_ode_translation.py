@@ -1137,8 +1137,18 @@ class TestParameterValuesThroughTranslation(TestCase):
         translator = ODETranslator.from_ode_system(system)
         self.assertEqual(translator.scheme(), ReductionScheme.DEP_VAR)
         reduced = translator.translate_dep_var(system)
-        self.assertEqual(reduced.parameter_values[sympy.Symbol('y0')],
-                         sympy.Integer(7))
+        # `a` multiplies a whole right-hand side, so the scaling leaves it alone: it is
+        # its own invariant, keeps its name, and so keeps its value.
+        a = sympy.Symbol('a')
+        self.assertEqual(a, reduced.named_symbols[a])
+        self.assertEqual(reduced.parameter_values[a], sympy.Integer(7))
+
+        # Asked to rename it, the value follows it to the generated name.
+        renaming = ODETranslator.from_ode_system(
+            system, naming_scheme={'rename_unchanged_symbols': True})
+        renamed = renaming.translate_dep_var(system)
+        self.assertEqual(a, renamed.named_symbols[sympy.Symbol('y0')])
+        self.assertEqual(renamed.parameter_values[sympy.Symbol('y0')], sympy.Integer(7))
 
     def test_every_scheme_values_exactly_its_known_parameters(self):
         # The invariant across all three: a reduced parameter has a value exactly when the

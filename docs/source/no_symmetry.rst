@@ -64,19 +64,31 @@ With nothing scaled, every symbol is invariant and there are no auxiliaries:
 The reduction is the identity
 -------------------------------
 
-Reducing by no symmetries changes nothing but the names:
+Reducing by no symmetries returns the system:
 
     >>> reduced = translator.translate(system)
     >>> reduced
+    dt/dt = 1
+    dz/dt = t + z + 1
+    >>> reduced.named_symbols
+    {t: t, z: z}
+
+Each symbol denotes itself.  An invariant that is one of the original symbols keeps that
+symbol's name, since the reduction did nothing to it, and here that is every symbol.
+
+The scheme that applies is the parameter scheme.  Its condition is that every auxiliary
+is a monomial in the parameters, and with no auxiliaries that holds.
+
+To have generated names throughout, set ``rename_unchanged_symbols`` in the naming
+scheme.  The equations are the same ones in different letters:
+
+    >>> renaming = ODETranslator.from_ode_system(
+    ...     system, naming_scheme={'rename_unchanged_symbols': True})
+    >>> renaming.translate(system)
     dtau/dtau = 1
     dnu0/dtau = nu0 + tau + 1
-    >>> reduced.named_symbols
+    >>> renaming.translate(system).named_symbols
     {tau: t, nu0: z}
-
-Each reduced symbol denotes one original symbol, and the equation is the original one
-written in the new names.  The names are the parameter scheme's, which is the scheme
-that applies: its condition is that every auxiliary is a monomial in the parameters, and
-with no auxiliaries that holds.
 
 :attr:`~desr.ode_translation.ODETranslator.num_scaling_symmetries` is the thing to check
 before a reduction if it matters whether anything will be removed.

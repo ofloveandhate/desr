@@ -151,8 +151,12 @@ and translate the system
     ds/dtau = c*c3 + c*s - c0*s
     s(0) = 1
     c1 == c2 + c3
-    c4 == c0/(c1 + 1)
-    parameters: c0, c1, c2, c3, c4
+    epsilon == c0/(c1 + 1)
+    parameters: c0, c1, c2, c3, epsilon
+
+:math:`\epsilon` is dimensionless, so the scaling leaves it alone and it comes through
+the reduction under its own name.  The other four parameters are new quantities and are
+named by the scheme.
 
 The scaling invariants:
 
@@ -217,8 +221,7 @@ Making some substitutions leads to :cite:`Segel1989` (21a-d)
     ...                    expand_after=True,
     ...                    factor_after=True)
     >>> reduced_system = reduced_system.subs({'c1': 'sigma',
-    ...                          'c3': 'kappa',
-    ...                          'c4': 'epsilon'},
+    ...                          'c3': 'kappa'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,
     ...                         factor_after=True)
@@ -274,7 +277,6 @@ and only the clock changes.  The three column operations act on the time column 
     >>> reduced_system.subs({'c': 'v',
     ...                          'c1': 'sigma',
     ...                          'c3': 'kappa',
-    ...                          'c4': 'epsilon',
     ...                          's': 'u'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,

@@ -63,11 +63,19 @@ class ReductionScheme(str, enum.Enum):
 #: of those categories are empty -- there may be no parameter invariants, and the clock may
 #: be entangled with a dependent variable, as in Hubert & Labahn 6.6 where `t z1^3` is an
 #: invariant -- and the names for them simply go unused.
-NAMING_SCHEME_KEYS = ('parameters', 'independent', 'dependents', 'auxiliaries')
+#:
+#: The last key is not a name but a switch.  An invariant that is one of the original
+#: symbols -- a dimensionless parameter, a clock the reduction does not rescale, every
+#: symbol of a system with no scaling symmetry -- keeps that symbol's name, because
+#: nothing happened to it.  ``rename_unchanged_symbols`` set to :const:`True` gives it a
+#: generated name like any other, so that every symbol of the reduced system is spelled
+#: differently from every symbol of the original.
+NAMING_SCHEME_KEYS = ('parameters', 'independent', 'dependents', 'auxiliaries',
+                      'rename_unchanged_symbols')
 
 #: Defaults for the parameter reduction scheme: desr's own nondimensionalisation names.
 PARAMETER_SCHEME_NAMES = {'parameters': 'kappa', 'independent': 'tau', 'dependents': 'nu',
-                          'auxiliaries': 'x'}
+                          'auxiliaries': 'x', 'rename_unchanged_symbols': False}
 
 #: Defaults for the general and dependent-variable schemes: Hubert & Labahn's notation, where
 #: the auxiliaries are :math:`x` and the invariants :math:`y`, so that output can be compared
@@ -76,7 +84,7 @@ PARAMETER_SCHEME_NAMES = {'parameters': 'kappa', 'independent': 'tau', 'dependen
 #: denotes the original one.  Where it does not, the name comes from
 #: :data:`RESCALED_CLOCK_NAME` instead; see :meth:`ODETranslator._clock_name_for`.
 GENERAL_SCHEME_NAMES = {'parameters': 'kappa', 'independent': None, 'dependents': 'y',
-                        'auxiliaries': 'x'}
+                        'auxiliaries': 'x', 'rename_unchanged_symbols': False}
 
 #: What a reduction calls its clock when that clock is a rescaled time rather than the
 #: system's own.  It is the parameter scheme's name for the same thing, which is why
@@ -104,7 +112,7 @@ def _normalise_naming_scheme(naming_scheme):
     >>> _normalise_naming_scheme(('tau', 'nu', 'kappa'))
     Traceback (most recent call last):
         ...
-    ValueError: A naming scheme is a dict, not a tuple.  Write {'independent': 'tau', 'dependents': 'nu', 'parameters': 'kappa'} -- the keys are parameters, independent, dependents, auxiliaries, and any you leave out take their default.
+    ValueError: A naming scheme is a dict, not a tuple.  Write {'independent': 'tau', 'dependents': 'nu', 'parameters': 'kappa'} -- the keys are parameters, independent, dependents, auxiliaries, rename_unchanged_symbols, and any you leave out take their default.
 
     >>> _normalise_naming_scheme({'independent': 'tau', 'dependents': ['u', 'v']}) == {
     ...     'independent': 'tau', 'dependents': ['u', 'v']}
@@ -116,7 +124,14 @@ def _normalise_naming_scheme(naming_scheme):
     >>> _normalise_naming_scheme({'indep': 'tau'})
     Traceback (most recent call last):
         ...
-    ValueError: Unknown naming scheme key 'indep'.  The keys are parameters, independent, dependents, auxiliaries.
+    ValueError: Unknown naming scheme key 'indep'.  The keys are parameters, independent, dependents, auxiliaries, rename_unchanged_symbols.
+
+    The switch is a switch, and a name given in its place is refused:
+
+    >>> _normalise_naming_scheme({'rename_unchanged_symbols': 'kappa'})
+    Traceback (most recent call last):
+        ...
+    ValueError: The naming scheme's 'rename_unchanged_symbols' is True or False, not a name.  Got a str.
     '''
     if naming_scheme is None:
         return {}
@@ -145,6 +160,12 @@ def _normalise_naming_scheme(naming_scheme):
                 "number of them is not known until the reduction runs.  Got a {}.".format(
                     key, type(value).__name__))
 
+    switch = naming_scheme.get('rename_unchanged_symbols')
+    if switch is not None and not isinstance(switch, bool):
+        raise ValueError(
+            "The naming scheme's 'rename_unchanged_symbols' is True or False, not a name.  "
+            "Got a {}.".format(type(switch).__name__))
+
     return dict(naming_scheme)
 
 
@@ -153,6 +174,36 @@ def _new_symbols(pattern, count, start_at):
     `count` symbols named `pattern` with consecutive indices appended, counting from `start_at`.
     '''
     return [sympy.Symbol('{}{}'.format(pattern, i + start_at)) for i in range(count)]
+
+
+def _keeping_unchanged(names, monomials, symbols):
+    '''
+    Give back to each invariant that is one of the original symbols that symbol's name.
+
+    A generated name says a quantity is new.  An invariant whose monomial is a single
+    original symbol is not new: the scaling leaves that symbol alone, so the reduction
+    carries it through as it stands, and calling it `kappa0` would report a change where
+    there was none.  The clock that comes through unrescaled is the commonest case, a
+    dimensionless parameter the next, and every symbol of a system with no scaling
+    symmetry the limiting one.
+
+    The other names keep their indices, so an index goes on meaning a column.
+
+    Args:
+        names (iter of sympy.Symbol): The generated names, one per invariant column.
+        monomials (iter of sympy.Expr): What each column denotes, in the same order.
+        symbols (iter of sympy.Symbol): The original system's symbols.
+
+    Returns:
+        list of sympy.Symbol
+
+    This is for invariants only.  An auxiliary is always given a new name, even when its
+    monomial is a single symbol, because being an auxiliary is a role that symbol did not
+    have in the original system.
+    '''
+    symbols = set(symbols)
+    return [monomial if monomial in symbols else name
+            for name, monomial in zip(names, monomials)]
 
 
 def _names_for(pattern, count, start_at, what):
@@ -391,6 +442,12 @@ class ODETranslator(object):
               this must be a single string rather than a list.
             - `'auxiliaries'`: the pattern for the auxiliary variables, likewise a single
               string.  Only the general and dependent-variable schemes make any.
+            - `'rename_unchanged_symbols'`: :const:`False` by default.  An invariant that is
+              one of the original symbols -- a dimensionless parameter, a clock that is
+              not rescaled -- keeps that symbol's name, since the reduction did nothing to
+              it.  :const:`True` gives it a generated name like any other invariant.  An
+              auxiliary is given a new name either way, and so is anything an explicit
+              list of names covers.
 
             The defaults are :data:`PARAMETER_SCHEME_NAMES` for the parameter scheme and
             :data:`GENERAL_SCHEME_NAMES` for the other two, so that output under the general
@@ -517,6 +574,17 @@ class ODETranslator(object):
         resolved = dict(defaults)
         resolved.update(self._naming_scheme)
         return resolved
+
+    def _keeps_unchanged_names(self):
+        '''
+        Whether an invariant that is one of the original symbols keeps that symbol's name.
+
+        It does unless the naming scheme sets ``rename_unchanged_symbols``.  The default is
+        the same under every reduction scheme, so no scheme's defaults need consulting.
+
+        :rtype: bool
+        '''
+        return not self._naming_scheme.get('rename_unchanged_symbols', False)
 
     def _clock_monomial(self, system, identified, clock_auxiliaries=()):
         '''
@@ -2367,9 +2435,12 @@ class ODETranslator(object):
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
-        num_inv_var = reduced_scaling.herm_mult_n.shape[1]
-        invariant_names = _names_for(scheme['dependents'], num_inv_var,
-                                         self._new_indices_start_at, 'invariants')
+        # Every invariant column's name, from the one place that names them, so that what
+        # this builds and what the reports say cannot differ.  This scheme identifies
+        # nothing, so none is left out.
+        invariant_names = list(self._invariant_names_for(
+            system, ReductionScheme.DEP_VAR, normalise_parameters=normalise_parameters,
+            identify_indep_var=False))
 
         # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
         #print 'x = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
@@ -2557,9 +2628,11 @@ class ODETranslator(object):
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
-        num_inv_var = self.herm_mult_n.shape[1]
-        invariant_names = _names_for(scheme['dependents'], num_inv_var,
-                                         self._new_indices_start_at, 'invariants')
+        # Every invariant column's name, from the one place that names them.  Asked with
+        # nothing identified, because the columns left out are decided further down.
+        invariant_names = list(self._invariant_names_for(
+            system, ReductionScheme.GENERAL, normalise_parameters=False,
+            identify_indep_var=False))
 
         if include_aux_vars:
             # x = sympy.Matrix(scale_action(system.symbols, self.herm_mult_i))
@@ -2747,9 +2820,29 @@ class ODETranslator(object):
         new_vars = _names_for(scheme['dependents'], num_variables_wo_time,
                               self._new_indices_start_at, 'dependent variables')
 
-        independent = scheme['independent']
-        the_map = {system.independent_variable: system.independent_variable if independent is None
-                                     else sympy.Symbol(independent)}
+        # The columns of V_n run (parameter invariants, the clock, the dependents).
+        monomials = list(scale_action(system.symbols, self.herm_mult_n))
+        first = system.num_parameters - self.r
+        clock_monomial, dependent_monomials = monomials[first], monomials[first + 1:]
+
+        # An explicit list of names is the caller's statement and is taken as given.  A
+        # pattern only says how to spell what is new, so a dependent the scaling leaves
+        # alone keeps its own name.
+        keeps = self._keeps_unchanged_names()
+        if keeps and isinstance(scheme['dependents'], str):
+            new_vars = _keeping_unchanged(new_vars, dependent_monomials, system.symbols)
+
+        # The same for the clock: `tau` is a rescaled time, and one that comes through as
+        # `t` is not rescaled.  Setting `independent`, to a name or to None, overrides.
+        if 'independent' in self._naming_scheme:
+            independent = scheme['independent']
+            clock = (system.independent_variable if independent is None
+                     else sympy.Symbol(independent))
+        elif keeps and clock_monomial == system.independent_variable:
+            clock = system.independent_variable
+        else:
+            clock = sympy.Symbol(scheme['independent'])
+        the_map = {system.independent_variable: clock}
 
         for v,V in zip(system.dependents, new_vars):
             the_map[v] = V
@@ -2771,8 +2864,14 @@ class ODETranslator(object):
         :rtype: list of sympy.Symbol
         '''
         scheme = self._resolved_naming_scheme(PARAMETER_SCHEME_NAMES)
-        return _new_symbols(scheme['parameters'], system.num_parameters - self.r,
-                            self._new_indices_start_at)
+        count = system.num_parameters - self.r
+        names = _new_symbols(scheme['parameters'], count, self._new_indices_start_at)
+        if not self._keeps_unchanged_names():
+            return names
+        # A parameter the scaling leaves alone -- a dimensionless one -- is its own
+        # invariant, and keeps its name.
+        monomials = list(scale_action(system.symbols, self.herm_mult_n))[:count]
+        return _keeping_unchanged(names, monomials, system.symbols)
 
     def translate_parameter_substitutions(self, system):
         '''
@@ -3370,6 +3469,8 @@ class ODETranslator(object):
         '''
         explicit = set()
         for key, value in self._naming_scheme.items():
+            if key == 'rename_unchanged_symbols':
+                continue  # a switch, not a name
             if key == 'independent':
                 if value is not None:
                     explicit.add(to_symbol(value))
@@ -3391,9 +3492,11 @@ class ODETranslator(object):
 
         Only a name the reduction **generated** can clash by accident.  A name the caller
         wrote out is their decision, and reusing the original letters is a real thing to
-        want: Hubert & Labahn write their reduced predator-prey system in the same `n` and
-        `p`, and ``naming_scheme={'dependents': ['n', 'p']}`` is how to reproduce that.  So
-        an explicit entry of the naming scheme is exempt.
+        want: Hubert & Labahn write their reduced predator-prey system in the same letters
+        as the original, `n` and `p`, set in fraktur to mark them as different quantities.
+        Plain text has no second typeface, and ``naming_scheme={'dependents': ['n', 'p']}``
+        is the nearest way to write that.  So an explicit entry of the naming scheme is
+        exempt.
 
         **A shared name that denotes the same quantity is not a clash.**  What is refused
         is one spelling for two quantities, so a reduced symbol whose monomial is the
@@ -3407,9 +3510,24 @@ class ODETranslator(object):
         A caller who set `independent`, including to :const:`None`, has chosen the
         clock's name and is not second-guessed here.
 
+        **Two symbols of the reduced system may not share a name either.**  An invariant
+        that is one of the original symbols keeps that symbol's name, so a model whose own
+        dimensionless parameter is called ``y1`` could meet a generated ``y1``.
+
         Raises:
             ValueError: naming the clashing symbols and the way out.
         '''
+        seen, repeated = set(), set()
+        for symbol in reduced_system.symbols:
+            (repeated if symbol in seen else seen).add(symbol)
+        if repeated:
+            named = ', '.join(map(str, sorted(repeated, key=str)))
+            raise ValueError(
+                'The reduced system would use the name{} {} twice: once for a symbol the '
+                'reduction leaves unchanged, which keeps its name, and once as a '
+                'generated name.  Pass a naming_scheme whose patterns avoid {}.'.format(
+                    '' if len(repeated) == 1 else 's', named, named))
+
         denotes = reduced_system.named_symbols or {}
         shared = {symbol
                   for symbol in set(system.symbols) & set(reduced_system.symbols)
@@ -3632,6 +3750,19 @@ class ODETranslator(object):
             naming = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
             names = _names_for(naming['dependents'], count,
                                self._new_indices_start_at, 'invariants')
+            if self._keeps_unchanged_names() and isinstance(naming['dependents'], str):
+                # A pattern spells what is new; an invariant that is one of the original
+                # symbols is not, and keeps its name.  The independent variable is left
+                # out: an invariant that is the clock itself is the identification
+                # step's business, and where that step is declined the reduced system
+                # carries both, which one name could not do.
+                if scheme == ReductionScheme.DEP_VAR:
+                    monomials = self._dep_var_blocks(system)[1]
+                else:
+                    monomials = list(scale_action(system.symbols, self.herm_mult_n))
+                names = _keeping_unchanged(
+                    names, monomials,
+                    [s for s in system.symbols if s != system.independent_variable])
 
         if len(names) != count:
             raise ValueError('the {} scheme names {} invariants but there are {}'.format(
