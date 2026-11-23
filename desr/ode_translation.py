@@ -1637,8 +1637,8 @@ class ODETranslator(object):
             epsilon = translator.column_of('e_0/s_0')
             translator.multiplier_add_columns(clock, epsilon)
 
-        The ``multiplier_*`` methods deliberately keep taking integers, so that the number a
-        reduction depends on stays visible in the code that performs it.
+        The ``multiplier_*`` methods take a monomial directly, so this is rarely needed
+        before calling one.  It remains the way to learn where a column sits.
 
         Args:
             monomial_or_name: A monomial in the original symbols -- `'e_0/s_0'`, or the
@@ -1720,14 +1720,49 @@ class ODETranslator(object):
             '{} is not a column of this Hermite multiplier.  The monomials are {}.'.format(
                 monomial_or_name, ', '.join(map(str, monomials))))
 
+    def _column(self, which):
+        '''
+        The column an argument of a ``multiplier_*`` operation refers to.
+
+        A column is its monomial -- the column is an exponent vector, and the exponent
+        vector is a monomial in the system's own symbols -- so that is how to say which
+        one is meant.  Its position is where it happens to sit, and may change as soon
+        as an operation is applied.
+
+        Args:
+            which: A sympy expression, the column's monomial; or a string, parsed with
+                the library's convention; or an integer, the column's index, negative
+                ones counting from the end.
+
+        Returns:
+            int: The column index, never negative.
+
+        Raises:
+            ValueError: If no column has that monomial, listing the ones there are, or
+                if an index is out of range.
+        '''
+        columns = self.herm_mult.cols
+        if isinstance(which, bool):
+            raise ValueError('{} is not a column: give its monomial, or its index.'.format(
+                which))
+        if isinstance(which, (int, sympy.Integer)):
+            index = int(which)
+            if not -columns <= index < columns:
+                raise ValueError(
+                    'Column {} is out of range: the Hermite multiplier has {} columns.'
+                    .format(index, columns))
+            return index + columns if index < 0 else index
+        return self.column_of(which)
+
     def multiplier_swap_columns(self, i, j):
         '''
         Swap columns i and j of the Hermite multiplier, checking that we are only swapping 0 columns of the scaling
         matrix.
 
         Args:
-            i (int): Column index
-            j (int): Column index
+            i: The first column: its monomial as a sympy expression or a string, or its
+                index.  See :meth:`multiplier_add_columns`.
+            j: The second column, likewise.
 
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
@@ -1778,7 +1813,7 @@ class ODETranslator(object):
         >>> translator.multiplier_swap_columns(2, 6)
         Traceback (most recent call last):
             ...
-        IndexError: Index out of range: a[6]
+        ValueError: Column 6 is out of range: the Hermite multiplier has 5 columns.
 
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
@@ -1797,8 +1832,7 @@ class ODETranslator(object):
         [0, 0,  0,  1],
         [0, 0,  1,  0]])
         '''
-        if i < 0: i += self.herm_mult.cols
-        if j < 0: j += self.herm_mult.cols
+        i, j = self._column(i), self._column(j)
         if i == j:
             return
         if not self.herm_form.col(i).is_zero_matrix:
@@ -1836,11 +1870,22 @@ class ODETranslator(object):
         changes the choice of auxiliary, which is just as free.  Adding an *auxiliary*
         column anywhere would change :math:`AV`, and is refused.
 
-        :meth:`column_of` is how to get `i` and `j` without writing a bare index.
+        **Which columns.**  A column can be given by its monomial or by its index, and the
+        two are good for different things.
+
+        The monomial says which column is meant: a sympy expression in the system's own
+        symbols, taken from :meth:`invariant_monomials` or :meth:`auxiliary_monomials` or
+        written out, or a string to be parsed.  It needs no looking up.  It changes when
+        the column does, so after an operation the column answers to its new monomial.
+
+        The index stays put.  That makes it the handle to keep when several operations
+        are applied to the same column in a row: :meth:`column_of` finds it once from the
+        monomial, and the same integer goes on meaning the same column.
 
         Args:
-            i (int): Column index of the column to change.
-            j (int): Column index of the invariant column to add.
+            i: The column to change: its monomial as a sympy expression or a string, or
+                its index.
+            j: The invariant column to add, likewise.
             power (int): How many times to add it, which is the power of invariant *j*
                 that invariant *i* is multiplied by.  Defaults to 1.
 
@@ -1923,6 +1968,35 @@ class ODETranslator(object):
         >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t**3*z1**3/z2]]), Matrix([[t*z1**3, z2/(t**2*z1)]]))
 
+        **By monomial.**  The same two steps, saying which columns are meant rather than
+        where they sit.  Each column is named by the monomial it holds at that moment, so
+        the second step refers to the result of the first:
+
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> t, z1, z2 = system.symbols
+        >>> translator.multiplier_add_columns(z1**2*z2/t, t*z1**3, power=-1)
+        >>> translator.multiplier_add_columns(t*z1**2, z2/(t**2*z1), power=-1)
+        >>> translator.auxiliary_monomials(), translator.invariant_monomials()
+        (Matrix([[t**3*z1**3/z2]]), Matrix([[t*z1**3, z2/(t**2*z1)]]))
+
+        The monomials need not be typed.  They are what the translator reports:
+
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> first, second = translator.invariant_monomials()
+        >>> translator.multiplier_add_columns(second, first, power=-1)
+        >>> translator.invariant_monomials()
+        Matrix([[t*z1**3, z2/(t**2*z1)]])
+
+        **By index, when chaining.**  Looked up once, the position goes on meaning the
+        same column however its monomial changes:
+
+        >>> translator = ODETranslator.from_ode_system(system)
+        >>> column = translator.column_of(z1**2*z2/t)
+        >>> translator.multiplier_add_columns(column, t*z1**3, power=-1)
+        >>> translator.multiplier_negate_column(column)
+        >>> translator.forward_monomials()[column]
+        t**2*z1/z2
+
         Sympy's natural column accessing is unhappy with negative indices, so make sure we don't pick up any bad habits
 
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 0], [0, 1, 0, 1]]))
@@ -1940,8 +2014,7 @@ class ODETranslator(object):
         [0, 0,  1,  0],
         [0, 0,  1,  1]])
         '''
-        if i < 0: i += self.herm_mult.cols
-        if j < 0: j += self.herm_mult.cols
+        i, j = self._column(i), self._column(j)
         if i == j:
             raise ValueError('Cannot add column {} to itself'.format(i))
         if not self.herm_form.col(j).is_zero_matrix:
@@ -1959,8 +2032,12 @@ class ODETranslator(object):
         C_i <- -C_i
         Check that we are only operating with 0 columns of the scaling matrix.
 
+        Negating an exponent vector inverts the monomial, so this replaces an invariant
+        by its reciprocal.
+
         Args:
-            i (int): Column index
+            i: The column: its monomial as a sympy expression or a string, or its index.
+                See :meth:`multiplier_add_columns`.
 
         >>> translator = ODETranslator(sympy.Matrix([[1, 0, 1, 1, -1],
         ...                                            [0, 1, 0, -1, 1]]))
@@ -2022,7 +2099,7 @@ class ODETranslator(object):
         [0, 1,  0],
         [0, 0, -1]])
         '''
-        if i < 0: i += self.herm_mult.cols
+        i = self._column(i)
         if not self.herm_form.col(i).is_zero_matrix:
             raise ValueError('Cannot negate non-zero column {}'.format(i))
         self._herm_mult.col_op(i, lambda v, index: -v)

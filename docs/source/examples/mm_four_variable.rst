@@ -209,17 +209,16 @@ While this isn't implemented yet, we can do it by hand for the moment.
 None of the six invariants above is a monomial in the parameters alone, so the parameter
 scheme has nothing to reduce yet.  One column operation makes one: dividing
 :math:`\frac{k_1}{k_{-1}} P` by :math:`\frac{k_1}{k_2} P` cancels the :math:`P` and leaves
-:math:`k_2 / k_{-1}`.  Both column numbers come from
-:meth:`~desr.ode_translation.ODETranslator.column_of`, which takes the invariant a column
-carries and gives back its index.
+:math:`k_2 / k_{-1}`.  The operation is told which columns are meant by the invariants
+they hold, written in the system's own symbols:
 
-    >>> ratio = max_scal2.column_of('P*k_1/k_m1')
-    >>> product = max_scal2.column_of('P*k_1/k_2')
-    >>> ratio, product
-    (3, 6)
-    >>> max_scal2.multiplier_add_columns(ratio, product, power=-1)
+    >>> k_1, k_2, k_m1, t, C, E, P, S = original_system.symbols
+    >>> max_scal2.multiplier_add_columns(P*k_1/k_m1, P*k_1/k_2, power=-1)
     >>> max_scal2.invariant_monomials()
     Matrix([[C*k_1/k_2, k_2/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
+
+:meth:`~desr.ode_translation.ODETranslator.column_of` gives the position of a column
+from its invariant, for when the position itself is wanted.
 
 We then reorder the last :math:`n-r` columns into the layout the scheme wants: the
 parameter invariant first, then the independent variable, then the dependent invariants.
