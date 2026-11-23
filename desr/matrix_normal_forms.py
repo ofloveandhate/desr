@@ -579,141 +579,6 @@ Returns:
 
 ## Smith normal form
 
-def expand_matrix(matrix_):
-    """
-    Given a rectangular :math:`n \\times m` integer matrix, return an :math:`(n+1) \\times (m+1)` matrix where the extra row and
-    column are 0 except on the first entry which is 1.
-
-    Parameters
-    ----------
-    matrix_ : sympy.Matrix
-        The rectangular matrix to be expanded
-
-    Returns
-    -------
-    sympy.Matrix
-        An :math:`(n+1) \\times (m+1)` matrix
-
-
-    >>> matrix_ = sympy.diag(*[1, 1, 2])
-    >>> expand_matrix(matrix_)
-    Matrix([
-    [1, 0, 0, 0],
-    [0, 1, 0, 0],
-    [0, 0, 1, 0],
-    [0, 0, 0, 2]])
-
-    >>> matrix_ = sympy.Matrix([1])
-    >>> expand_matrix(matrix_)
-    Matrix([
-    [1, 0],
-    [0, 1]])
-
-    >>> matrix_ = sympy.Matrix([[0]])
-    >>> expand_matrix(matrix_)
-    Matrix([
-    [1, 0],
-    [0, 0]])
-
-    >>> matrix_ = sympy.Matrix([[]])
-    >>> expand_matrix(matrix_)
-    Matrix([[1]])
-
-    >>> matrix_ = sympy.Matrix([[1, 2, 3]])
-    >>> expand_matrix(matrix_)
-    Matrix([
-    [1, 0, 0, 0],
-    [0, 1, 2, 3]])
-    >>> expand_matrix(matrix_.T)
-    Matrix([
-    [1, 0],
-    [0, 1],
-    [0, 2],
-    [0, 3]])
-    """
-    if len(matrix_.shape) != 2:
-        raise ValueError('expand_matrix called for non-square matrix of dimension {}.'.format(len(matrix_.shape)))
-
-    if len(matrix_) == 0:
-        return sympy.Matrix([[1]])
-
-    # Add top row
-    matrix_ = sympy.Matrix.vstack(sympy.zeros(1, matrix_.shape[1]), matrix_.copy())
-    # Add left column
-    matrix_ = sympy.Matrix.hstack(sympy.zeros(matrix_.shape[0], 1), matrix_)
-    matrix_[0, 0] = 1
-    return matrix_
-
-def _swap_ij_rows(matrices, i, j):
-    """
-        Given an iterable of matrices, swap all of the ith and jth rows.
-
-        Parameters
-        ----------
-        matrices : iter
-            The matrices to be acted on.
-        i : int
-            Index of first row
-        j : int
-            Index of second row
-
-        Returns
-        -------
-        matrices: tuple
-            The resulting matrices.
-
-    >>> matrices = [sympy.eye(3) for _ in range(2)]
-    >>> matrices = _swap_ij_rows(matrices, 0, 1)
-    >>> matrices[0]
-    Matrix([
-    [0, 1, 0],
-    [1, 0, 0],
-    [0, 0, 1]])
-    >>> matrices[1]
-    Matrix([
-    [0, 1, 0],
-    [1, 0, 0],
-    [0, 0, 1]])
-    """
-    matrices = [matrix_.copy() for matrix_ in matrices]
-    for matrix_ in matrices:
-        matrix_.row_swap(i, j)
-    return tuple(matrices)
-
-def _swap_ij_cols(matrices, i, j):
-    """
-        Given an iterable of matrices, swap all of the ith and jth columns. Acts in place.
-
-        Parameters
-        ----------
-        matrices : iter
-            The matrices to be acted on.
-        i : int
-            Index of first column
-        j : int
-            Index of second column
-
-        Returns
-        -------
-        matrices : tuple
-            The resulting matrices.
-
-    >>> matrices = [sympy.eye(3) for _ in range(2)]
-    >>> matrices = _swap_ij_cols(matrices, 0, 1)
-    >>> matrices[0]
-    Matrix([
-    [0, 1, 0],
-    [1, 0, 0],
-    [0, 0, 1]])
-    >>> matrices[1]
-    Matrix([
-    [0, 1, 0],
-    [1, 0, 0],
-    [0, 0, 1]])
-    """
-    return tuple(matrix_.T for matrix_ in _swap_ij_rows([_matrix.T for _matrix in matrices], i, j))
-
- # this one is less performant, because it has to convert the entire matrix to bools before checking.  so i have the other one.
 def is_non_negative(matrix_):
     """
     Check that all entries in a sympy matrix are at least 0.
@@ -730,41 +595,6 @@ def is_non_negative(matrix_):
         if m<0:
             return False
     return True
-
-def element_wise_lt(matrix_, other):
-    """
-    Given a rectangular :math:`n \\times m` integer matrix, return a matrix of bools with (i, j)th entry equal to
-    matrix_[i,j] < other or other[i,j], depending on the type of other.
-
-    Parameters
-    ----------
-    matrix_ : sympy.Matrix
-        The input matrix
-    other : sympy.Matrix, int
-        Value(s) to compare it to.
-
-    Returns
-    -------
-    sympy.Matrix
-        :math:`n \\times m` Boolean matrix
-
-
-    >>> x = sympy.eye(2) * 3
-    >>> element_wise_lt(x, 2)
-    Matrix([
-    [0, 1],
-    [1, 0]])
-    >>> element_wise_lt(x, sympy.Matrix([[4, -1], [1, 1]]))
-    Matrix([
-    [1, 0],
-    [1, 0]])
-    """
-    if isinstance(other, sympy.Matrix):
-        if other.shape != matrix_.shape:
-            raise ValueError('Incompatible shapes: {} != {}'.format(matrix_.shape, other.shape))
-        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: 1 if matrix_[i, j] < other[i, j] else 0)
-    else:
-        return sympy.Matrix(matrix_.shape[0], matrix_.shape[1], lambda i, j: 1 if matrix_[i, j] < other else 0)
 
 def is_smith_normal_form(matrix_):
     """
@@ -836,7 +666,6 @@ def is_smith_normal_form(matrix_):
         return False
 
     # Check all entries are non-negative
-    # if any(element_wise_lt(matrix_, 0)): # this one is less performant, because it has to convert the entire matrix to bools before checking.  so i have the other one.
     if not is_non_negative(matrix_):
         return False
 

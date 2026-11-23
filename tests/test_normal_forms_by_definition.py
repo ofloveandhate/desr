@@ -10,9 +10,9 @@ from unittest import TestCase
 
 import sympy
 
-from desr.matrix_normal_forms import (element_wise_lt, expand_matrix, hnf_col_lll,
-                                      is_hnf_col, is_hnf_row, is_non_negative,
-                                      is_smith_normal_form, smith_normal_form)
+from desr.matrix_normal_forms import (hnf_col_lll, is_hnf_col, is_hnf_row,
+                                      is_non_negative, is_smith_normal_form,
+                                      smith_normal_form)
 
 
 def random_matrix(seed):
@@ -104,24 +104,6 @@ class TestColumnHermiteNormalFormByLLL(TestCase):
 
 class TestSmallMatrixHelpers(TestCase):
 
-    def test_expanding_adds_a_leading_one(self):
-        matrix = sympy.Matrix([[2, 3], [4, 5], [6, 7]])
-        expanded = expand_matrix(matrix)
-        self.assertEqual((4, 3), expanded.shape)
-        self.assertEqual(1, expanded[0, 0])
-        self.assertTrue(expanded[0, 1:].is_zero_matrix)
-        self.assertTrue(expanded[1:, 0].is_zero_matrix)
-        self.assertEqual(matrix, expanded[1:, 1:])
-        # So the determinant of a square matrix is unchanged.
-        square = sympy.Matrix([[2, 3], [4, 5]])
-        self.assertEqual(square.det(), expand_matrix(square).det())
-
     def test_non_negative(self):
         self.assertTrue(is_non_negative(sympy.Matrix([[0, 1], [2, 3]])))
         self.assertFalse(is_non_negative(sympy.Matrix([[0, 1], [-2, 3]])))
-
-    def test_element_wise_less_than(self):
-        matrix = sympy.Matrix([[1, 5], [3, 2]])
-        self.assertEqual([True, False, False, True], list(element_wise_lt(matrix, 3)))
-        other = sympy.Matrix([[2, 5], [3, 9]])
-        self.assertEqual([True, False, False, True], list(element_wise_lt(matrix, other)))
