@@ -195,6 +195,11 @@ def symbol_graph(translator, system, direction=FORWARD):
             present on a dependent variable that has an initial condition: the symbol the
             caller gave on the original side, and on the reduced side what the reduction
             states, in the reduced parameters.
+        ``initial_value_of``
+            present on a parameter that is the initial value of dependent variables in its
+            own layer: a tuple of them.  On the original side every initial value is such
+            a parameter.  On the reduced side one may instead be a number or a monomial in
+            several parameters, and then no node has it.
 
     Graph attributes:
         ``direction``
@@ -321,6 +326,17 @@ def symbol_graph(translator, system, direction=FORWARD):
         REDUCED: set(translator.reverse_symbols_that_must_not_be_zero()),
     }
 
+    def started_by(initial):
+        '''Each symbol that is an initial value, with the dependents that start at it.'''
+        starts = {}
+        for variable, value in initial.items():
+            if isinstance(value, sympy.Symbol):
+                starts.setdefault(value, []).append(variable)
+        return {value: tuple(variables) for value, variables in starts.items()}
+
+    original_starts = started_by(original_initial)
+    reduced_starts = started_by(reduced_initial)
+
     graph = networkx.DiGraph()
     graph.graph['direction'] = direction
     if refused is not None:
@@ -344,6 +360,8 @@ def symbol_graph(translator, system, direction=FORWARD):
             attributes['value'] = original_values[symbol]
         if symbol in original_initial:
             attributes['initial_value'] = original_initial[symbol]
+        if symbol in original_starts:
+            attributes['initial_value_of'] = original_starts[symbol]
         graph.add_node((ORIGINAL, symbol), **attributes)
 
     for index, symbol in enumerate(names):
@@ -375,6 +393,8 @@ def symbol_graph(translator, system, direction=FORWARD):
             attributes['value'] = reduced_values[symbol]
         if symbol in reduced_initial:
             attributes['initial_value'] = reduced_initial[symbol]
+        if symbol in reduced_starts and symbol in names:
+            attributes['initial_value_of'] = reduced_starts[symbol]
         graph.add_node((REDUCED, symbol), **attributes)
 
     # The multiplier is indexed [original, reduced] and its inverse [reduced, original], so
@@ -454,34 +474,42 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
     direction: the reduction normalises on the way out, and on the way back those same
     auxiliaries are the values a recovery has to be told.
 
-    A dependent variable with an initial condition has a second line, where it starts:
-    :math:`\\nu_1(0) = \\kappa_2`.
+    Where a dependent variable starts is said once, on the parameter that is its initial
+    value: :math:`s_0 = s(0)`, :math:`\\kappa_2 = \\nu_1(0) = s_0/e_0`.  A reduced
+    dependent may start at something that is not one parameter, a number or a monomial in
+    several, and then it is a second line under the dependent itself:
+    :math:`\\nu_1(0) = 1`.
 
     Set in mathtext by default, which :mod:`matplotlib` renders itself -- no LaTeX
     installation -- so ``kappa0`` prints as :math:`\\kappa_0` and a quotient as a built-up
     fraction rather than with a slash.
     '''
     parts = [data['symbol']]
+    for variable in data.get('initial_value_of', ()):
+        parts.append(sympy.Function(str(variable))(0))
     if with_monomial:
         parts.append(data['monomial'])
     if 'value' in data:
         parts.append(data['value'])
 
     normalised = data['normalised'] and show_normalisation
+    # A start that is a parameter is written on that parameter's node.
+    own_line = ('initial_value' in data
+                and not isinstance(data['initial_value'], sympy.Symbol))
     if latex:
         # expr_to_tex rather than sympy.latex: desr writes a negative subscript `k_m1`,
         # which sympy sets as a literal m.  display_tex because this is a figure, where
         # an inline fraction comes out half height.
         chain = ' = '.join(display_tex(expr_to_tex(part)) for part in parts)
         label = '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
-        if 'initial_value' in data:
+        if own_line:
             label += '\n${}(0) = {}$'.format(
                 display_tex(expr_to_tex(data['symbol'])),
                 display_tex(expr_to_tex(data['initial_value'])))
         return label
     chain = ' = '.join(str(part) for part in parts)
     label = chain + (' |-> 1' if normalised else '')
-    if 'initial_value' in data:
+    if own_line:
         label += '\n{}(0) = {}'.format(data['symbol'], data['initial_value'])
     return label
 

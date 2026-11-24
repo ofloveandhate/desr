@@ -376,7 +376,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         graph = symbol_graph(translator, system)
         s_0 = graph.nodes[(ORIGINAL, sympy.Symbol('s_0'))]
         self.assertTrue(s_0['normalised'])
-        self.assertEqual(_node_label(s_0, latex=False), 's_0 |-> 1')
+        self.assertEqual(_node_label(s_0, latex=False), 's_0 = s(0) |-> 1')
 
     def test_the_general_scheme_normalises_the_auxiliaries_it_can(self):
         # Not all or nothing.  An auxiliary is normalised exactly when it is a monomial in
@@ -729,7 +729,7 @@ class TestDrawing(TestCase):
         graph = symbol_graph(self.translator, self.system)
         kappa4 = graph.nodes[(REDUCED, sympy.Symbol('kappa4'))]
         self.assertEqual(_node_label(kappa4, with_monomial=True, latex=False),
-                         'kappa4 = c_0/s_0 = 0')
+                         'kappa4 = nu1(0) = c_0/s_0 = 0')
 
     def test_a_label_without_a_known_value_stops_at_the_expression(self):
         graph = symbol_graph(self.translator, self.system)
@@ -936,14 +936,57 @@ class TestWhereTheDependentsStart(TestCase):
                           if 'initial_value' in data])
         self.assertNotIn('initial_conditions_refused', graph.graph)
 
-    def test_the_label_has_a_second_line_for_the_start(self):
+    def test_the_parameter_that_is_an_initial_value_says_whose(self):
+        for direction in ('forward', 'reverse'):
+            graph = symbol_graph(self.translator, self.system, direction=direction)
+            for layer in (ORIGINAL, REDUCED):
+                starts = {data['symbol']: data['initial_value']
+                          for node, data in graph.nodes(data=True)
+                          if data['layer'] == layer and 'initial_value' in data}
+                named = {data['symbol']: data['initial_value_of']
+                         for node, data in graph.nodes(data=True)
+                         if data['layer'] == layer and 'initial_value_of' in data}
+                with self.subTest(direction=direction, layer=layer):
+                    self.assertEqual(2, len(starts))
+                    # The two attributes are one relation read from either end, for
+                    # every start that is a symbol.  Here s_0 is the unit, so the
+                    # reduced s starts at the number 1 and no node is that.
+                    self.assertEqual(
+                        {(value, variable) for variable, value in starts.items()
+                         if isinstance(value, sympy.Symbol)},
+                        {(value, variable) for value, variables in named.items()
+                         for variable in variables})
+                    self.assertEqual(2 if layer == ORIGINAL else 1, len(named))
+
+    def test_a_start_is_written_once_on_the_parameter_that_is_it(self):
         graph = symbol_graph(self.translator, self.system)
-        s = sympy.Symbol('s')
-        plain = _node_label(graph.nodes[(ORIGINAL, s)], latex=False)
-        self.assertEqual('s\ns(0) = s_0', plain)
-        set_in_tex = _node_label(graph.nodes[(ORIGINAL, s)])
-        self.assertEqual(2, len(set_in_tex.split('\n')))
-        self.assertIn('(0) =', set_in_tex.split('\n')[1])
-        # A parameter has one line.
-        k_1 = sympy.Symbol('k_1')
-        self.assertNotIn('\n', _node_label(graph.nodes[(ORIGINAL, k_1)]))
+        s, s_0, c_0, k_m1 = sympy.symbols('s s_0 c_0 k_m1')
+        # s_0 is also the unit here, which the arrow says.
+        self.assertEqual('s_0 = s(0) |-> 1',
+                         _node_label(graph.nodes[(ORIGINAL, s_0)], latex=False))
+        # With its value, which was already there.
+        self.assertEqual('c_0 = c(0) = 0',
+                         _node_label(graph.nodes[(ORIGINAL, c_0)], latex=False))
+        # The dependent itself and an ordinary parameter are unchanged, and nothing has
+        # a second line.
+        self.assertEqual('s', _node_label(graph.nodes[(ORIGINAL, s)], latex=False))
+        self.assertEqual('k_m1', _node_label(graph.nodes[(ORIGINAL, k_m1)], latex=False))
+        # The one second line is the reduced s, which starts at a number.
+        two_lines = [data['symbol'] for node, data in graph.nodes(data=True)
+                     if '\n' in _node_label(data, with_monomial=True)]
+        self.assertEqual(1, len(two_lines))
+        self.assertEqual(1, graph.nodes[(REDUCED, two_lines[0])]['initial_value'])
+
+    def test_a_start_that_is_no_parameter_is_a_second_line_on_the_dependent(self):
+        # dz/dt = -k z with z(0) = z_0 reduces to y = z/z_0, which starts at 1.
+        system = ODESystem.from_equations(['dz/dt = -k*z'])
+        system.update_initial_conditions({'z': 'z_0'})
+        graph = symbol_graph(ODETranslator.from_ode_system(system), system)
+        dependent = next(data for node, data in graph.nodes(data=True)
+                         if data['layer'] == REDUCED and 'initial_value' in data)
+        self.assertEqual(1, dependent['initial_value'])
+        self.assertFalse([node for node, data in graph.nodes(data=True)
+                          if data['layer'] == REDUCED and 'initial_value_of' in data])
+        label = _node_label(dependent, latex=False)
+        self.assertEqual('{0}\n{0}(0) = 1'.format(dependent['symbol']), label)
+        self.assertEqual(2, len(_node_label(dependent).split('\n')))
