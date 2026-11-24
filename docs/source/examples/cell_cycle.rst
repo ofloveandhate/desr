@@ -72,9 +72,11 @@ a fixed order, which is the order their reduced counterparts are numbered in.
 Seven scaling symmetries
 --------------------------
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
     >>> translator.num_scaling_symmetries
     7
+
+``new_indices_start_at=1`` numbers the reduced symbols from 1 instead of 0.
 
 The units the reduction infers show what they are.  For the species:
 
@@ -142,43 +144,43 @@ clock is rescaled time, and each species is measured in its total:
     V_2primeprime*t*totalAPC
     >>> for symbol in reduced.dependents:
     ...     print(symbol, '=', names[symbol])
-    nu0 = Cyclin/totalCdk
-    nu1 = MPF/totalCdk
-    nu2 = preMPF/totalCdk
-    nu3 = Cdc25P/totalCdc25
-    nu4 = Wee1P/totalWee1
-    nu5 = IEP/totalIE
-    nu6 = APC/totalAPC
+    nu1 = Cyclin/totalCdk
+    nu2 = MPF/totalCdk
+    nu3 = preMPF/totalCdk
+    nu4 = Cdc25P/totalCdc25
+    nu5 = Wee1P/totalWee1
+    nu6 = IEP/totalIE
+    nu7 = APC/totalAPC
 
 Among the twenty-three parameters, the first is what is left of the phosphatase, and
 the next eight are the Michaelis constants, each as a fraction of the total of its
 species:
 
-    >>> for index in range(9):
+    >>> for index in range(1, 10):
     ...     symbol = sympy.Symbol('kappa{}'.format(index))
     ...     print(symbol, '=', names[symbol])
-    kappa0 = PPase*k_h/(V_2primeprime*totalAPC*totalIE)
-    kappa1 = K_a/totalCdc25
-    kappa2 = K_b/totalCdc25
-    kappa3 = K_c/totalAPC
-    kappa4 = K_d/totalAPC
-    kappa5 = K_e/totalWee1
-    kappa6 = K_f/totalWee1
-    kappa7 = K_g/totalIE
-    kappa8 = K_h/totalIE
+    kappa1 = PPase*k_h/(V_2primeprime*totalAPC*totalIE)
+    kappa2 = K_a/totalCdc25
+    kappa3 = K_b/totalCdc25
+    kappa4 = K_c/totalAPC
+    kappa5 = K_d/totalAPC
+    kappa6 = K_e/totalWee1
+    kappa7 = K_f/totalWee1
+    kappa8 = K_g/totalIE
+    kappa9 = K_h/totalIE
 
 The equation of the reduced system for cyclin:
 
-    >>> reduced.derivative_dict[sympy.Symbol('nu0')]
-    kappa10*nu0*nu1 + kappa10*nu0*nu2 - kappa10*nu0 + kappa22*nu0*nu6 - kappa22*nu0 + kappa9 - nu0*nu6
-    >>> for name in ('kappa9', 'kappa10', 'kappa22'):
+    >>> reduced.derivative_dict[sympy.Symbol('nu1')]
+    kappa10 + kappa11*nu1*nu2 + kappa11*nu1*nu3 - kappa11*nu1 + kappa23*nu1*nu7 - kappa23*nu1 - nu1*nu7
+    >>> for name in ('kappa10', 'kappa11', 'kappa23'):
     ...     print(name, '=', names[sympy.Symbol(name)])
-    kappa9 = k_1/(V_2primeprime*totalAPC*totalCdk)
-    kappa10 = k_3*totalCdk/(V_2primeprime*totalAPC)
-    kappa22 = V_2prime/V_2primeprime
+    kappa10 = k_1/(V_2primeprime*totalAPC*totalCdk)
+    kappa11 = k_3*totalCdk/(V_2primeprime*totalAPC)
+    kappa23 = V_2prime/V_2primeprime
 
-It is the original equation with :math:`1 - \nu_1 - \nu_2` for the free Cdk and
-:math:`\kappa_{22} (1 - \nu_6) + \nu_6` for the rate of degradation.  The whole
+It is the original equation with :math:`1 - \nu_2 - \nu_3` for the free Cdk and
+:math:`\kappa_{23} (1 - \nu_7) + \nu_7` for the rate of degradation.  The whole
 reduced system can be printed with ``reduced`` or typeset with
 :meth:`~desr.ode_system.ODESystem.to_tex`.
 
@@ -190,7 +192,7 @@ the order.  The choice of units does.  Left in its default order, which is
 alphabetical, the system reduces to twenty-three parameters as well:
 
     >>> default = ODESystem.from_tex(tex, sub_defns=True)
-    >>> other = ODETranslator.from_ode_system(default)
+    >>> other = ODETranslator.from_ode_system(default, new_indices_start_at=1)
     >>> other.num_scaling_symmetries
     7
     >>> otherwise = other.translate(default)
@@ -204,7 +206,7 @@ constants, which come before the totals in the alphabet:
     >>> for symbol in otherwise.dependents:
     ...     if len(images[symbol].free_symbols) == 2:
     ...         print(symbol, '=', images[symbol])
-    nu0 = APC/K_c
-    nu1 = Cdc25P/K_a
-    nu3 = IEP/K_g
-    nu5 = Wee1P/K_e
+    nu1 = APC/K_c
+    nu2 = Cdc25P/K_a
+    nu4 = IEP/K_g
+    nu6 = Wee1P/K_e
