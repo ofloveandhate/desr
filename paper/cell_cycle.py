@@ -44,58 +44,57 @@ print(system)
 #  that form again, pass only the seven derivative lines to from_tex.)
 
 
-# the commented-out ones have been substituted away.
+# The order of the variables decides which parameters the reduction uses as units: the
+# ones at the front.  The order is parameters, then the independent variable, then the
+# dependent variables.
 #
-# The canonical order is parameters, then the independent variable, then the dependent
-# variables.  The leading parameters are the ones the reduction normalises.
-variable_order = \
-(
-# start the constants
-'PPase',
-'K_a',
-'K_b',
-'K_c',
-'K_d',
-'K_e',
-'K_f',
-'K_g',
-'K_h',
-'k_1',
-# 'Cdk',
-# 'k_2',
-# 'k_25',
-# 'k_wee',
-'k_3',
-'k_a',
-'k_b',
-'k_c',
-'k_d',
-'k_e',
-'k_f',
-'k_g',
-'k_h',
-'V_25prime', 
-'V_25primeprime',
-'V_weeprime', 
-'V_weeprimeprime', 
-# 'APCstar', # this was removed, because APC in the paper was recognized as a typo. APC* is supposed to be APC, as evidenced in the code in Table 1.
-'V_2prime', 
-'V_2primeprime',
-'totalCdc25',
-'totalIE',
-'totalAPC',
-'totalCdk',
-'totalWee1',
-'t', # time
-# the seven variables
-'Cyclin',
-'MPF',
-'preMPF',
-'Cdc25P',
-'Wee1P',
-'IEP',
-'APC',
+# The seven the reduction sets to 1 come first.  The five totals, so that each species is
+# measured in its own total amount, which is the choice Sible & Tyson make by hand when
+# their Table 1 sets the totals to 1; then V_2'' and k_h, so that time is measured in
+# 1/(V_2'' [total APC]).
+#
+# The other twenty-three follow in the order the paper lists them, which is the order
+# their reduced counterparts are numbered in: kappa_1 goes with PPase, kappa_23 with V_2'.
+#
+# Cdk, k_2, k_25 and k_wee are not here: they are the four definitions, and have been
+# substituted away.  APC* is not here either: it was a typo in the paper for APC, as its
+# Table 1 shows.
+used_as_units = (
+    'totalWee1',
+    'totalCdk',
+    'totalAPC',
+    'totalIE',
+    'totalCdc25',
+    'V_2primeprime',
+    'k_h',
 )
+remaining_parameters = (
+    'PPase',
+    'K_a',
+    'K_b',
+    'K_c',
+    'K_d',
+    'K_e',
+    'K_f',
+    'K_g',
+    'K_h',
+    'k_1',
+    'k_3',
+    'k_a',
+    'k_b',
+    'k_c',
+    'k_d',
+    'k_e',
+    'k_f',
+    'k_g',
+    'V_25prime',
+    'V_25primeprime',
+    'V_weeprime',
+    'V_weeprimeprime',
+    'V_2prime',
+)
+dependents = ('Cyclin', 'MPF', 'preMPF', 'Cdc25P', 'Wee1P', 'IEP', 'APC')
+variable_order = used_as_units + remaining_parameters + ('t',) + dependents
 
 system.reorder_variables(variable_order)
 
