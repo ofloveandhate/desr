@@ -1,13 +1,13 @@
 .. _signalling_networks:
 
-Five signalling networks
-==========================
+Six signalling networks
+=========================
 
 Mass-action models of phosphorylation cycles and cascades.  They are larger than the
 other examples, with up to eleven species and twelve rate constants, and they all
 reduce in the same way.  This page works the smallest in full and tabulates the rest.
 
-Four of the five are motifs studied by Feliu and Wiuf :cite:`FeliuWiuf2011`, whose
+Five of the six are motifs studied by Feliu and Wiuf :cite:`FeliuWiuf2011`, whose
 Figure 1 draws them.  The references to that paper are to version 2 of the preprint,
 which is where the equations cited here are written out.
 
@@ -107,10 +107,10 @@ constant:
     >>> sympy.expand(total)
     0
 
-The other four
+The other five
 ----------------
 
-The same construction gives four larger networks.  They are built in
+The same construction gives five larger networks.  They are built in
 ``tests/example_networks.py``, each with an assertion of the conservation law it
 satisfies, and the tests check each against the mass-action equations of its
 reactions.
@@ -118,6 +118,9 @@ reactions.
 - **Two-site modification.**  A substrate with two phosphorylation sites,
   :math:`S_0 \to S_1 \to S_2`, with a kinase and a phosphatase for each step.
   Motif (e), equations (21)–(24).
+- **Two-site modification with shared enzymes.**  The same substrate, with one kinase
+  acting at both sites and one phosphatase acting at both.  Motif (g), equations
+  (35)–(38).
 - **Two-substrate modification.**  One kinase acting on two substrates, each with its
   own phosphatase.  Motif (h), in section B.3.
 - **Two-layer cascade.**  The activated form of one substrate is the kinase for a
@@ -150,6 +153,11 @@ reactions.
      - 12
      - 2
      - 10
+   * - two-site modification, shared enzymes
+     - 9
+     - 12
+     - 2
+     - 10
    * - two-substrate modification
      - 11
      - 12
@@ -161,7 +169,7 @@ reactions.
      - 2
      - 10
 
-All five have the same two symmetries, and all five reductions choose the same two
+All six have the same two symmetries, and all six reductions choose the same two
 units: time in :math:`1/k_2` and concentration in :math:`k_2/k_1`.  In each, the
 reduction removes two rate constants, whatever the size of the network.
 

@@ -1,5 +1,5 @@
 """
-The five signalling networks in `example_networks.py`, reduced.
+The six signalling networks in `example_networks.py`, reduced.
 
 They are the largest systems in the repository.  These are properties rather than
 printed output: that the reduction is the size the translator predicts, that the
@@ -26,9 +26,9 @@ def michaelis_menten(substrate, enzyme, intermediate, product):
             '{} -> {} + {}'.format(intermediate, product, enzyme)]
 
 
-#: The reactions of each network.  For the four from Feliu & Wiuf, arXiv:1101.5799v2,
+#: The reactions of each network.  For the five from Feliu & Wiuf, arXiv:1101.5799v2,
 #: these are the reaction diagrams printed with each motif: (a) on p. 21, (e) on p. 27,
-#: (h) on p. 37, (j) on p. 41.  The kinase is `Ev` here where the paper has `E`.  The
+#: (g) on p. 34, (h) on p. 37, (j) on p. 41.  The kinase is `Ev` here where the paper has `E`.  The
 #: phosphorelay's are the reactions its equations describe.
 REACTIONS = {
     'one-site modification':
@@ -36,6 +36,9 @@ REACTIONS = {
     'two-site modification':
         michaelis_menten('S0', 'Ev1', 'X1', 'S1') + michaelis_menten('S1', 'Ev2', 'X2', 'S2')
         + michaelis_menten('S1', 'F1', 'Y1', 'S0') + michaelis_menten('S2', 'F2', 'Y2', 'S1'),
+    'two-site modification, shared enzymes':
+        michaelis_menten('S0', 'Ev', 'X1', 'S1') + michaelis_menten('S1', 'Ev', 'X2', 'S2')
+        + michaelis_menten('S1', 'F', 'Y1', 'S0') + michaelis_menten('S2', 'F', 'Y2', 'S1'),
     'two-substrate modification':
         michaelis_menten('S0', 'Ev', 'X1', 'S1') + michaelis_menten('P0', 'Ev', 'X2', 'P1')
         + michaelis_menten('S1', 'F1', 'Y1', 'S0') + michaelis_menten('P1', 'F2', 'Y2', 'P0'),
@@ -182,6 +185,7 @@ class TestTheExampleReactionNetworks(TestCase):
         'one-site modification': (6, 6, 4),
         'two-step phosphorelay': (10, 10, 8),
         'two-site modification': (11, 12, 10),
+        'two-site modification, shared enzymes': (9, 12, 10),
         'two-substrate modification': (11, 12, 10),
         'two-layer cascade': (11, 12, 10),
     }

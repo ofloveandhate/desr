@@ -1,7 +1,7 @@
 '''
-Five reaction networks from the literature on signalling cascades, as systems.
+Six reaction networks from the literature on signalling cascades, as systems.
 
-Four are motifs of Feliu & Wiuf, "Enzyme sharing as a cause of multistationarity in
+Five are motifs of Feliu & Wiuf, "Enzyme sharing as a cause of multistationarity in
 signaling systems", arXiv:1101.5799v2; each builder says which, and where its equations
 are in that version.  The two-step phosphorelay is not in that paper.
 
@@ -11,7 +11,7 @@ written to satisfy.  They are the largest systems the tests use: the two-step
 phosphorelay has ten dependent variables and ten rate constants.
 
 `docs/source/examples/signalling_networks.rst` works the smallest in full and tabulates
-the rest; `test_example_networks.py` holds what that page says to all five.
+the rest; `test_example_networks.py` holds what that page says to all six.
 
 Not a test module itself.
 '''
@@ -124,6 +124,48 @@ def example_two_site_modification():
     return system
 
 
+def example_two_site_modification_shared_enzymes():
+    ''' Two-site modification with one kinase and one phosphatase.  Motif (g) of
+        arXiv:1101.5799v2, equations (35)-(38): the kinase E catalyses phosphorylation
+        at both sites of S0 -> S1 -> S2, and the phosphatase F dephosphorylation at
+        both.  X1, X2, Y1 and Y2 are intermediate species.
+
+        The rate constants a, b, c of the paper are k, km and the next k here, in the
+        order X1, Y1, X2, Y2: a_1^E, b_1^E, c_1^E are k1, km1, k2; a_1^F, b_1^F, c_1^F
+        are k3, km3, k4; a_2^E, b_2^E, c_2^E are k5, km5, k6; a_2^F, b_2^F, c_2^F are
+        k7, km7, k8.
+    '''
+    variables = 'S0, S1, S2, Ev, F, X1, X2, Y1, Y2'
+    variables = sympy.symbols(variables)
+    S0, S1, S2, Ev, F, X1, X2, Y1, Y2 = variables
+
+    equations = [
+        'km1*X1 + k4*Y1 - k1*Ev*S0',  # S0
+        'k2*X1 + km5*X2 + km3*Y1 + k8*Y2 - (k3*F + k5*Ev)*S1',  # S1, (35)
+        'k6*X2 + km7*Y2 - k7*F*S2',  # S2, (36)
+        '(km1 + k2)*X1 + (km5 + k6)*X2 - (k1*S0 + k5*S1)*Ev',  # E
+        '(km3 + k4)*Y1 + (km7 + k8)*Y2 - (k3*S1 + k7*S2)*F',  # F
+        '-(km1 + k2)*X1 + k1*Ev*S0',  # X1, (37) with k = 1
+        '-(km5 + k6)*X2 + k5*Ev*S1',  # X2, (37) with k = 2
+        '-(km3 + k4)*Y1 + k3*F*S1',  # Y1, (38) with k = 1
+        '-(km7 + k8)*Y2 + k7*F*S2',  # Y2, (38) with k = 2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip(variables, equations))
+
+    # The conservation laws printed after (38): total kinase, total phosphatase and
+    # total substrate.
+    assert (deriv_dict[Ev] + deriv_dict[X1] + deriv_dict[X2]).expand() == 0
+    assert (deriv_dict[F] + deriv_dict[Y1] + deriv_dict[Y2]).expand() == 0
+    eq_const = sum([deriv_dict[v] for v in [S0, S1, S2, X1, X2, Y1, Y2]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+
 def example_two_substrate_modification():
     ''' Modification of two substrates example.  Motif (h) of arXiv:1101.5799v2,
         section B.3.
@@ -202,6 +244,7 @@ NETWORKS = {
     'two-step phosphorelay': example_two_step_phosphorelay,
     'one-site modification': example_one_site_modification,
     'two-site modification': example_two_site_modification,
+    'two-site modification, shared enzymes': example_two_site_modification_shared_enzymes,
     'two-substrate modification': example_two_substrate_modification,
     'two-layer cascade': example_two_layer_cascade,
 }
