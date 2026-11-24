@@ -2216,17 +2216,43 @@ class TestTheTwoCompartmentModel(TestCase):
     \frac{dz_1}{dt} &= -a_1 z_1 + a_12 z_2\\
     \frac{dz_2}{dt} &= -b_22 z_2 + u_2
     '''
+    # The page's variable orders.  The parameters at the front are used as units: the
+    # input, and the loss rate of compartment 2 under whichever name it has.
+    ORDER_AS_WRITTEN = ['u_2', 'a_2', 'a_1', 'a_12', 't', 'z_1', 'z_2']
+    ORDER_LUMPED = ['u_2', 'b_22', 'a_12', 'a_1', 't', 'z_1', 'z_2']
+    ORDER_RELATED = ['a_2', 'u_2', 'a_1', 'a_12', 'b_22', 't', 'z_1', 'z_2']
+    ORDER_SAME_UNIT = ['u_2', 'b_22', 'a_1', 'a_12', 't', 'z_1', 'z_2']
+
+    def as_written(self):
+        system = ODESystem.from_tex(self.AS_WRITTEN)
+        system.reorder_variables(self.ORDER_AS_WRITTEN)
+        return system
+
+    def lumped(self):
+        system = ODESystem.from_tex(self.LUMPED)
+        system.reorder_variables(self.ORDER_LUMPED)
+        return system
 
     def test_as_written_it_has_two_symmetries_and_one_unit_of_material(self):
-        system = ODESystem.from_tex(self.AS_WRITTEN)
+        system = self.as_written()
         self.assertEqual(2, ODETranslator.from_ode_system(system).num_scaling_symmetries)
         dimensions = system.dimensions_of()
         z_1, z_2 = sympy.symbols('z_1 z_2')
         self.assertEqual(dimensions[z_1], dimensions[z_2])
         self.assertEqual(2, len(system.reduce_scaling_symmetries().parameters))
 
+    def test_as_written_time_is_in_units_of_the_loss_from_compartment_two(self):
+        reduced = self.as_written().reduce_scaling_symmetries()
+        t, a_1, a_2, a_12, u_2, z_1, z_2 = sympy.symbols('t a_1 a_2 a_12 u_2 z_1 z_2')
+        images = reduced.named_symbols
+        self.assertEqual(a_2 * t, images[reduced.independent_variable])
+        self.assertEqual({a_2 * z_1 / u_2, a_2 * z_2 / u_2},
+                         {images[symbol] for symbol in reduced.dependents})
+        self.assertEqual({a_1 / a_2, a_12 / a_2},
+                         {images[symbol] for symbol in reduced.parameters})
+
     def test_lumped_it_has_three_and_two_units(self):
-        system = ODESystem.from_tex(self.LUMPED)
+        system = self.lumped()
         self.assertEqual(3, ODETranslator.from_ode_system(system).num_scaling_symmetries)
         dimensions = system.dimensions_of()
         z_1, z_2 = sympy.symbols('z_1 z_2')
@@ -2237,7 +2263,7 @@ class TestTheTwoCompartmentModel(TestCase):
         # Put b_22 = a_2 + a_12 into what each reduced symbol denotes.  The reduced
         # equations must then hold along the model as written, by the chain rule.
         model = ODESystem.from_tex(self.AS_WRITTEN)
-        reduced = ODESystem.from_tex(self.LUMPED).reduce_scaling_symmetries()
+        reduced = self.lumped().reduce_scaling_symmetries()
         a_2, a_12, b_22 = sympy.symbols('a_2 a_12 b_22')
         denotes = {symbol: monomial.subs(b_22, a_2 + a_12)
                    for symbol, monomial in reduced.named_symbols.items()}
@@ -2260,13 +2286,15 @@ class TestTheTwoCompartmentModel(TestCase):
         self.assertEqual(2, checked)
         # And the parameter it depends on is not a monomial in the model's own.
         kappa = next(iter(reduced.parameters))
-        self.assertEqual((a_2 + a_12) / sympy.Symbol('a_1'), denotes[kappa])
+        self.assertEqual(sympy.Symbol('a_1') / (a_2 + a_12), denotes[kappa])
 
     def test_the_relation_or_the_same_unit_gives_two_symmetries_back(self):
         related = ODESystem.from_tex(self.LUMPED)
         related.add_constraint(lhs='b_22', rhs='a_2 + a_12')
+        related.reorder_variables(self.ORDER_RELATED)
         same_unit = ODESystem.from_tex(self.LUMPED)
         same_unit.require_same_unit({'b_22': 'a_12'})
+        same_unit.reorder_variables(self.ORDER_SAME_UNIT)
         z_1, z_2 = sympy.symbols('z_1 z_2')
         for system in (related, same_unit):
             self.assertEqual(
