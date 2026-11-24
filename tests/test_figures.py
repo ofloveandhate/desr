@@ -63,6 +63,86 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
             with self.subTest(system=label):
                 self.assertIsNotNone(symbol_map_figure(system))
 
+    def test_the_symbol_map_is_as_wide_as_its_panels_or_its_chain(self):
+        # The three panels are measured and packed side by side, so nothing drawn is
+        # off the page and none of the three overlaps the next.
+        for label, system in self.systems():
+            with self.subTest(system=label):
+                figure = symbol_map_figure(system)
+                figure.canvas.draw()
+                renderer = figure.canvas.get_renderer()
+                page = figure.bbox
+                panels = [ax for ax in figure.axes if ax.texts][:3]
+                extents = []
+                for ax in panels:
+                    box = ax.get_tightbbox(renderer)
+                    self.assertGreaterEqual(box.x0, page.x0 - 1)
+                    self.assertLessEqual(box.x1, page.x1 + 1)
+                    extents.append((ax.get_position().x0, ax.get_position().x1))
+                extents.sort()
+                for (_, ends), (starts, _) in zip(extents, extents[1:]):
+                    self.assertLessEqual(ends, starts + 1e-9)
+                matplotlib.pyplot.close(figure)
+
+    def test_the_arrows_of_the_table_share_a_column(self):
+        figure = symbol_map_figure(self.with_initial())
+        starts = {round(text.get_position()[0], 6)
+                  for ax in figure.axes for text in ax.texts
+                  if text.get_text().startswith('$\\mapsto')}
+        matplotlib.pyplot.close(figure)
+        self.assertEqual(1, len(starts))
+
+    def test_the_table_states_a_dimension_at_one_size(self):
+        # `[t] = [t]` is one bracket twice, so both sides are set alike.
+        figure = symbol_map_figure(self.with_initial())
+        sizes = {text.get_fontsize() for ax in figure.axes for text in ax.texts
+                 if text.get_text().startswith(('$\\left[', '$=\\;\\left[',
+                                                '$=\\;\\dfrac{1}{\\left['))}
+        matplotlib.pyplot.close(figure)
+        self.assertEqual(1, len(sizes))
+
+    def test_the_boxes_stand_together_under_arrows_that_arc_over_them(self):
+        from matplotlib.patches import FancyArrowPatch
+        figure = symbol_map_figure(self.with_initial())
+        figure.canvas.draw()
+        width = figure.get_size_inches()[0]
+        boxes = sorted((ax.get_position() for ax in figure.axes if not ax.texts
+                        or ax.texts[0].get_text() in ('original', 'reduced', 'normalised',
+                                                      'nondimensionalised')),
+                       key=lambda box: box.x0)[-5:]
+        self.assertEqual(5, len(boxes))
+        gaps = [(right.x0 - left.x1) * width for left, right in zip(boxes, boxes[1:])]
+        for gap in gaps:
+            self.assertLess(gap, 0.2)
+        # Centred on the page.
+        self.assertAlmostEqual(boxes[0].x0, 1.0 - boxes[-1].x1, places=6)
+        # Four arrows, each starting and ending above the boxes, bent.
+        arrows = [artist for artist in figure.artists
+                  if isinstance(artist, FancyArrowPatch)]
+        self.assertEqual(4, len(arrows))
+        top = max(box.y1 for box in boxes)
+        for arrow in arrows:
+            (start_x, start_y), (end_x, end_y) = arrow._posA_posB
+            self.assertGreater(start_y, top)
+            self.assertEqual(start_y, end_y)
+            self.assertLess(start_x, end_x)
+            self.assertIn('arc3', str(arrow.get_connectionstyle().__class__.__name__).lower())
+        matplotlib.pyplot.close(figure)
+
+    def test_a_box_counts_its_symbols_in_short_lines(self):
+        from desr.figures.symbol_map import summary_lines
+        lines = summary_lines(self.with_initial())
+        self.assertEqual(['8 symbols', '1 independent', '2 dependents', '5 parameters',
+                          'autonomous'], lines)
+        # The three kinds add up to the count.
+        self.assertEqual(8, 1 + 2 + 5)
+        self.assertEqual(8, len(self.with_initial().symbols))
+
+    def test_a_given_size_is_the_size(self):
+        figure = symbol_map_figure(self.with_initial(), size=(12.0, 7.0))
+        self.assertEqual([12.0, 7.0], [round(side, 2) for side in figure.get_size_inches()])
+        matplotlib.pyplot.close(figure)
+
     def test_no_panel_runs_off_the_page(self):
         # The silent failure this replaces: a panel wider than the page used to be
         # clamped to the margin and allowed to overflow, so the figure looked finished

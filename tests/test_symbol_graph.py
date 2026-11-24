@@ -977,6 +977,40 @@ class TestWhereTheDependentsStart(TestCase):
         self.assertEqual(1, len(two_lines))
         self.assertEqual(1, graph.nodes[(REDUCED, two_lines[0])]['initial_value'])
 
+    def test_a_long_chain_is_set_on_two_lines_with_the_equals_signs_aligned(self):
+        from desr.symbol_graph import _node_label_lines
+        graph = symbol_graph(self.translator, self.system)
+        c_0, s_0 = sympy.symbols('c_0 s_0')
+        # The same parts as the one-line label, in the same order.
+        head, lines = _node_label_lines(graph.nodes[(ORIGINAL, c_0)], latex=False)
+        self.assertEqual(('c_0', ['= c(0)', '= 0']), (head, lines))
+        self.assertEqual(_node_label(graph.nodes[(ORIGINAL, c_0)], latex=False),
+                         ' '.join([head] + lines))
+        # Nothing after the start: one line.
+        self.assertIsNone(_node_label_lines(graph.nodes[(ORIGINAL, s_0)], latex=False))
+        # And a symbol that is no initial value.
+        k_m1 = sympy.Symbol('k_m1')
+        self.assertIsNone(_node_label_lines(graph.nodes[(ORIGINAL, k_m1)], latex=False))
+
+        # Drawn, the two continuation lines start at one x, the first above the second,
+        # and the symbol ends just before them.
+        import matplotlib.pyplot
+        from matplotlib.text import Annotation
+        figure, ax = matplotlib.pyplot.subplots()
+        draw_symbol_graph(graph, ax=ax, legend=False, label_edges=False)
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+        pieces = [text for text in ax.texts if isinstance(text, Annotation)]
+        self.assertEqual(0, len(pieces) % 3)
+        self.assertGreater(len(pieces), 0)
+        for index in range(0, len(pieces), 3):
+            symbol, first, second = (piece.get_window_extent(renderer)
+                                     for piece in pieces[index:index + 3])
+            self.assertAlmostEqual(first.x0, second.x0, delta=1.0)
+            self.assertLess(symbol.x1, first.x0)
+            self.assertGreater(first.y0, second.y1 - 1.0)
+        matplotlib.pyplot.close(figure)
+
     def test_a_start_that_is_no_parameter_is_a_second_line_on_the_dependent(self):
         # dz/dt = -k z with z(0) = z_0 reduces to y = z/z_0, which starts at 1.
         system = ODESystem.from_equations(['dz/dt = -k*z'])

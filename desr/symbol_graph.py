@@ -514,6 +514,42 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
     return label
 
 
+def _node_label_lines(data, with_monomial=False, latex=True, show_normalisation=True):
+    '''
+    A label as a symbol and two continuation lines, where it is long enough to want them.
+
+    A parameter that is an initial value and also has an expression or a value reads
+    :math:`\\kappa_3 = \\nu_0(0) = c_0/e_0 = 0` in one line.  Here it is the symbol, then
+    ``= nu0(0)``, then ``= c_0/e_0 = 0``, for the drawing to set on two lines with the
+    equals signs under one another.  The same parts as :func:`_node_label`, in the same
+    order.
+
+    Returns:
+        tuple or None: ``(symbol, [first line, second line])``, each line starting with
+        its equals sign; :const:`None` for a label that stays on one line.
+    '''
+    whose = data.get('initial_value_of', ())
+    rest = []
+    if with_monomial:
+        rest.append(data['monomial'])
+    if 'value' in data:
+        rest.append(data['value'])
+    if not whose or not rest or data['auxiliary']:
+        return None
+    starts = [sympy.Function(str(variable))(0) for variable in whose]
+    normalised = data['normalised'] and show_normalisation
+    if latex:
+        def line(parts, arrow=False):
+            return '$= {}{}$'.format(
+                ' = '.join(display_tex(expr_to_tex(part)) for part in parts),
+                r' \mapsto 1' if arrow else '')
+        return ('${}$'.format(display_tex(expr_to_tex(data['symbol']))),
+                [line(starts), line(rest, normalised)])
+    return (str(data['symbol']),
+            ['= ' + ' = '.join(map(str, starts)),
+             '= ' + ' = '.join(map(str, rest)) + (' |-> 1' if normalised else '')])
+
+
 #: Where along an edge its exponent is written.  Every edge of a two-column layout has its
 #: midpoint at the same `x`, so a single label position stacks all of them into one
 #: illegible column; cycling through a few spreads them out.  Deterministic, so the same
@@ -605,7 +641,7 @@ _KIND_SWATCHES = {'parameter': _square_swatch, 'dependent': _circle_swatch}
 def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                       latex=True, legend=True, width=1.0, height=1.0, font_size=10,
                       node_size=320, faded=None, show_normalisation=None,
-                      legend_kwargs=None):
+                      legend_kwargs=None, label_padding=0.11):
     '''
     Draw an exponent graph.
 
@@ -640,6 +676,8 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
             only described when something carries it.
         width, height (float): The box the layout is drawn in.
         font_size (int): For the node and edge labels.
+        label_padding (float): How far outside its column a label is written, as a
+            fraction of `width`.
         node_size (int): Passed to :mod:`networkx`.
         faded (set, optional): Nodes to draw as removed -- pale, and every edge touching
             one pale with them.  They keep their places, which is the point: drawing the
@@ -727,7 +765,7 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     # Labels go *outside* the columns, not on the markers: a marker big enough to hold
     # `kappa0` or `c_0 = 0` would be a box of text rather than a vertex, and the middle of
     # the figure is needed for the edges.
-    padding = 0.11 * width
+    padding = label_padding * width
     target_layer = REDUCED if graph.graph.get('direction', FORWARD) == FORWARD else ORIGINAL
     for node, data in graph.nodes(data=True):
         x, y = positions[node]
@@ -738,13 +776,48 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                 'edgecolor': _BORDER, 'linewidth': 0.8,
                 'hatch': _AUXILIARY_LABEL_HATCH}
                if data['auxiliary'] else None)
-        ax.text(x + (-padding if on_the_left else padding), y,
-                _node_label(data,
-                            with_monomial=label_expressions
-                            and data['layer'] == target_layer,
-                            latex=latex, show_normalisation=normalisation),
-                fontsize=font_size, ha='right' if on_the_left else 'left', va='center',
-                bbox=box, alpha=_GONE_ALPHA if node in faded else None)
+        anchor = (x + (-padding if on_the_left else padding), y)
+        with_monomial = label_expressions and data['layer'] == target_layer
+        alpha = _GONE_ALPHA if node in faded else None
+        lines = _node_label_lines(data, with_monomial=with_monomial, latex=latex,
+                                  show_normalisation=normalisation)
+        if lines is None:
+            ax.text(anchor[0], anchor[1],
+                    _node_label(data, with_monomial=with_monomial, latex=latex,
+                                show_normalisation=normalisation),
+                    fontsize=font_size, ha='right' if on_the_left else 'left',
+                    va='center', bbox=box, alpha=alpha)
+            continue
+
+        # Two lines with the equals signs under one another.  Each piece is placed in
+        # points from the anchor, so the block keeps its shape whatever the axes'
+        # limits become; the widths are the text's own, which is measured.
+        head, tails = lines
+        renderer = getattr(ax.figure.canvas, 'get_renderer', ax.figure._get_renderer)()
+        to_points = 72.0 / ax.figure.dpi
+
+        def piece(words, align):
+            return ax.annotate(words, xy=anchor, xytext=(0, 0),
+                               textcoords='offset points', fontsize=font_size,
+                               ha=align, va='center', alpha=alpha,
+                               # Measured before the axes' limits are set, when the
+                               # anchor is still outside them; clipped, an annotation
+                               # reports no size at all.
+                               annotation_clip=False)
+
+        symbol = piece(head, 'right')
+        continued = [piece(words, 'left') for words in tails]
+        sizes = [written.get_window_extent(renderer) for written in continued]
+        gap = 0.15 * font_size
+        if on_the_left:
+            equals = -max(size.width for size in sizes) * to_points
+        else:
+            equals = symbol.get_window_extent(renderer).width * to_points + gap
+        upper, lower = (size.height * to_points for size in sizes)
+        leading = 0.35 * font_size
+        symbol.set_position((equals - gap, (lower + leading) / 2))
+        continued[0].set_position((equals, (lower + leading) / 2))
+        continued[1].set_position((equals, -(upper + leading) / 2))
 
     if label_edges:
         grouped = {}

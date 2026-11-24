@@ -93,9 +93,6 @@ def auxiliary_split(system):
                     and monomials[name].free_symbols & moving)
     return len(system.auxiliary_names) - integrals, integrals
 
-#: What marks a line as one of the symbol count's parts rather than a fact of its own.
-BULLET = '·  '
-
 
 def summary_lines(system):
     """
@@ -115,10 +112,9 @@ def summary_lines(system):
     dependents = len(system.dependents)
     parameters = len(system.parameters)
     lines = [plural(len(system.symbols), 'symbol'),
-             BULLET + '1 independent variable',
-             BULLET + plural(dependents, 'dependent variable')]
-    lines.append(BULLET + (plural(parameters, 'parameter') if parameters
-                           else 'no parameters'))
+             '1 independent',
+             plural(dependents, 'dependent')]
+    lines.append(plural(parameters, 'parameter') if parameters else 'no parameters')
 
     units, integrals = auxiliary_split(system)
     if units:
@@ -236,6 +232,12 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
     that :math:`y_1` *is* :math:`e`.  A row whose monomial survives the substitution
     carries no arrow, which is what marks a quadrature and the values measured in it.
 
+    The columns are placed by measuring what is in them.  The expressions are monomials
+    of no fixed width, so each column starts a fixed gap after the widest entry of the
+    one before, and the arrows share a column of their own.  The horizontal unit is the
+    inch: the axes are left exactly as wide as the table came out, and
+    :func:`box_unit_table` draws the outline once the caller has put them where they go.
+
     Args:
         rows (list): :meth:`~desr.ode_translation.ODETranslator.unit_table`.
         normalisations (dict):
@@ -244,33 +246,59 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
             the original symbols, so either can be followed across the figure.
         dimensions (dict, optional): ``{symbol: dimension}`` for the original system,
             from :func:`dimensions_shown`.  Left out, only the right half is drawn.
+
+    Returns:
+        tuple: the width of the table in inches, and the artists
+        :func:`box_unit_table` is to enclose.
     """
-    ax.set_xlim(-1.30, 1.30)
     ax.set_ylim(-0.18, 1.42)
     ax.axis('off')
     if not rows:
-        return ax
-    renderer = _renderer(ax.figure)
+        return 0.0, []
+    figure = ax.figure
+    renderer = _renderer(figure)
+    edge, between, apart = 0.07, 0.04, 0.20
+
+    def wide(artists):
+        """The width of the widest of these, in inches."""
+        return max((artist.get_window_extent(renderer).width / figure.dpi
+                    for artist in artists), default=0.0)
+
+    def place(artists, x):
+        for artist in artists:
+            artist.set_x(x)
 
     drawn = []
+    cursor = edge
+    original_centre = None
     if dimensions:
+        bracketed, stated = [], []
         for symbol, dimension in dimensions.items():
             y = (origins or {}).get(symbol)
             if y is None:
                 continue
             # Bracketed, because the column states a dimension rather than a quantity:
             # `t  time` reads as t being a time, and `[t] = time` says what is meant.
-            written = ax.text(
-                -0.84, y, '$\\left[{}\\right]$'.format(expr_to_tex(symbol)),
-                fontsize=font, ha='right', va='center')
-            drawn.append(written)
-            drawn.append(ax.text(
-                _right_edge(ax, written, renderer) + 0.05, y,
+            bracketed.append(ax.text(
+                0.0, y, '$\\left[{}\\right]$'.format(expr_to_tex(symbol)),
+                fontsize=font, ha='right', va='center'))
+            stated.append(ax.text(
+                0.0, y,
                 '$=\\;{}$'.format(display_tex(dimension_to_tex(dimension)))
                 if dimension is not None else '=  not declared',
-                fontsize=font - 1, ha='left', va='center'))
+                # The same size as the left side: `[t] = [t]` is one bracket twice.
+                fontsize=font, ha='left', va='center'))
+        start = cursor
+        cursor += wide(bracketed)
+        place(bracketed, cursor)
+        cursor += between
+        place(stated, cursor)
+        cursor += wide(stated)
+        original_centre = (start + cursor) / 2
+        cursor += apart
+        drawn.extend(bracketed + stated)
 
-    meanings, widest = [], 0.03
+    symbols, denoted, arrows, meanings = [], [], [], []
     for index, row in enumerate(rows):
         symbol = row['symbol']
         y = heights.get(symbol)
@@ -305,18 +333,17 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
         # normalisation reached this row, so the rows without one are the quadrature
         # and the values measured in it -- nothing normalises a unit the scaling moves.
         #
-        # Part of the same string, not a column of its own: set apart it reads as a
-        # later step rather than as what that line of the table says.
+        # In a column of its own, just clear of the longest monomial, so the arrows
+        # line up and the rows the normalisation reaches can be read down the table.
         after = row['adopted']
+        symbols.append(ax.text(0.0, y, '$' + expr_to_tex(symbol) + '$', fontsize=font,
+                               ha='right', va='center', color=colour))
+        denoted.append(ax.text(0.0, y, '$=\\;' + display_tex(reads_as) + '$',
+                               fontsize=font - 0.5, ha='left', va='center'))
         if after != row['denotes']:
-            reads_as += '\\;\\;\\mapsto\\;' + expr_to_tex(after)
-
-        drawn.append(ax.text(0.0, y, '$' + expr_to_tex(symbol) + '$', fontsize=font,
-                             ha='right', va='center', color=colour))
-        written = ax.text(0.03, y, '$=\\;' + display_tex(reads_as) + '$',
-                          fontsize=font - 0.5, ha='left', va='center')
-        drawn.append(written)
-        widest = max(widest, _right_edge(ax, written, renderer))
+            arrows.append(ax.text(
+                0.0, y, '$\\mapsto\\;' + display_tex(expr_to_tex(after)) + '$',
+                fontsize=font - 0.5, ha='left', va='center'))
 
         if unit:
             # "unit of concentration", not "*the* unit of concentration": the model has
@@ -341,12 +368,37 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
         if meaning:
             meanings.append((y, meaning, colour))
 
-    # One column, flush left, clear of the longest expression.  The expressions are
-    # monomials of no fixed width, so where that is lies in the measuring; set each
-    # against its own row instead and the column comes out ragged.
-    for y, meaning, colour in meanings:
-        drawn.append(ax.text(widest + 0.10, y, meaning, fontsize=font - 1,
-                             ha='left', va='center', color=colour))
+    # Each column a fixed gap after the widest entry of the one before.
+    start = cursor
+    cursor += wide(symbols)
+    place(symbols, cursor)
+    cursor += 0.03
+    place(denoted, cursor)
+    cursor += wide(denoted)
+    if arrows:
+        cursor += 0.07
+        place(arrows, cursor)
+        cursor += wide(arrows)
+    reduced_centre = (start + cursor) / 2
+    drawn.extend(symbols + denoted + arrows)
+
+    # One column, flush left, clear of the longest expression.
+    if meanings:
+        cursor += 0.12
+        written = [ax.text(cursor, y, meaning, fontsize=font - 1, ha='left',
+                           va='center', color=colour)
+                   for y, meaning, colour in meanings]
+        cursor += wide(written)
+        drawn.extend(written)
+    width = cursor + edge
+
+    # From here on a horizontal unit is an inch.
+    ax.set_xlim(0.0, width)
+    position = ax.get_position()
+    centre = (position.x0 + position.x1) / 2
+    share = width / figure.get_size_inches()[0]
+    ax.set_position([centre - share / 2, position.y0, share, position.height])
+    renderer = _renderer(figure)
 
     # Which half is which, in the same words as the boxes below, so the two halves are
     # the two systems the first graph runs between and not two unnamed lists.
@@ -356,25 +408,75 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
     rows_extent = Bbox.union([artist.get_window_extent(renderer)
                               for artist in drawn])
     rows_extent = rows_extent.transformed(ax.transData.inverted())
-    if dimensions:
-        drawn.append(ax.text(-0.62, rows_extent.y1 + 0.07, 'original',
+    if original_centre is not None:
+        drawn.append(ax.text(original_centre, rows_extent.y1 + 0.07, 'original',
                              fontsize=font - 0.5, ha='center', va='bottom',
                              color=QUIET))
-        drawn.append(ax.text(0.34, rows_extent.y1 + 0.07, 'reduced',
+        drawn.append(ax.text(reduced_centre, rows_extent.y1 + 0.07, 'reduced',
                              fontsize=font - 0.5, ha='center', va='bottom',
                              color=QUIET))
 
-    # Over the middle of the rows, which is where the heading of a table goes and is not
-    # a column position any of them share.
+    # Over the middle of the table.
     headed = Bbox.union([artist.get_window_extent(renderer) for artist in drawn])
     headed = headed.transformed(ax.transData.inverted())
     # Size alone, no weight: Computer Modern ships no bold face, so asking for one gets
     # the roman back with a warning.  The flowchart's panel headings are set the same way.
-    drawn.append(ax.text((headed.x0 + headed.x1) / 2, headed.y1 + 0.06, title,
+    drawn.append(ax.text(width / 2, headed.y1 + 0.06, title,
                          fontsize=font + 1.5, ha='center', va='bottom'))
+    return width, drawn
 
-    _tight_box(ax, drawn, renderer)
+
+def box_unit_table(ax, drawn):
+    """
+    The outline of the table :func:`draw_unit_table` drew, once its axes are in place.
+
+    Separate because the outline is measured from the text as it finally sits, and the
+    caller decides where that is after it knows how wide the table came out.
+    """
+    if drawn:
+        _tight_box(ax, drawn, _renderer(ax.figure))
     return ax
+
+
+def fit_graph(ax, separation, hang):
+    """
+    Make the axes of a drawn symbol graph exactly as wide as the graph needs.
+
+    The two columns of vertices are put `separation` inches apart, and the axes reach as
+    far to either side as the widest label hanging off that column, `hang` inches from
+    it.  The labels are text of a fixed size, so their widths are measured, and what is
+    left to choose is only how long the edges are.
+
+    Returns:
+        float: the width of the axes, in inches.
+    """
+    figure = ax.figure
+    renderer = _renderer(figure)
+    # How far each column's labels reach from where they are anchored, which is `hang`
+    # outside the column.  A label of several pieces is anchored once and placed in
+    # points from there, so each piece is measured from the anchor, not from itself.
+    reach = {True: 0.0, False: 0.0}
+    for label in ax.texts:
+        anchor = getattr(label, 'xy', None) or label.get_position()
+        on_the_left = anchor[0] < 0.5
+        anchored = ax.transData.transform(anchor)[0]
+        extent = label.get_window_extent(renderer)
+        beyond = (anchored - extent.x0) if on_the_left else (extent.x1 - anchored)
+        if label.get_bbox_patch() is not None:
+            # The outline around an auxiliary's label, which stands this far outside
+            # the text.  Its own extent is not known until it has been drawn.
+            beyond += 0.3 * label.get_fontsize() * figure.dpi / 72.0
+        reach[on_the_left] = max(reach[on_the_left], beyond / figure.dpi)
+    edge = 0.03
+    left = reach[True] + hang + edge
+    right = reach[False] + hang + edge
+    ax.set_xlim(-left / separation, 1.0 + right / separation)
+    width = left + separation + right
+    position = ax.get_position()
+    centre = (position.x0 + position.x1) / 2
+    share = width / figure.get_size_inches()[0]
+    ax.set_position([centre - share / 2, position.y0, share, position.height])
+    return width
 
 
 def _renderer(figure):
@@ -384,12 +486,6 @@ def _renderer(figure):
     except AttributeError:
         figure.canvas.draw()
         return figure.canvas.get_renderer()
-
-
-def _right_edge(ax, artist, renderer):
-    """Where a drawn text ends, in the axes' own coordinates."""
-    box = artist.get_window_extent(renderer)
-    return ax.transData.inverted().transform((box.x1, box.y1))[0]
 
 
 def _tight_box(ax, drawn, renderer, pad=0.045):
@@ -460,27 +556,45 @@ def step_labels(normalised, identified):
     return ('forward', units, clock, 'reverse')
 
 
+#: How far an arrow between two boxes bends, as `arc3` measures it: the middle of the
+#: arc stands half this fraction of the arrow's length above its ends.
+STEP_BEND = 0.55
+
+
 def _step_arrow(figure, start, end, y, label, font, colour):
     """
-    One arrow between two system boxes, named above it with what the step does.
+    One arrow from the top of a system box over to the top of the next, named above it
+    with what the step does.
+
+    Over the boxes rather than between them, so the boxes can stand close together and
+    the label has the width of two half boxes to be written in.
     """
     figure.add_artist(FancyArrowPatch(
         (start, y), (end, y), transform=figure.transFigure,
+        connectionstyle='arc3,rad={}'.format(-STEP_BEND),
         arrowstyle='-|>', mutation_scale=7, linewidth=0.9, color=colour,
-        shrinkA=0, shrinkB=0))
-    figure.text((start + end) / 2, y + 0.020, label, fontsize=font + 0.5,
-                ha='center', va='bottom', color=colour, linespacing=1.3)
+        shrinkA=1.5, shrinkB=1.5))
+    width, height = figure.get_size_inches()
+    rise = 0.5 * STEP_BEND * (end - start) * width
+    figure.text((start + end) / 2, y + (rise + 0.04) / height, label,
+                fontsize=font + 0.5, ha='center', va='bottom', color=colour,
+                linespacing=1.3)
 
 
 #: The fixed parts of the height, in inches: the strip the title sits in, the gap under
 #: the graphs, the system boxes, and the margin below them.  Everything left over is the
 #: band the graphs and the table share, and that band is what grows with the system.
-TITLE_IN, GAP_IN, BOXES_IN, FOOT_IN = 0.66, 0.22, 1.75, 0.50
+TITLE_IN, GAP_IN, BOXES_IN, FOOT_IN = 0.66, 0.62, 1.55, 0.50
 
-#: The width.  Three panels of expressions side by side is what sets it, and they are
-#: as wide as a system's monomials are long, so there is no number to compute it from --
-#: pass `size` for a journal column.
-WIDTH_IN = 10.8
+#: The widths that are chosen rather than measured, in inches: between the two columns
+#: of vertices in a graph, between two panels, at either edge of the figure, the least a
+#: system box can be, and between two boxes.  The panels are as wide as a system's
+#: monomials are long, which is measured, so the figure's own width is what these and
+#: the measurements add up to.
+SEPARATION_IN, BETWEEN_IN, MARGIN_IN, BOX_IN, BOX_GAP_IN = 0.65, 0.10, 0.05, 0.80, 0.14
+
+#: How far from its vertex a graph's label is written, in inches.
+HANG_IN = 0.11
 
 #: How much height one row of symbols asks for.  Three rows is the floor, below which
 #: the graphs crowd their own labels.
@@ -505,8 +619,10 @@ def symbol_map_figure(system, title=None, size=None, font=6.5, steps=None,
             says it a second time in a place the typesetter cannot reach.
         size (tuple, optional): Figure size in inches.  Left out, the height follows the
             number of symbols, which is the number of rows in the graphs and in the
-            table alike, and the width is :data:`WIDTH_IN`.  A journal column wants
-            something nearer 5.5 wide and a smaller `font`.
+            table alike, and the width is what the three panels measure, packed side by
+            side, or what the five boxes need if that is more.  Given, the panels are
+            spread over that width, and overlap if it is less than they need; a smaller
+            `font` makes them need less.
         font (float): Base point size; everything else is set relative to it.
         steps (sequence of str, optional): The words on the four arrows, in order.
             Worked out from the reduction by :func:`step_labels` when left out.  A
@@ -554,23 +670,14 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     # Without a title the top strip still has to hold the panels' own names.
     title_in = TITLE_IN if title else TITLE_IN - 0.30
     fixed = title_in + GAP_IN + BOXES_IN + FOOT_IN
-    if size is None:
-        size = (WIDTH_IN, fixed + rows * ROW_IN)
-    height = size[1]
+    given_width = None if size is None else size[0]
+    height = fixed + rows * ROW_IN if size is None else size[1]
     band = max(height - fixed, ROW_IN)
 
-    figure = plt.figure(figsize=size)
+    scale = font / 6.5
+    figure = plt.figure(figsize=(12.0, height))
     bottom = (FOOT_IN + BOXES_IN + GAP_IN) / height
     top = bottom + band / height
-
-    # Five boxes distributed evenly across the full width, so the gaps between systems
-    # are equal and the chain has a steady beat.  Everything else is placed from these:
-    # each map is centred between the two boxes it maps between, and each arrow runs
-    # across the gap between them.
-    margin, box_width = 0.012, 0.116
-    gap = (1.0 - 2 * margin - 5 * box_width) / 4
-    box_left = [margin + index * (box_width + gap) for index in range(5)]
-    box_centre = [place + box_width / 2 for place in box_left]
 
     # The heights the forward graph gives each column of symbols, so the table lines up
     # with it row for row and either half can be followed back to a vertex.
@@ -585,50 +692,90 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
                           in normalise_pairs(translator, system, reduced, normalised)}
     identified = {symbol: image for symbol, image, _, _
                   in rescale_pairs(translator, system, reduced, normalised, final)}
+    if steps is None:
+        steps = step_labels(normalised_symbols, identified)
 
-    # The forward graph spans the first seam and the reverse graph the last.  The table
-    # spans both middle seams: the two steps act on the same symbols, so they are one
-    # table read downwards, not two panels.
-    panels = [('forward', 0, 1), ('dimensions, units, and normalisation', 1, 3),
-              ('reverse', 3, 4)]
-    for name, start, end in panels:
-        centre = (box_centre[start] + box_centre[end]) / 2
-        reach = box_centre[end] - box_centre[start]
-        # The table holds two tables side by side and wants the room; the graphs give it
-        # up, since their own width is mostly the labels hanging off their columns.
-        graph_width = reach * (1.04 if start == 1 else 0.88)
-        ax = figure.add_axes([centre - graph_width / 2, bottom,
-                              graph_width, top - bottom])
-        if start == 1:
-            # Its name goes inside its box, where it reads as the table's heading rather
-            # than as a second subtitle under the figure's own.
-            draw_unit_table(ax, table, font + 0.5, heights,
-                            translator.normalisations(), name,
-                            dimensions=dimensions_shown(system,
-                                                        translator.scaling_matrix),
-                            origins=origins)
-        else:
-            # The forward graph says what each new symbol *is* -- that is the whole
-            # content of a change of coordinates, and without it the reduced column is a
-            # row of names nobody can read.  The reverse graph says it the other way.
-            #
-            # Not the normalisation, though: this seam is the change of coordinates and
-            # the normalisation happens at the next one.  Drawn here it would put a
-            # |-> 1 on the caller's own k_0_1, which reads as a claim about a rate
-            # constant.  The table says it, in the coordinates it acts in.
-            #
-            # One key for the figure, under everything, drawn by the forward graph
-            # because both graphs mark the same things the same way and a key repeated
-            # is a key a reader has to check is the same.
-            draw_symbol_graph(forward if name == 'forward' else reverse, ax=ax,
-                              legend=name == 'forward', label_edges=False,
-                              label_expressions=True, show_normalisation=False,
-                              font_size=font, node_size=90,
-                              legend_kwargs={'loc': 'lower center', 'ncol': 4,
-                                             'bbox_to_anchor': (0.5, 0.004),
-                                             'bbox_transform': figure.transFigure,
-                                             'columnspacing': 1.6})
-            ax.set_title(name, fontsize=font + 2)
+    # Three panels: the forward graph, the table, the reverse graph.  Each is drawn in
+    # axes put anywhere, measured, and then moved: how wide a panel is depends on the
+    # system's monomials, so the figure's width is an outcome and not a setting.
+    names = ('forward', 'dimensions, units, and normalisation', 'reverse')
+    axes = [figure.add_axes([0.35, bottom, 0.30, top - bottom]) for _ in names]
+
+    # The forward graph says what each new symbol *is* -- that is the whole content of a
+    # change of coordinates, and without it the reduced column is a row of names nobody
+    # can read.  The reverse graph says it the other way.
+    #
+    # Not the normalisation, though: that seam is the change of coordinates and the
+    # normalisation happens at the next one.  Drawn here it would put a |-> 1 on the
+    # caller's own k_0_1, which reads as a claim about a rate constant.  The table says
+    # it, in the coordinates it acts in.
+    #
+    # One key for the figure, under everything, drawn by the forward graph because both
+    # graphs mark the same things the same way and a key repeated is a key a reader has
+    # to check is the same.
+    widths = [0.0, 0.0, 0.0]
+    for index, graph in ((0, forward), (2, reverse)):
+        draw_symbol_graph(graph, ax=axes[index],
+                          legend=index == 0, label_edges=False,
+                          label_expressions=True, show_normalisation=False,
+                          font_size=font, node_size=90,
+                          label_padding=HANG_IN / SEPARATION_IN,
+                          legend_kwargs={'loc': 'lower center', 'ncol': 4,
+                                         'bbox_to_anchor': (0.5, 0.004),
+                                         'bbox_transform': figure.transFigure,
+                                         'columnspacing': 1.6})
+        axes[index].set_title(names[index], fontsize=font + 2)
+        widths[index] = fit_graph(axes[index], SEPARATION_IN * scale, HANG_IN * scale)
+    # Its name goes inside its box, where it reads as the table's heading rather than as
+    # a second subtitle under the figure's own.
+    widths[1], table_text = draw_unit_table(
+        axes[1], table, font + 0.5, heights, translator.normalisations(), names[1],
+        dimensions=dimensions_shown(system, translator.scaling_matrix),
+        origins=origins)
+
+    # The five boxes need a width of their own: each wide enough for its longest line.
+    # The arrows go over the top, from the middle of one box to the middle of the next,
+    # so a label has that far to be written in and the boxes are wide enough for it.
+    renderer = _renderer(figure)
+
+    def written_width(words, fontsize):
+        probe = figure.text(0, 0, words, fontsize=fontsize)
+        measured = probe.get_window_extent(renderer).width / figure.dpi
+        probe.remove()
+        return measured
+
+    stages = [('original', system), ('reduced', reduced),
+              ('normalised', normalised), ('nondimensionalised', final),
+              ('original', system)]
+    box_in = max([BOX_IN * scale]
+                 + [written_width(line, font) + 0.17
+                    for _, each in stages for line in summary_lines(each)]
+                 + [written_width(name, font + 1) + 0.17 for name, _ in stages])
+    gap_in = BOX_GAP_IN * scale
+    longest = max(written_width(line, font + 0.5)
+                  for label in steps for line in label.split('\n'))
+    box_in = max(box_in, longest + 0.08 - gap_in)
+    chain_in = 5 * box_in + 4 * gap_in + 2 * MARGIN_IN
+
+    packed = sum(widths) + 2 * BETWEEN_IN + 2 * MARGIN_IN
+    if given_width is None:
+        width = max(packed, chain_in)
+    else:
+        width = given_width
+    # What the width has beyond the panels' own goes between them and at the edges, in
+    # equal parts, so the panels stay evenly placed on a wider page.
+    spare = max(width - packed, 0.0) / 4
+    figure.set_size_inches(width, height)
+    cursor = MARGIN_IN + spare
+    for ax, panel in zip(axes, widths):
+        ax.set_position([cursor / width, bottom, panel / width, top - bottom])
+        cursor += panel + BETWEEN_IN + spare
+    box_unit_table(axes[1], table_text)
+
+    # The boxes stand close together in the middle of the page, whatever its width.
+    box_width, gap = box_in / width, gap_in / width
+    margin = (1.0 - 5 * box_width - 4 * gap) / 2
+    box_left = [margin + index * (box_width + gap) for index in range(5)]
 
     stages = [('original', system), ('reduced', reduced),
               ('normalised', normalised), ('nondimensionalised', final),
@@ -639,19 +786,18 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
         _system_box(figure, [box_left[index], box_bottom, box_width, box_height],
                     name, each, font, notes.get(name))
 
-    # The arrows, across the gaps, at the height of the boxes they join.  The outer two
-    # are the graphs above them and the inner two the chain's own steps, which is why
-    # they are coloured as the table colours its two halves -- and greyed where the step
-    # does nothing, so the colour means the same thing as the words.
-    arrow_y = box_bottom + box_height * 0.52
-    if steps is None:
-        steps = step_labels(normalised_symbols, identified)
+    # The arrows, over the tops of the boxes they join.  The outer two are the graphs
+    # above them and the inner two the chain's own steps, which is why they are coloured
+    # as the table colours its two halves -- and greyed where the step does nothing, so
+    # the colour means the same thing as the words.
+    arrow_y = box_bottom + box_height + 0.03 / height
     colours = [QUIET,
                QUIET if normalised_symbols else INERT,
                QUIET if identified else INERT,
                QUIET]
     for index, (label, colour) in enumerate(zip(steps, colours)):
-        _step_arrow(figure, box_left[index] + box_width, box_left[index + 1],
+        _step_arrow(figure, box_left[index] + 0.72 * box_width,
+                    box_left[index + 1] + 0.28 * box_width,
                     arrow_y, label, font, colour)
 
     if title:
