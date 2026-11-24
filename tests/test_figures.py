@@ -95,11 +95,34 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
     def test_the_table_states_a_dimension_at_one_size(self):
         # `[t] = [t]` is one bracket twice, so both sides are set alike.
         figure = symbol_map_figure(self.with_initial())
+        # The left half: a bracketed symbol alone, and the `= dimension` beside it.
         sizes = {text.get_fontsize() for ax in figure.axes for text in ax.texts
-                 if text.get_text().startswith(('$\\left[', '$=\\;\\left[',
+                 if (text.get_text().startswith('$\\left[') and '=' not in text.get_text())
+                 or text.get_text().startswith(('$=\\;\\left[',
                                                 '$=\\;\\dfrac{1}{\\left['))}
         matplotlib.pyplot.close(figure)
         self.assertEqual(1, len(sizes))
+
+    def test_the_unit_column_gives_a_unit_its_dimension_and_a_value_its_unit(self):
+        # Michaelis-Menten: x0 = 1/(e_0 k_1) is the unit of time and x1 = e_0 the unit
+        # of concentration.  Their rows state their dimensions; every other row names
+        # the unit it is measured in, and nothing in the column is a sentence.
+        system = self.with_initial()
+        translator = ODETranslator.from_ode_system(system)
+        figure = symbol_map_figure(system)
+        written = [text.get_text() for ax in figure.axes for text in ax.texts]
+        matplotlib.pyplot.close(figure)
+        self.assertIn('unit', written)
+        self.assertIn('dimensions, normalisations, and units', written)
+        units = [row for row in translator.unit_table() if row['role'] == 'unit']
+        self.assertEqual(2, len(units))
+        for row in units:
+            stated = [words for words in written
+                      if words.startswith('$\\left[{}\\right] = '.format(
+                          str(row['symbol'])[0] + '_{' + str(row['symbol'])[1:] + '}'))]
+            self.assertEqual(1, len(stated), row['symbol'])
+        self.assertFalse([words for words in written if 'in units of' in words])
+        self.assertFalse([words for words in written if words.startswith('unit of')])
 
     def test_the_boxes_stand_together_under_arrows_that_arc_over_them(self):
         from matplotlib.patches import FancyArrowPatch
@@ -128,6 +151,15 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
             self.assertLess(start_x, end_x)
             self.assertIn('arc3', str(arrow.get_connectionstyle().__class__.__name__).lower())
         matplotlib.pyplot.close(figure)
+
+    def test_the_clock_step_says_what_the_clock_is(self):
+        import sympy
+        from desr.figures.symbol_map import step_labels
+        tau = sympy.Symbol('tau')
+        self.assertEqual(('forward', 'normalise', 'clock is $\\tau$', 'reverse'),
+                         step_labels({sympy.Symbol('x0')}, {sympy.Symbol('y3'): tau}))
+        self.assertEqual(('forward', 'nothing to normalise', 'clock unchanged', 'reverse'),
+                         step_labels(set(), {}))
 
     def test_a_box_counts_its_symbols_in_short_lines(self):
         from desr.figures.symbol_map import summary_lines

@@ -350,8 +350,12 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
             # three of them, and the article says there is one.
             dimension = (dimension_to_tex(row['dimension'])
                          if row['dimension'] is not None else None)
-            meaning = ('unit of ${}$'.format(display_tex(dimension)) if dimension
-                       else 'unit of a dimension not declared')
+            # A unit's own row states its dimension, in the brackets and the form the
+            # left half uses: `[x_0] = [t]`.  That is what connects the two halves --
+            # the dimensions on the left are the ones these symbols are the units of.
+            bracketed_unit = '\\left[{}\\right]'.format(expr_to_tex(symbol))
+            meaning = ('${} = {}$'.format(bracketed_unit, display_tex(dimension))
+                       if dimension else '${}$ not declared'.format(bracketed_unit))
             if after == row['denotes']:
                 # The one kind of unit nobody can adopt: the scaling moves it, so it is
                 # a quadrature rather than a number to set, and nothing sends it to 1.
@@ -360,8 +364,9 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
             # In words, which is what keeps it out of the equations.  y1 is the value of
             # e in the unit x1, and saying so is a remark about two symbols rather than
             # a relation the reduced system holds.
-            meaning = '${}$ in units of ${}$'.format(
-                expr_to_tex(row['of']), expr_to_tex(row['measured_in']))
+            # Only the unit: the column is headed "unit", and the quantity measured is
+            # the one the arrow beside it has just named.
+            meaning = '${}$'.format(display_tex(expr_to_tex(row['measured_in'])))
         else:
             meaning = None
 
@@ -385,12 +390,32 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
     # One column, flush left, clear of the longest expression.
     if meanings:
         cursor += 0.12
-        written = [ax.text(cursor, y, meaning, fontsize=font - 1, ha='left',
+        written = [ax.text(cursor, y, meaning, fontsize=font - 1, ha='center',
                            va='center', color=colour)
                    for y, meaning, colour in meanings]
+        # Centred under the heading, in a column as wide as its widest entry.
+        unit_centre = cursor + wide(written) / 2
+        place(written, unit_centre)
         cursor += wide(written)
         drawn.extend(written)
+    else:
+        unit_centre = None
     width = cursor + edge
+
+    # The title is part of the table, and a narrow table is narrower than its title.
+    # Then the columns move right by half the difference, so they stay under its middle.
+    probe = ax.text(0.0, 0.0, title, fontsize=font + 1.5)
+    short = wide([probe]) + 0.30 - width
+    probe.remove()
+    if short > 0:
+        for artist in drawn:
+            artist.set_x(artist.get_position()[0] + short / 2)
+        reduced_centre += short / 2
+        if original_centre is not None:
+            original_centre += short / 2
+        if unit_centre is not None:
+            unit_centre += short / 2
+        width += short
 
     # From here on a horizontal unit is an inch.
     ax.set_xlim(0.0, width)
@@ -414,6 +439,12 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
                              color=QUIET))
         drawn.append(ax.text(reduced_centre, rows_extent.y1 + 0.07, 'reduced',
                              fontsize=font - 0.5, ha='center', va='bottom',
+                             color=QUIET))
+    if unit_centre is not None:
+        # A little lower than "reduced", so it reads as a heading within that half:
+        # these are the reduced system's units, not the original's.
+        drawn.append(ax.text(unit_centre, rows_extent.y1 + 0.025, 'unit',
+                             fontsize=font - 1, ha='center', va='bottom',
                              color=QUIET))
 
     # Over the middle of the table.
@@ -549,7 +580,7 @@ def step_labels(normalised, identified):
         # it whenever the reduced clock is renamed -- the system's own `t` goes there
         # alongside the invariant that is now the same quantity -- and listing one name
         # per source would print it twice.
-        clock = 'clock ' + ', '.join(
+        clock = 'clock is ' + ', '.join(
             sorted({'$' + expr_to_tex(image) + '$' for image in identified.values()}))
     else:
         clock = 'clock unchanged'
@@ -698,7 +729,7 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     # Three panels: the forward graph, the table, the reverse graph.  Each is drawn in
     # axes put anywhere, measured, and then moved: how wide a panel is depends on the
     # system's monomials, so the figure's width is an outcome and not a setting.
-    names = ('forward', 'dimensions, units, and normalisation', 'reverse')
+    names = ('forward', 'dimensions, normalisations, and units', 'reverse')
     axes = [figure.add_axes([0.35, bottom, 0.30, top - bottom]) for _ in names]
 
     # The forward graph says what each new symbol *is* -- that is the whole content of a
@@ -777,9 +808,6 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     margin = (1.0 - 5 * box_width - 4 * gap) / 2
     box_left = [margin + index * (box_width + gap) for index in range(5)]
 
-    stages = [('original', system), ('reduced', reduced),
-              ('normalised', normalised), ('nondimensionalised', final),
-              ('original', system)]
     # The boxes sit on top of the foot, which the key hangs in.
     box_bottom, box_height = FOOT_IN / height, BOXES_IN / height
     for index, (name, each) in enumerate(stages):
