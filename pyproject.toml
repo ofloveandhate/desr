@@ -1,0 +1,8 @@
+# The build system, declared so that `python -m build` and `pip install .` use the same
+# backend whatever a machine's defaults are.  The metadata itself is in setup.py.
+#
+# setuptools 77 is the first that takes the licence as an SPDX expression (PEP 639),
+# which setup.py gives it.
+[build-system]
+requires = ["setuptools >= 77"]
+build-backend = "setuptools.build_meta"

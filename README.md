@@ -17,7 +17,15 @@ This package requires the Sympy package.
 
 ### Installing
 
-To install, download the package and run:
+From PyPI:
+
+`$ pip install desr`
+
+The figures also need matplotlib, which desr does not install:
+
+`$ pip install matplotlib`
+
+From a clone of the repository:
 
 `$ pip install .`
 

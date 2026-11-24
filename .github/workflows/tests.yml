@@ -12,17 +12,19 @@ name: tests
 #                     script that draws a figure for a page lives beside that page, and
 #                     this build is what runs it.
 #
-# The second axis is the optional dependencies.  desr is sympy and python-flint, and
-# `import desr` must work without numpy, scipy, networkx or matplotlib -- the first two
-# are the `numerics` extra and desr.numerics alone needs them, the other two are the
-# `graphs` extra and desr.symbol_graph alone needs them.  `without-numeric-extras` proves
-# that on a bare install, which a test running inside a full environment cannot.
+# The second axis is what `pip install desr` brings.  It has no extras: numpy, scipy and
+# networkx are requirements, and matplotlib, which only the drawing needs, is not.
+# `bare-install` proves on a fresh install what a test inside a full environment cannot:
+# the requirements arrive, matplotlib does not, the reduction and the numerics work, and
+# drawing says what is missing.
 
 on:
   push:
     branches: [main, 'release/**']
   pull_request:
   workflow_dispatch:
+  # publish.yml runs every check here before it builds anything.
+  workflow_call:
 
 jobs:
   tests:
@@ -41,10 +43,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install desr with every extra
+      - name: Install desr, matplotlib for the figures, and pytest
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[numerics,graphs]' pytest
+          python -m pip install . matplotlib pytest
 
       - name: Unit tests
         run: python -m pytest tests/ -v
@@ -52,8 +54,8 @@ jobs:
       - name: Module doctests
         run: python -m pytest --doctest-modules desr/ -v
 
-  without-numeric-extras:
-    name: no extras, python ${{ matrix.python-version }}
+  bare-install:
+    name: bare install, python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -66,22 +68,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install desr with no extras at all
+      - name: Install desr and nothing else
         run: |
           python -m pip install --upgrade pip
           python -m pip install .
 
-      - name: the optional dependencies really are absent
+      - name: The requirements arrived, and matplotlib did not
         run: |
           python - <<'PY'
           import importlib.util
-          for name in ('numpy', 'scipy', 'networkx', 'matplotlib'):
-              assert importlib.util.find_spec(name) is None, (
-                  name + ' is installed, so this job proves nothing')
-          print('none of the optional dependencies is present')
+          for name in ('numpy', 'scipy', 'networkx'):
+              assert importlib.util.find_spec(name) is not None, name + ' was not installed'
+          assert importlib.util.find_spec('matplotlib') is None, (
+              'matplotlib is installed, so the step that draws proves nothing')
+          print('numpy, scipy and networkx are present; matplotlib is not')
           PY
 
-      - name: A whole symbolic workflow, with no numeric dependency
+      - name: A whole symbolic workflow
         run: |
           python - <<'PY'
           from desr import ODESystem, ODETranslator, ReductionScheme
@@ -96,16 +99,27 @@ jobs:
           print(reduced)
           PY
 
-      - name: desr.numerics asks for numpy, and says so
+      - name: The numerics and the symbol graph work
+        run: |
+          python - <<'PY'
+          from desr import NumericTranslator, ODESystem
+
+          system = ODESystem.from_equations(['dz/dt = -k*z'])
+          translator = system.translator()
+          print(NumericTranslator(translator.translate(system)))
+          print(translator.symbol_graph())
+          PY
+
+      - name: Drawing says what is missing
         run: |
           python - <<'PY'
           try:
-              import desr.numerics
+              import desr.figures
           except ImportError as exc:
-              assert 'numpy' in str(exc), 'unhelpful message: ' + str(exc)
-              print('desr.numerics raised as it should:', exc)
+              assert 'matplotlib' in str(exc), 'unhelpful message: ' + str(exc)
+              print('desr.figures raised as it should:', exc)
           else:
-              raise AssertionError('desr.numerics imported without numpy')
+              raise AssertionError('desr.figures imported without matplotlib')
           PY
 
   docs:
@@ -121,7 +135,7 @@ jobs:
       - name: Install desr and the docs toolchain
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[numerics,graphs]' sphinx sphinxcontrib-bibtex sphinx-rtd-theme
+          python -m pip install . matplotlib sphinx sphinxcontrib-bibtex sphinx-rtd-theme
 
       - name: Sphinx doctests
         run: python -m sphinx -b doctest docs/source docs/build/doctest

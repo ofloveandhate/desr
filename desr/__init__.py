@@ -37,24 +37,25 @@ from .ode_translation import ODETranslator, ReductionScheme, scale_action
 from .sympy_helper import sympify_expression, to_symbol
 from .tex_tools import TexParseError
 
-# desr.numerics needs numpy and scipy, which are optional for using the rest of the
-# library.  Importing it here would make them mandatory for `import desr`, so the numeric
-# names are resolved on first access instead: `from desr import NumericTranslator` works,
-# and an ImportError for numpy arrives only if you actually reach for the numeric part.
+# desr.numerics loads numpy, and the reduction itself does not need it.  Importing it here
+# would make every `import desr` pay for numpy, so the numeric names are resolved on first
+# access instead: `from desr import NumericTranslator` works, and numpy is loaded only when
+# something reaches for the numeric part.
 _LAZY = {
     'ConflictingKnownValues': 'numerics',
     'InsufficientKnownValues': 'numerics',
     'NumericTranslator': 'numerics',
     'numerics': None,
-    # desr.symbol_graph needs networkx, and its drawing needs matplotlib.  Same bargain as
-    # numerics: resolved on first access, so neither is needed for `import desr`.  The
+    # desr.symbol_graph loads networkx, and its drawing matplotlib.  Same bargain as
+    # numerics: resolved on first access, so `import desr` loads neither.  The
     # submodule only, not its functions: the module and its main function share a name, so
     # a top-level `symbol_graph` would be ambiguous.  `ODETranslator.symbol_graph` is the
     # way in, and `from desr.symbol_graph import draw_symbol_graph` gets the drawing.
     'symbol_graph': None,
-    # desr.figures draws with matplotlib, and the symbol map reaches networkx through
-    # desr.symbol_graph.  The same bargain again: `from desr.figures import
-    # flowchart_figure` works, and neither dependency is needed for `import desr`.
+    # desr.figures draws with matplotlib, which is not a requirement of desr, and the
+    # symbol map reaches networkx through desr.symbol_graph.  The same bargain again:
+    # `from desr.figures import flowchart_figure` works where matplotlib is installed,
+    # and `import desr` works where it is not.
     'figures': None,
 }
 

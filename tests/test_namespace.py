@@ -2,9 +2,10 @@
 What `import desr` gives you.
 
 A whole workflow should be one import.  The constraint pulling the other way is that
-numpy and scipy are optional for *using* desr -- only `desr.numerics` needs them -- so
-`import desr` must not require them.  Both halves are pinned here, because they are easy
-to break by adding one convenient import at the top of a module.
+the reduction is symbolic, so `import desr` should not pay to load numpy, scipy, networkx
+or matplotlib; and matplotlib is not a requirement of desr at all.  Both halves are pinned
+here, because they are easy to break by adding one convenient import at the top of a
+module.
 '''
 import subprocess
 import sys
@@ -129,11 +130,11 @@ class TestPublicNames(TestCase):
             desr.no_such_thing
 
 
-class TestOptionalDependencies(TestCase):
+class TestWhatImportDesrLoads(TestCase):
     '''
-    numpy and scipy are optional for using desr.  They are installed here -- the test
-    suite needs them -- so asking whether `import desr` pulled them in has to happen in a
-    fresh interpreter.
+    numpy, scipy and networkx are requirements of desr, and matplotlib is installed here
+    for the tests, so whether `import desr` loads them has to be asked of a fresh
+    interpreter.  It must not: they are loaded by the parts that use them.
 
     `desr.numerics` needs numpy at import; scipy is needed only for recovering auxiliary
     variables that vary along the solution, and is imported where it is used.
@@ -150,7 +151,7 @@ class TestOptionalDependencies(TestCase):
                                 capture_output=True, text=True, check=True)
         return result.stdout.strip()
 
-    def test_importing_desr_does_not_require_numpy_or_scipy(self):
+    def test_importing_desr_does_not_load_numpy_or_scipy(self):
         self.assertEqual(self.modules_after('import desr'), '')
 
     def test_reaching_for_the_numeric_part_imports_numpy(self):
@@ -160,7 +161,7 @@ class TestOptionalDependencies(TestCase):
 
     GRAPHS = ('networkx', 'matplotlib')
 
-    def test_importing_desr_does_not_require_networkx_or_matplotlib(self):
+    def test_importing_desr_does_not_load_networkx_or_matplotlib(self):
         self.assertEqual(self.modules_after('import desr', self.GRAPHS), '')
 
     def test_reaching_for_the_graph_part_imports_networkx(self):

@@ -171,10 +171,14 @@ each can be turned off.
 
 ### Packaging
 
-  - Two optional extras.  `pip install desr[numerics]` adds numpy and scipy
-    for `desr.numerics`; `pip install desr[graphs]` adds networkx and
-    matplotlib for the symbol graph and the figures.  `import desr` needs
-    neither, and CI proves it on a bare install.
+  - `desr` is on PyPI: `pip install desr`.  `pyproject.toml` declares the build
+    system, and the metadata carries classifiers, keywords and the licence as
+    an SPDX expression.
+
+  - numpy, scipy and networkx are requirements, for `desr.numerics` and the
+    symbol graph.  matplotlib is not: the figures need it, and drawing
+    without it says so.  `import desr` loads none of the four, and CI checks
+    a bare install.
   - `desr.figures` ships with the package.
 
 Tested on 809 unit tests over 1271 subtests, 133 module doctests, 1509

@@ -5,11 +5,11 @@
 # Python dependencies
 sympy >= 1.0
 python-flint >= 0.7
-
-# Optional for using desr: needed only by desr.numerics and the numerical examples.
-# Required for testing desr: the unit tests and doctests do not skip them.
 numpy
 scipy
+networkx
+
+# Not required by desr; the figures and the tests need it.
 matplotlib
 
 # Test runner

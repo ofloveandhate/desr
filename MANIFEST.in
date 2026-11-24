@@ -1,0 +1,5 @@
+# What the source distribution carries besides the package: the changelog, and the tests,
+# so that someone who unpacks it can run them.  README.md and LICENSE are included by
+# setuptools itself.
+include CHANGELOG.md
+recursive-include tests *.py
