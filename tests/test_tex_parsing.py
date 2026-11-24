@@ -2,7 +2,7 @@
 Reading the LaTeX that papers are actually written in.
 
 The constructs here were all taken from one place: the Tyson cell-cycle system as
-transcribed in `examples/cell_cycle_control_network.py`, which needed sixty lines of
+once transcribed in a script under `examples/`, which needed sixty lines of
 hand-rolled regex preprocessing before `from_tex` would look at it.  That preprocessing is
 the specification, and this is it in test form.
 
@@ -255,9 +255,9 @@ class TestLineClassification(TestCase):
 
 class TestTheTysonCellCycleSystem(TestCase):
     '''
-    The system that motivated all of this: Tyson's cell-cycle control network, transcribed
-    from the 2007 paper.  Seven derivative lines and four definitions, every one of which
-    involves a dependent variable.
+    The system that motivated all of this: the cell-cycle control network of Sible &
+    Tyson, Methods 41 (2007) 238-247, transcribed from their Figure 2.  Seven derivative
+    lines and four definitions, every one of which involves a dependent variable.
     '''
 
     DERIVATIVE_LINES = r'''\frac{d}{dt}\textrm{[Cyclin]} &= k_1 - k_2 \textrm{[Cyclin]} - k_3 \textrm{[Cyclin]} \textrm{[Cdk]} \\
@@ -266,7 +266,7 @@ class TestTheTysonCellCycleSystem(TestCase):
 \frac{d}{dt}\textrm{[Cdc25P]} &= \frac{k_a \textrm{[MPF]}\left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right)}{K_a + \textrm{[total Cdc25]} - \textrm{[Cdc25P]}} - \frac{k_b \textrm{[PPase]} \textrm{[Cdc25P]}}{K_b + \textrm{[Cdc25P]}} \\
 \frac{d}{dt}\textrm{[Wee1P]} &= \frac{k_e \textrm{[MPF]}\left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right)}{K_e + \textrm{[total Wee1]} - \textrm{[Wee1P]}} - \frac{k_f \textrm{[PPase]} \textrm{[Wee1P]}}{K_f + \textrm{[Wee1P]}} \\
 \frac{d}{dt}\textrm{[IEP]} &= \frac{k_g \textrm{[MPF]}\left( \textrm{[total IE]} - \textrm{[IEP]} \right)}{K_g + \textrm{[total IE]} - \textrm{[IEP]}} - \frac{k_h \textrm{[PPase]} \textrm{[IEP]}}{K_h + \textrm{[IEP]}} \\
-\frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[MPF]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}}'''
+\frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[IEP]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}}'''
 
     DEFINITION_LINES = r'''\textrm{[Cdk]} &= \textrm{[total Cdk]} - \textrm{[MPF]} - \textrm{[preMPF]} \\
 k_{25} &= V_{25}' \left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right) + V_{25}'' \textrm{[Cdc25P]} \\
@@ -322,6 +322,165 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         translator = ODETranslator.from_ode_system(system)
         self.assertTrue(translator.translate(system).symbols)
+
+    def test_which_species_drives_which_as_in_their_figure_2(self):
+        # Equations 4 to 7.  MPF drives the forward rate of Cdc25P, Wee1P and IEP, and
+        # IEP drives APC's.  The transcription once had MPF in equation 7 as well, which
+        # left IEP in no equation but its own.
+        system = ODESystem.from_tex(self.DERIVATIVE_LINES)
+        MPF, IEP = sympy.symbols('MPF IEP')
+        rates = {str(symbol): rate for symbol, rate in system.derivative_dict.items()}
+        for driven in ('Cdc25P', 'Wee1P', 'IEP'):
+            with self.subTest(species=driven):
+                self.assertTrue(rates[driven].has(MPF))
+        self.assertTrue(rates['APC'].has(IEP))
+        self.assertFalse(rates['APC'].has(MPF))
+        # Every species appears in some equation other than its own.
+        for name in self.SPECIES:
+            with self.subTest(species=name):
+                self.assertTrue(any(rate.has(sympy.Symbol(name))
+                                    for other, rate in ODESystem.from_tex(
+                                        self.TEX, sub_defns=True).derivative_dict.items()
+                                    if str(other) not in (name, 't')))
+
+    # What docs/source/examples/cell_cycle.rst says about this model.
+
+    # The page's variable order.  The reduction uses as units the parameters at the front:
+    # the five totals, then V_2'' and k_h.
+    USED_AS_UNITS = ('totalWee1', 'totalCdk', 'totalAPC', 'totalIE', 'totalCdc25',
+                     'V_2primeprime', 'k_h')
+    REMAINING_PARAMETERS = ('PPase',
+                            'K_a', 'K_b', 'K_c', 'K_d', 'K_e', 'K_f', 'K_g', 'K_h',
+                            'k_1', 'k_3',
+                            'k_a', 'k_b', 'k_c', 'k_d', 'k_e', 'k_f', 'k_g',
+                            'V_25prime', 'V_25primeprime',
+                            'V_weeprime', 'V_weeprimeprime', 'V_2prime')
+    TOTAL_OF = {'Cyclin': 'totalCdk', 'MPF': 'totalCdk', 'preMPF': 'totalCdk',
+                'Cdc25P': 'totalCdc25', 'Wee1P': 'totalWee1', 'IEP': 'totalIE',
+                'APC': 'totalAPC'}
+
+    def reduction(self):
+        from desr import ODETranslator
+        system = ODESystem.from_tex(self.TEX, sub_defns=True)
+        system.reorder_variables(
+            self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES)
+        translator = ODETranslator.from_ode_system(system)
+        return system, translator, translator.translate(system)
+
+    def test_the_order_names_every_variable_once(self):
+        system = ODESystem.from_tex(self.TEX, sub_defns=True)
+        order = self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES
+        self.assertEqual(len(order), len(set(order)))
+        self.assertEqual(set(order), set(map(str, system.symbols)))
+
+    def test_seven_symmetries_remove_seven_of_thirty_parameters(self):
+        system, translator, reduced = self.reduction()
+        self.assertEqual(30, len(system.parameters))
+        self.assertEqual(7, translator.num_scaling_symmetries)
+        self.assertEqual(23, len(reduced.parameters))
+        self.assertEqual(7, len(reduced.dependents))
+
+    def test_every_reduced_equation_is_true(self):
+        from oracles import false_equations
+        system, _, reduced = self.reduction()
+        self.assertEqual([], false_equations(system, reduced))
+
+    def test_the_species_have_five_units_of_concentration(self):
+        system, _, _ = self.reduction()
+        dimensions = system.dimensions_of()
+        units = {str(species): dimensions[species] for species in system.dependents}
+        self.assertEqual(5, len(set(units.values())))
+        self.assertEqual(units['Cyclin'], units['MPF'])
+        self.assertEqual(units['MPF'], units['preMPF'])
+        four = {units[name] for name in ('Cdc25P', 'Wee1P', 'IEP', 'APC')}
+        self.assertEqual(4, len(four))
+        self.assertNotIn(units['MPF'], four)
+
+    def test_the_phosphatase_appears_only_times_one_of_four_rate_constants(self):
+        # So scaling it up and those four down by the same factor is a symmetry:
+        # substitute, and every equation is unchanged.
+        system, translator, _ = self.reduction()
+        PPase = sympy.Symbol('PPase')
+        partners = sympy.symbols('k_b k_d k_f k_h')
+        scale = sympy.Symbol('lambda_', positive=True)
+        moved = {PPase: scale * PPase}
+        moved.update({k: k / scale for k in partners})
+        touched = 0
+        for rate in system.derivatives:
+            if rate is None:
+                continue
+            self.assertEqual(0, sympy.simplify(rate.subs(moved, simultaneous=True) - rate))
+            touched += rate.has(PPase)
+        self.assertEqual(4, touched)
+        # And it is among the symmetries the library finds: this direction is in the
+        # row space of the scaling matrix.
+        direction = sympy.Matrix([[1 if s == PPase else -1 if s in partners else 0
+                                   for s in system.symbols]])
+        A = translator.scaling_matrix
+        self.assertEqual(A.rank(), sympy.Matrix.vstack(A, direction).rank())
+
+    def test_the_seven_parameters_at_the_front_are_the_ones_set_to_one(self):
+        system, translator, _ = self.reduction()
+        substitutions = translator.translate_parameter_substitutions(system)
+        set_to_one = {str(symbol) for symbol, image in substitutions.items() if image == 1}
+        self.assertEqual(set(self.USED_AS_UNITS), set_to_one)
+
+    def test_each_species_is_measured_in_its_total(self):
+        _, _, reduced = self.reduction()
+        images = set(reduced.named_symbols[symbol] for symbol in reduced.dependents)
+        expected = {sympy.Symbol(species) / sympy.Symbol(total)
+                    for species, total in self.TOTAL_OF.items()}
+        self.assertEqual(expected, images)
+
+    def test_time_is_measured_against_the_degradation_of_cyclin_by_all_the_apc(self):
+        _, _, reduced = self.reduction()
+        t, V, total = sympy.symbols('t V_2primeprime totalAPC')
+        self.assertEqual(V * total * t, reduced.named_symbols[reduced.independent_variable])
+
+    def test_the_michaelis_constants_become_fractions_of_the_totals(self):
+        _, _, reduced = self.reduction()
+        images = set(reduced.named_symbols.values())
+        for constants, total in (('ab', 'totalCdc25'), ('cd', 'totalAPC'),
+                                 ('ef', 'totalWee1'), ('gh', 'totalIE')):
+            for letter in constants:
+                with self.subTest(constant='K_' + letter):
+                    self.assertIn(sympy.Symbol('K_' + letter) / sympy.Symbol(total), images)
+
+    def test_the_reduced_cyclin_equation_is_the_original_in_fractions(self):
+        # Synthesis, less degradation at a rate between V_2'/V_2'' and 1 according to the
+        # fraction of APC that is active, less binding to the Cdk that is free.
+        _, _, reduced = self.reduction()
+        denotes = {image: symbol for symbol, image in reduced.named_symbols.items()}
+
+        def reduced_symbol(text):
+            return denotes[sympy.sympify(text)]
+
+        cyclin, mpf, pre, apc = (reduced_symbol(species + '/' + self.TOTAL_OF[species])
+                                 for species in ('Cyclin', 'MPF', 'preMPF', 'APC'))
+        synthesis = reduced_symbol('k_1/(V_2primeprime*totalAPC*totalCdk)')
+        binding = reduced_symbol('k_3*totalCdk/(V_2primeprime*totalAPC)')
+        ratio = reduced_symbol('V_2prime/V_2primeprime')
+        expected = (synthesis - (ratio * (1 - apc) + apc) * cyclin
+                    - binding * cyclin * (1 - mpf - pre))
+        self.assertEqual(0, sympy.expand(reduced.derivative_dict[cyclin] - expected))
+
+    def test_the_default_order_removes_as_many_parameters_with_other_units(self):
+        from desr import ODETranslator
+        from oracles import false_equations
+        _, translator, _ = self.reduction()
+        default = ODESystem.from_tex(self.TEX, sub_defns=True)
+        other = ODETranslator.from_ode_system(default)
+        reduced = other.translate(default)
+        self.assertEqual(7, other.num_scaling_symmetries)
+        self.assertEqual(23, len(reduced.parameters))
+        self.assertEqual([], false_equations(default, reduced))
+        self.assertNotEqual(set(other.auxiliary_monomials()),
+                            set(translator.auxiliary_monomials()))
+        # The four species with a unit of their own are measured in Michaelis constants.
+        images = set(map(str, reduced.named_symbols.values()))
+        for expected in ('APC/K_c', 'Cdc25P/K_a', 'IEP/K_g', 'Wee1P/K_e'):
+            with self.subTest(monomial=expected):
+                self.assertIn(expected, images)
 
 
 class TestMultiLine(TestCase):

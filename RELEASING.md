@@ -7,7 +7,7 @@ The steps for cutting a release, in order. Nothing here happens on a merge: a re
 1. **The version.** It is written in one place, `__version__` in `desr/__init__.py`. `setup.py` and `docs/source/conf.py` read it from there.
 2. **The changelog.** `CHANGELOG.md` has a section for the version. Its last paragraph gives test counts; update them to what `main` runs now. The section is what goes into the GitHub release.
 3. **The milestone.** No open issues on the milestone for this version.
-4. **CI is green on `main`** for the commit to be tagged. The `tests` workflow runs the unit tests on Python 3.10 to 3.14, the module doctests, a bare install without the optional dependencies, the Sphinx doctests, the HTML build with warnings as errors, the example scripts, and coverage.
+4. **CI is green on `main`** for the commit to be tagged. The `tests` workflow runs the unit tests on Python 3.10 to 3.14, the module doctests, a bare install without the optional dependencies, the Sphinx doctests, the HTML build with warnings as errors, and coverage.
 
 To run the same checks locally:
 
@@ -16,7 +16,6 @@ python -m pytest tests/
 python -m pytest --doctest-modules desr/
 python -m sphinx -b doctest docs/source docs/build/doctest
 python -m sphinx -b html -W docs/source docs/build/html
-python .github/scripts/run_examples.py
 ```
 
 ## 2. Tag and release on GitHub

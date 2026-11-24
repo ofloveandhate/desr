@@ -1,0 +1,261 @@
+'''
+Six reaction networks from the literature on signalling cascades, as systems.
+
+Five are motifs of Feliu & Wiuf, "Enzyme sharing as a cause of multistationarity in
+signaling systems", arXiv:1101.5799v2; each builder says which, and where its equations
+are in that version.  The two-step phosphorelay is not in that paper.
+
+Each is written out by hand as mass-action equations, with the intermediate species'
+equations fixed by conservation, and each builder asserts the conservation law it was
+written to satisfy.  They are the largest systems the tests use: the two-step
+phosphorelay has ten dependent variables and ten rate constants.
+
+`docs/source/examples/signalling_networks.rst` works the smallest in full and tabulates
+the rest; `test_example_networks.py` holds what that page says to all six.
+
+Not a test module itself.
+'''
+import sympy
+
+from desr import ODESystem
+
+
+def example_two_step_phosphorelay():
+    ''' Two-step Phosphorelay example.
+
+        Source unknown.  It is not in arXiv:1101.5799.  It was added to the library's
+        examples on 2017-01-18 with the description below and no reference, and no
+        paper, draft or dissertation connected with the library has been found to
+        contain it.  The description was pasted from some document, and the other
+        networks' descriptions, pasted from the same one, speak of species being
+        "highly diffusible", which may help identify it.
+
+        What can be checked is that it is self-consistent: `test_example_networks.py`
+        derives the mass-action equations of the reactions the description gives and
+        requires them to be these.
+
+        Let S be a signal that activates X 1 . The activated form of X 1 gives its phosphate group to X 2
+        to activate it. Both X 1 and X 2 have phosphatases, F 1 and F 2 , respectively. Y 1 , Y 2 and Y 3 are
+        intermediate species.
+    '''
+    variables = 'Xs1 X1 Xs2 X2 S0 F1 F2 Y1 Y2 Y3'
+    variables = sympy.symbols(variables)
+    Xs1, X1, Xs2, X2, S0, F1, F2, Y1, Y2, Y3 = variables
+
+    equations = [
+        'k2*Y1 + km3*Y2 - (k3*F1 + k5*X2)*Xs1',  # Xs1
+        'km1*Y1 + k4*Y2 + k5*Xs1*X2 - k1*X1*S0',  # X1
+        'km6*Y3 + k5*Xs1*X2 - k6*Xs2*F2',  # Xs2
+        'k7*Y3 - k5*Xs1*X2',  # X2
+        '(km1 + k2)*Y1 - k1*X1*S0',  # S
+        '(km3 + k4)*Y2 - k3*Xs1*F1',  # F1
+        '(km6 + k7)*Y3 - k6*Xs2*F2',  # F2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip(variables, equations))
+
+    deriv_dict[Y1] = - deriv_dict[S0]
+    deriv_dict[Y2] = - deriv_dict[F1]
+    deriv_dict[Y3] = - deriv_dict[F2]
+
+    # The term km6*Y3 in the equation for Xs2 was once written km5*Y3.  There is no
+    # reaction with a rate km5: Y3 forms from Xs2 and F2 at the rate k6 and comes apart
+    # again at the rate km6.  With km5 there the seven species below did not sum to a
+    # conserved total, and the two constants were set equal to make them.
+    eq_const = sum([deriv_dict[v] for v in [Xs1, X1, Xs2, X2, Y1, Y2, Y3]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+def example_one_site_modification():
+    ''' One-site modification example.  Motif (a) of arXiv:1101.5799v2, equations
+        (5)-(7).
+        Consider the substrate S0 , with kinase E and phosphatase F , and active form S1. X and Y are
+        the intermediate species. As before, all the species need to be highly diffusible in order to verify
+        the conservation laws.
+    '''
+    variables = 'S0 S1 Ev F X Y'
+    variables = sympy.symbols(variables)
+    S0, S1, Ev, F, X, Y = variables
+
+    equations = [
+        'k4*Y + km1*X - k1*S0*Ev',  # S0
+        'k2*X + km3*Y - k3*S1*F',  # S1
+        '(km1 + k2)*X - k1*S0*Ev',  # Ev
+        '(km3 + k4)*Y - k3*S1*F',  # F
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip([S0, S1, Ev, F], equations))
+    deriv_dict[X] = - deriv_dict[Ev]
+    deriv_dict[Y] = - deriv_dict[F]
+
+    eq_const = sum([deriv_dict[v] for v in [S0, S1, X, Y]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+def example_two_site_modification():
+    ''' Two-site modification example.  Motif (e) of arXiv:1101.5799v2, equations
+        (21)-(24).
+        Consider species S0, S1 and S2, with kinases E1 and E2, and phosphatases F1 and F2. X1, X2, Y1
+        and Y2 are intermediate species.
+    '''
+    variables = 'S0, S1, S2, Ev1, Ev2, F1, F2, X1, X2, Y1, Y2'
+    variables = sympy.symbols(variables)
+    S0, S1, S2, Ev1, Ev2, F1, F2, X1, X2, Y1, Y2 = variables
+
+    equations = [
+        'k4*Y1 + km1*X1 - k1*S0*Ev1',  # S0
+        'k2*X1 + km3*Y1 + km5*X2 + k8*Y2 - (k3*F1 + k5*Ev2)*S1',  # S1
+        'k6*X2 + km7*Y2 - k7*S2*F2',  # S2
+        '(km1 + k2)*X1 - k1*S0*Ev1',  # Ev1
+        '(km5 + k6)*X2 - k5*S1*Ev2',  # Ev2
+        '(km3 + k4)*Y1 - k3*S1*F1',  # F1
+        '(km7 + k8)*Y2 - k7*S2*F2',  # F2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip([S0, S1, S2, Ev1, Ev2, F1, F2], equations))
+    deriv_dict[X1] = - deriv_dict[Ev1]
+    deriv_dict[X2] = - deriv_dict[Ev2]
+    deriv_dict[Y1] = - deriv_dict[F1]
+    deriv_dict[Y2] = - deriv_dict[F2]
+
+    eq_const = sum([deriv_dict[v] for v in [S0, S1, S2, X1, X2, Y1, Y2]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+
+def example_two_site_modification_shared_enzymes():
+    ''' Two-site modification with one kinase and one phosphatase.  Motif (g) of
+        arXiv:1101.5799v2, equations (35)-(38): the kinase E catalyses phosphorylation
+        at both sites of S0 -> S1 -> S2, and the phosphatase F dephosphorylation at
+        both.  X1, X2, Y1 and Y2 are intermediate species.
+
+        The rate constants a, b, c of the paper are k, km and the next k here, in the
+        order X1, Y1, X2, Y2: a_1^E, b_1^E, c_1^E are k1, km1, k2; a_1^F, b_1^F, c_1^F
+        are k3, km3, k4; a_2^E, b_2^E, c_2^E are k5, km5, k6; a_2^F, b_2^F, c_2^F are
+        k7, km7, k8.
+    '''
+    variables = 'S0, S1, S2, Ev, F, X1, X2, Y1, Y2'
+    variables = sympy.symbols(variables)
+    S0, S1, S2, Ev, F, X1, X2, Y1, Y2 = variables
+
+    equations = [
+        'km1*X1 + k4*Y1 - k1*Ev*S0',  # S0
+        'k2*X1 + km5*X2 + km3*Y1 + k8*Y2 - (k3*F + k5*Ev)*S1',  # S1, (35)
+        'k6*X2 + km7*Y2 - k7*F*S2',  # S2, (36)
+        '(km1 + k2)*X1 + (km5 + k6)*X2 - (k1*S0 + k5*S1)*Ev',  # E
+        '(km3 + k4)*Y1 + (km7 + k8)*Y2 - (k3*S1 + k7*S2)*F',  # F
+        '-(km1 + k2)*X1 + k1*Ev*S0',  # X1, (37) with k = 1
+        '-(km5 + k6)*X2 + k5*Ev*S1',  # X2, (37) with k = 2
+        '-(km3 + k4)*Y1 + k3*F*S1',  # Y1, (38) with k = 1
+        '-(km7 + k8)*Y2 + k7*F*S2',  # Y2, (38) with k = 2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip(variables, equations))
+
+    # The conservation laws printed after (38): total kinase, total phosphatase and
+    # total substrate.
+    assert (deriv_dict[Ev] + deriv_dict[X1] + deriv_dict[X2]).expand() == 0
+    assert (deriv_dict[F] + deriv_dict[Y1] + deriv_dict[Y2]).expand() == 0
+    eq_const = sum([deriv_dict[v] for v in [S0, S1, S2, X1, X2, Y1, Y2]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+
+def example_two_substrate_modification():
+    ''' Modification of two substrates example.  Motif (h) of arXiv:1101.5799v2,
+        section B.3.
+        Consider the kinase E acting on the substrates S0 and P0 , with phosphatases F1 and F2 ,
+        respectively.
+        X1 , X2 , Y1 and Y2 are intermediate species. Once again, all the species are highly
+        diffusible.
+    '''
+    variables = 'S0, S1, F1, Ev, P0, P1, F2, X1, X2, Y1, Y2'
+    variables = sympy.symbols(variables)
+    S0, S1, F1, Ev, P0, P1, F2, X1, X2, Y1, Y2 = variables
+
+    equations = [
+        'km1*X1 + k4*Y1 - k1*S0*Ev',  # S0
+        'km3*Y1 + k2*X1 - k3*S1*F1',  # S1
+        '(km3 + k4)*Y1 - k3*S1*F1',  # F1
+        '(km1 + k2)*X1 + (km5 + k6)*X2 - (k1*S0 + k5*P0)*Ev',  # Ev
+        'km5*X2 + k8*Y2 - k5*P0*Ev',  # P0
+        'km7*Y2 + k6*X2 - k7*P1*F2',  # P1
+        '(km7 + k8)*Y2 - k7*P1*F2',  # F2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip([S0, S1, F1, Ev, P0, P1, F2], equations))
+    deriv_dict[Y1] = - deriv_dict[F1]
+    deriv_dict[Y2] = - deriv_dict[F2]
+    deriv_dict[X1] = - deriv_dict[Y1] - deriv_dict[S0] - deriv_dict[S1]
+    deriv_dict[X2] = - deriv_dict[Y2] - deriv_dict[P0] - deriv_dict[P1]
+
+    eq_const = sum([deriv_dict[v] for v in [Ev, X1, X2]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+def example_two_layer_cascade():
+    ''' Two layer cascade example.
+        Consider a substrate S0 with kinase E and phosphatase F1 , with active form S1 that acts as a
+        kinase on the substrate P0 , which has phosphatase F2 . All the species are highly diffusible.
+
+        Motif (j) of arXiv:1101.5799v2, equations (53)-(58).  (Equations (35)-(38)
+        of that version are Motif (g), a different network.)
+    '''
+    variables = 'S0, S1, P0, P1, Ev, F1, F2, X1, X2, Y1, Y2'
+    variables = sympy.symbols(variables)
+    S0, S1, P0, P1, Ev, F1, F2, X1, X2, Y1, Y2 = variables
+
+    equations = [
+        'km1*X1 + k4*Y1 - k1*S0*Ev',  # S0
+        'k2*X1 + (km5 + k6)*X2 + km3*Y1 - (k3*F1 + k5*P0)*S1',  # S1
+        'km5*X2 + k8*Y2 - k5*P0*S1',  # P0
+        'km7*Y2 + k6*X2 - k7*P1*F2',  # P1
+        '(km1 + k2)*X1 - k1*S0*Ev',  # Ev
+        '(km3 + k4)*Y1 - k3*S1*F1',  # F1
+        '(km7 + k8)*Y2 - k7*P1*F2',  # F2
+    ]
+
+    equations = map(sympy.sympify, equations)
+
+    deriv_dict = dict(zip([S0, S1, P0, P1, Ev, F1, F2], equations))
+    deriv_dict[X1] = - deriv_dict[Ev]
+    deriv_dict[Y1] = - deriv_dict[F1]
+    deriv_dict[Y2] = - deriv_dict[F2]
+    deriv_dict[X2] = - deriv_dict[Y2] - deriv_dict[P0] - deriv_dict[P1]
+
+    eq_const = sum([deriv_dict[v] for v in [S0, S1, X1, Y1, X2]])
+    assert eq_const.expand() == 0
+
+    system = ODESystem.from_dict(deriv_dict)
+    return system
+
+
+#: Every network, by name.
+NETWORKS = {
+    'two-step phosphorelay': example_two_step_phosphorelay,
+    'one-site modification': example_one_site_modification,
+    'two-site modification': example_two_site_modification,
+    'two-site modification, shared enzymes': example_two_site_modification_shared_enzymes,
+    'two-substrate modification': example_two_substrate_modification,
+    'two-layer cascade': example_two_layer_cascade,
+}
