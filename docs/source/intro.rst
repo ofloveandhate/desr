@@ -20,7 +20,19 @@ This package requires the Sympy package.
 Installing
 ----------
 
-To install, download the package and run:
+From PyPI:
+
+.. code-block:: shell
+
+    pip install desr
+
+The figures also need matplotlib, which desr does not install:
+
+.. code-block:: shell
+
+    pip install matplotlib
+
+From a clone of the repository:
 
 .. code-block:: shell
 
@@ -35,7 +47,7 @@ Doctests are included in most files. To run them, from top level run ``sphinx-bu
 Building the documentation
 ---------------------------
 
-- The documentation is hosted online at `readthedocs <https://desr.readthedocs.io/latest/>`_.
+- The documentation is hosted online at `readthedocs <https://desr.readthedocs.io>`_.
 - `Sphinx <http://www.sphinx-doc.org/en/stable/>`_ - Used to generate the docs.
 
 

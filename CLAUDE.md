@@ -32,9 +32,11 @@ the wheel (`setup.py` packages `desr` only). `tests/test_edge_cases.py` holds ad
 systems; anything marked `unittest.expectedFailure` there is a known, unfixed bug and will
 turn into a failure when it is fixed.
 
-numpy and scipy are optional for *using* desr but required for *testing* it: the suite
-imports them unconditionally rather than skipping, since a suite that skips a module when
-its dependency is missing reports a success it has not earned.
+numpy, scipy and networkx are requirements of desr. matplotlib is not, since only the
+drawing needs it, but it is required for *testing*: the suite imports it unconditionally
+rather than skipping, since a suite that skips a module when its dependency is missing
+reports a success it has not earned. There are no extras: someone missing a part
+installs it and runs again, and nobody goes back to reinstall desr with an extra.
 
 ## Architecture
 
@@ -45,9 +47,9 @@ The public names are exported from the package, so a whole workflow is one impor
 `__all__`; submodules stay reachable as attributes (`desr.matrix_normal_forms`) for
 everything finer-grained. The numeric names (`NumericTranslator`,
 `InsufficientKnownValues`, `ConflictingKnownValues`) resolve through a module-level
-`__getattr__` rather than an eager import, because `desr.numerics` needs numpy and
-`import desr` must not. `desr.symbol_graph` and `desr.figures` resolve the same way,
-for networkx and matplotlib. `tests/test_namespace.py` pins both halves of that.
+`__getattr__` rather than an eager import, because `desr.numerics` loads numpy and
+`import desr` should not pay for it. `desr.symbol_graph` and `desr.figures` resolve the
+same way, for networkx and matplotlib. `tests/test_namespace.py` pins both halves of that.
 
 ### Core modules
 
@@ -74,9 +76,6 @@ Integer matrix algorithms: Hermite Normal Form (`hnf_row`, `hnf_col`, `normal_hn
 
 **`desr/chemical_reaction_network.py` — `ChemicalReactionNetwork`**
 Builds `ODESystem` objects from chemical reaction networks specified via `ChemicalSpecies`, `Complex`, and `Reaction` objects.
-
-**`desr/diophantine.py`**
-Third-party module (Thomas Close) for solving Diophantine equations; used internally by `matrix_normal_forms`.
 
 **`desr/sympy_helper.py`, `desr/tex_tools.py`**
 Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
@@ -106,7 +105,7 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   which is how a parameter-ordering bug survived until one of them tripped over it. In
   an `.rst` page, put a sentence between a `.. math::` block and a doctest block; an
   indented doctest directly after the math is taken as part of it and never runs.
-- The figures are library code, in `desr/figures/`, behind the `graphs` extra:
+- The figures are library code, in `desr/figures/`, and need matplotlib:
   `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
   draws it as a chain of systems. Neither computes anything — every matrix, monomial,
   dimension and substitution on either page comes from a getter, so a figure drawn for a
