@@ -47,7 +47,7 @@ Doctests are included in most files. To run them, from top level run ``sphinx-bu
 Building the documentation
 ---------------------------
 
-- The documentation is hosted online at `readthedocs <https://desr.readthedocs.io/latest/>`_.
+- The documentation is hosted online at `readthedocs <https://desr.readthedocs.io>`_.
 - `Sphinx <http://www.sphinx-doc.org/en/stable/>`_ - Used to generate the docs.
 
 

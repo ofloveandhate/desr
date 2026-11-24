@@ -33,7 +33,13 @@ A pushed tag is public, and for a final version it ends in a PyPI release and a 
 
 ## 3. Documentation
 
-Read the Docs builds from `.readthedocs.yaml`, and builds a version for a new tag on its own. After pushing the tag, check there that the version appears and that its build passed.
+Read the Docs builds from `.readthedocs.yaml`, and only for released states. The project is set up so:
+
+- `stable` is the default version, the one https://desr.readthedocs.io opens. Read the Docs moves it to the highest final-version tag by itself.
+- `latest`, which would rebuild on every push to `main`, is not active. The docs of work in progress are built by CI instead, in the `docs` job, with warnings as errors.
+- Each release gets a version of its own, through an automation rule (Admin, Automation rules): on a new tag matching the custom pattern `^v\d+\.\d+\.\d+$`, activate the version. Development and pre-release tags (`v3.0.0.dev1`, `v3.0.0rc1`) do not match, so they get no docs version.
+
+After pushing the tag, check on Read the Docs that the release's version appears, that its build passed, and that `stable` now points at it.
 
 ## 4. Zenodo
 
