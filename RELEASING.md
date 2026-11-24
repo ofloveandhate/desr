@@ -18,9 +18,9 @@ python -m sphinx -b doctest docs/source docs/build/doctest
 python -m sphinx -b html -W docs/source docs/build/html
 ```
 
-## 2. Tag and release on GitHub
+## 2. Tag
 
-Tags are `v` followed by the version: `v3.0.0`.
+Tags are `v` followed by the version: `v3.0.0`. Pushing the tag starts the release: section 5 says what it does.
 
 ```bash
 git switch main
@@ -29,13 +29,7 @@ git tag -a v3.0.0 -m "desr 3.0.0"
 git push origin v3.0.0
 ```
 
-Then create the GitHub release from that tag. Title: `desr 3.0.0`. Body: the version's section of `CHANGELOG.md`.
-
-```bash
-gh release create v3.0.0 --title "desr 3.0.0" --notes-file <file holding the changelog section>
-```
-
-A pushed tag and a published release are public. Check the commit before pushing the tag.
+A pushed tag is public, and for a final version it ends in a PyPI release and a GitHub release that cannot be taken back. Check the commit before pushing the tag.
 
 ## 3. Documentation
 
@@ -63,7 +57,53 @@ Two flags are deliberately absent from `g2z-send`: `-s` would send to the sandbo
 
 ## 5. PyPI
 
-desr is not on PyPI; see issue #35. There is no publishing step.
+**A pushed tag publishes.** `.github/workflows/publish.yml` runs every check in `tests.yml`, builds both distributions, checks them with `twine`, checks that the tag is `v` followed by exactly the version in `desr/__init__.py`, and uploads:
+
+| version | example tag | goes to |
+|---|---|---|
+| development or pre-release | `v3.0.0.dev1`, `v3.0.0rc1` | TestPyPI |
+| final | `v3.0.0` | PyPI, after the required reviewer approves the `pypi` environment; then a GitHub release |
+
+The GitHub release is titled `desr 3.0.0`, has the version's section of `CHANGELOG.md` as its notes, and has the wheel and the source distribution attached, the same files PyPI has. A tag whose final version has no section in `CHANGELOG.md` still reaches PyPI but gets no release, and the run fails at that step; make the release by hand with `gh release create`. A development version gets no GitHub release.
+
+A tag that disagrees with the version publishes nothing. **A version number on PyPI is single-use**: a release can be deleted, but the same version can never be uploaded again.
+
+### Trying a version on TestPyPI first
+
+On the branch being released:
+
+1. Set `__version__` to a development version, `3.0.0.dev1`, and commit.
+2. Tag and push the tag: `git tag -a v3.0.0.dev1 -m "desr 3.0.0.dev1"` and `git push origin v3.0.0.dev1`.
+3. When the workflow has run, read https://test.pypi.org/project/desr/ and install from there into a fresh environment. The dependencies are not on TestPyPI, so the real index is given as well:
+
+   ```bash
+   python -m venv try-desr
+   try-desr/bin/pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ desr==3.0.0.dev1
+   ```
+
+4. If something needs fixing, fix it and repeat with `3.0.0.dev2`.
+5. Set `__version__` back to `3.0.0`, merge, and tag `v3.0.0` on `main` as in section 2. That tag goes to PyPI.
+
+The development tags can be deleted afterwards, locally and on GitHub; what was uploaded to TestPyPI stays there.
+
+### One-time setup: trusted publishing
+
+No token is stored. PyPI and TestPyPI each accept uploads from this repository's `publish.yml`, in a named GitHub environment.
+
+1. On https://test.pypi.org, under Account settings, Publishing, add a pending publisher: project `desr`, owner `ofloveandhate`, repository `desr`, workflow `publish.yml`, environment `testpypi`.
+2. On https://pypi.org, the same with environment `pypi`.
+3. In the repository's Settings, Environments, create `testpypi` and `pypi`. Giving `pypi` a required reviewer makes every real upload wait for a click.
+
+### By hand
+
+If the workflow cannot be used, the same steps by hand, from the tagged commit:
+
+```bash
+pip install build twine
+python -m build --outdir dist-3.0.0
+python -m twine check dist-3.0.0/*
+python -m twine upload --repository testpypi dist-3.0.0/*   # or, for real: python -m twine upload dist-3.0.0/*
+```
 
 ## 6. Afterwards
 
