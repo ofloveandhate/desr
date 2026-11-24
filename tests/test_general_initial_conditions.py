@@ -209,6 +209,30 @@ class TestWhatDoesNotCarryOver(TestCase):
                 message = str(caught.exception)
                 self.assertIn('initial condition for c', message)
                 self.assertIn('involves t as well', message)
+                self.assertIn('isolate_clock', message)
+
+    def test_isolating_the_clock_is_the_fix_the_message_names(self):
+        system = michaelis_menten({'s': 's_0', 'c': 'c_0'})
+        translator = ODETranslator.from_ode_system(system)
+        c, e_0, k_1, t = sympy.symbols('c e_0 k_1 t')
+        translator.multiplier_add_columns(c / e_0, e_0 * k_1 * t, power=1)
+        translator.isolate_clock(system)
+        reduced = translator.translate_general(system)
+        self.assertEqual([], wrong_initial_values(system, reduced))
+        self.assertEqual(2, len(reduced.initial_conditions))
+
+    def test_ordering_the_initial_value_first_is_the_other_fix(self):
+        # dx/dt = x**2 with t ahead of x_0: the invariants are t x and t x_0.
+        system = ODESystem.from_equations(['dx/dt = x**2'])
+        system.update_initial_conditions({'x': 'x_0'})
+        system.reorder_variables(['t', 'x', 'x_0'])
+        with self.assertRaises(ValueError) as caught:
+            ODETranslator.from_ode_system(system).translate_general(system)
+        self.assertIn('put x_0 ahead of t', str(caught.exception))
+        system.reorder_variables(['x_0', 't', 'x'])
+        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        self.assertEqual([], wrong_initial_values(system, reduced))
+        self.assertEqual(1, len(reduced.initial_conditions))
 
     def test_the_same_invariant_is_no_obstacle_without_that_initial_condition(self):
         system = michaelis_menten({'s': 's_0'})
@@ -236,4 +260,10 @@ class TestWhatDoesNotCarryOver(TestCase):
                             for monomial in translator.auxiliary_monomials()))
         with self.assertRaises(ValueError) as caught:
             translator.translate_general(system)
-        self.assertIn('changes in time', str(caught.exception))
+        self.assertIn('uses z1 as a unit', str(caught.exception))
+        self.assertIn('Put a ahead of it', str(caught.exception))
+        # The fix the message names.
+        system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
+        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        self.assertEqual([], wrong_initial_values(system, reduced))
+        self.assertEqual(2, len(reduced.initial_conditions))

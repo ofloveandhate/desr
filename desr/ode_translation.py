@@ -3115,6 +3115,9 @@ class ODETranslator(object):
         def listed(symbols):
             return ', '.join(sorted(map(str, symbols)))
 
+        def initial_values_of(variables):
+            return listed(given[variable] for variable in variables)
+
         new_initial_conditions = {}
         for name, monomial in zip(named, monomials):
             involved = monomial.free_symbols
@@ -3123,20 +3126,23 @@ class ODETranslator(object):
             if name in kept_auxiliaries:
                 if started:
                     raise ValueError(
-                        'The initial condition for {} does not carry over to this '
-                        'reduction: the auxiliary {} = {} changes in time, so the '
-                        'reduction measures the other variables against it.'.format(
-                            listed(started), name, monomial))
+                        'The initial condition for {} does not carry over: the '
+                        'auxiliary {} = {} uses {} as a unit.  Put {} ahead of it in '
+                        'the variable order (`reorder_variables`), so that the initial '
+                        'value is the unit.'.format(
+                            listed(started), name, monomial, listed(started),
+                            initial_values_of(started)))
                 continue
             if clock in involved:
                 if started:
                     raise ValueError(
-                        'The initial condition for {} does not carry over to this '
-                        'reduction: the invariant {} = {} involves {} as well, so its '
-                        'value at {} = 0 does not depend on the initial condition.  '
-                        'Another choice of invariants may separate them; see '
-                        '`multiplier_add_columns` and `isolate_clock`.'.format(
-                            listed(started), name, monomial, clock, clock))
+                        'The initial condition for {} does not carry over: the '
+                        'invariant {} = {} involves {} as well, so its value at {} = 0 '
+                        'does not depend on the initial condition.  Call '
+                        '`isolate_clock()`, or put {} ahead of {} in the variable '
+                        'order (`reorder_variables`).'.format(
+                            listed(started), name, monomial, clock, clock,
+                            initial_values_of(started), clock))
                 if not moving:
                     if monomial.as_powers_dict()[clock] < 0:
                         raise ValueError(
@@ -3160,7 +3166,8 @@ class ODETranslator(object):
             if at_zero:
                 raise ValueError(
                     'The invariant {} = {} divides by {}, whose initial value is 0, so '
-                    'it has no initial value.'.format(name, monomial, listed(at_zero)))
+                    'it has no initial value.  Choose invariants that do not, with '
+                    '`multiplier_add_columns`.'.format(name, monomial, listed(at_zero)))
             value = monomial.subs(given, simultaneous=True).subs(to_sub, simultaneous=True)
             if value.free_symbols - parameter_names:
                 raise ValueError(
