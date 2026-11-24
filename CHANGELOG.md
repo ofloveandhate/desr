@@ -121,7 +121,14 @@ each can be turned off.
   - `desr.figures.flowchart_figure` draws a reduction as nine numbered boxes
     of matrices, page-text wide and as tall as it needs.
   - `desr.figures.symbol_map_figure` draws it as a chain of five systems and
-    the four maps between them.
+    the four maps between them.  Its width is measured from what is in it,
+    so a small system gives a figure about one page-text wide; `size` sets
+    it by hand.
+  - A dependent variable with an initial condition is shown where it starts.
+    The symbol graph's nodes carry `initial_value`, and the parameter that is
+    an initial value carries `initial_value_of` and is drawn as
+    `s_0 = s(0)`.  A reduction that refuses the initial conditions still has
+    a graph, which records the reason as `initial_conditions_refused`.
   - `desr.symbol_graph` is the exponent graph both are built on, with
     `ODETranslator.symbol_graph` and `draw_symbol_graph` as the way in.
   - Neither figure computes anything.  Every matrix, monomial, dimension and
