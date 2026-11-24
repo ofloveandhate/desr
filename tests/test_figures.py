@@ -107,12 +107,9 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
         self.assertEqual(6.5, round(flowchart_figure(system).get_size_inches()[0], 2))
         self.assertIsNotNone(symbol_map_figure(system))
 
-    def test_an_initial_condition_is_refused_by_the_symbol_map(self):
-        # The general scheme does not take initial conditions, and the symbol map
-        # needs it.  The flowchart draws such a system, since it never translates.
+    def test_both_figures_draw_a_system_with_an_initial_condition(self):
         system = self.with_initial()
-        with self.assertRaises(NotImplementedError):
-            symbol_map_figure(system)
+        self.assertIsNotNone(symbol_map_figure(system))
         self.assertIsNotNone(flowchart_figure(system))
 
     def test_the_boxes_are_numbered_in_flow_order(self):

@@ -22,6 +22,12 @@ each can be turned off.
     constant, so it can be set to 1.  That is a choice of units, not an
     assumption, and the choice is recorded in the caller's own symbols on
     the reduced system's `normalisations`.
+  - `translate_general` takes a system with initial conditions.  Each reduced
+    dependent starts at the value of its monomial at the start, stated in the
+    reduced parameters.  A case with no such value is refused by name: the
+    independent variable in an invariant with a dependent that has an initial
+    condition, a dependent used as a unit, an invariant mixing dependents with
+    and without initial conditions, or a division by a zero initial value.
   - A reduced system reports as parameters only the ones its equations use.
   - The reduced clock is called `t` only when it denotes `t`.  Where an
     invariant has been identified with it, the clock is a rescaled time and

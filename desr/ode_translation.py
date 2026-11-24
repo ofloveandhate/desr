@@ -34,7 +34,7 @@ class ReductionScheme(str, enum.Enum):
     '''
 
     #: The parameter scheme: the reduced system has :math:`n - r` variables and no
-    #: auxiliaries, and it is the only scheme that handles initial conditions.
+    #: auxiliaries.  Every initial condition carries over to it.
     PARAMETER = 'parameter'
 
     #: The dependent-variable scheme, where the scaling action ignores the independent
@@ -2811,6 +2811,23 @@ class ODETranslator(object):
         a system such as Hubert & Labahn 6.6 whose clock invariants all involve a dependent
         variable -- keeps :math:`t`, because there :math:`t` still means :math:`t`.
 
+        **Initial conditions.**  A reduced symbol denotes a monomial in the original
+        symbols, and its initial value is that monomial at the start: the independent
+        variable at 0 and each dependent variable at its initial value.  That is an
+        invariant monomial in the parameters, so it is stated in the reduced parameters.
+        An invariant that is the independent variable times parameters starts at 0.
+
+        Some reduced symbols have no such value, and a system whose initial conditions
+        would have to pass through one is refused with a :class:`ValueError` that names
+        it: an invariant that involves the independent variable together with a dependent
+        variable that has an initial condition; an auxiliary that changes in time, which
+        is a dependent variable used as a unit; an invariant that involves one dependent
+        variable with an initial condition and another without; and an invariant that
+        divides by a dependent variable whose initial value is 0.  Which invariants a
+        reduction has depends on the variable order and on
+        :meth:`multiplier_add_columns`, so another choice may carry over where one does
+        not.
+
         Args:
             system (ODESystem): System to reduce.
             include_aux_vars (bool): Whether to keep the auxiliary variables.  With
@@ -2884,6 +2901,16 @@ class ODETranslator(object):
         (x0, x1, x2)
         >>> reduced.scheme, reduced.num_scaling_symmetries
         (ReductionScheme.GENERAL, 3)
+
+        With initial conditions, each reduced dependent starts at the value of its
+        monomial at the start.  Here ``y1`` is ``z/z_0``:
+
+        >>> decay = ODESystem.from_equations(['dz/dt = -k*z'])
+        >>> decay.update_initial_conditions({'z': 'z_0'})
+        >>> ODETranslator.from_ode_system(decay).translate_general(decay)
+        dtau/dtau = 1
+        dy1/dtau = -y1
+        y1(0) = 1
         '''
         # A translator built from a bare matrix is handed the system to
         # reduce; bind it, so the reporting methods below have one.
@@ -2891,8 +2918,6 @@ class ODETranslator(object):
         system = self._system_or(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
-        if system.initial_conditions:
-            raise NotImplementedError('General translation not yet implemented for systems with initial conditions')
         # y = sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         #print 'y = ', sympy.Matrix(scale_action(system.symbols, self.herm_mult_n))
         scheme = self._resolved_naming_scheme(GENERAL_SCHEME_NAMES)
@@ -3006,6 +3031,9 @@ class ODETranslator(object):
                         name,
                         ', '.join(sorted(map(str, rate.free_symbols & normalised)))))
 
+        new_initial_conditions = self._general_initial_conditions(
+            system, named, monomials, kept_auxiliaries, to_sub)
+
         new_variables = [system.independent_variable] + named
         assert len(new_variables) == len(rates) + 1 == self.expected_variable_count(
             system, ReductionScheme.GENERAL, include_aux_vars,
@@ -3031,12 +3059,116 @@ class ODETranslator(object):
                             forward_monomials=aux_monomials + inv_monomials)
         reduced = _rename_indep_var(reduced, self._clock_name_for(
             system, identified_columns, clock_auxiliary_columns))
+        if new_initial_conditions:
+            reduced.update_initial_conditions(new_initial_conditions)
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
                                               ReductionScheme.GENERAL,
                                               include_aux_vars))
         self._refuse_name_clashes(system, reduced)
         return reduced
+
+    def _general_initial_conditions(self, system, named, monomials, kept_auxiliaries,
+                                    to_sub):
+        '''
+        The initial conditions of a general-scheme reduction.
+
+        A reduced symbol denotes a monomial in the original symbols.  Its initial value is
+        that monomial at the start: the independent variable at 0 and each dependent
+        variable at its initial value.  That is a monomial in the original parameters, and
+        it is an invariant, so it can be written in the reduced parameters.
+
+        Four kinds of reduced symbol have no initial value of that form, and a system
+        whose initial conditions would have to pass through one is refused:
+
+        * an invariant that involves the independent variable together with a dependent
+          variable.  At the start it is 0 or undefined whatever the data, so the initial
+          condition would be lost;
+        * an auxiliary that changes, which is a dependent variable or the independent
+          variable used as a unit;
+        * an invariant that involves a dependent variable with an initial condition and
+          another without;
+        * an invariant that divides by a dependent variable whose initial value is 0.
+
+        Args:
+            system (ODESystem): The system being reduced.
+            named (list): The reduced symbols, other than the clock.
+            monomials (list): What each denotes, in the original symbols.
+            kept_auxiliaries (list): Those of ``named`` that are auxiliaries.
+            to_sub (dict): Each original symbol as a monomial in the invariants' names,
+                which is how an invariant is rewritten.
+
+        Returns:
+            dict: ``{reduced symbol: its initial value}``, in the reduced parameters.
+
+        Raises:
+            ValueError: If an initial condition does not carry over.
+        '''
+        given = system.initial_conditions
+        if not given:
+            return {}
+        clock = system.independent_variable
+        dependents = set(system.dependents)
+        parameter_names = {name for name, monomial in zip(named, monomials)
+                           if not monomial.free_symbols & (dependents | {clock})}
+
+        def listed(symbols):
+            return ', '.join(sorted(map(str, symbols)))
+
+        new_initial_conditions = {}
+        for name, monomial in zip(named, monomials):
+            involved = monomial.free_symbols
+            moving = involved & dependents
+            started = moving & set(given)
+            if name in kept_auxiliaries:
+                if started:
+                    raise ValueError(
+                        'The initial condition for {} does not carry over to this '
+                        'reduction: the auxiliary {} = {} changes in time, so the '
+                        'reduction measures the other variables against it.'.format(
+                            listed(started), name, monomial))
+                continue
+            if clock in involved:
+                if started:
+                    raise ValueError(
+                        'The initial condition for {} does not carry over to this '
+                        'reduction: the invariant {} = {} involves {} as well, so its '
+                        'value at {} = 0 does not depend on the initial condition.  '
+                        'Another choice of invariants may separate them; see '
+                        '`multiplier_add_columns` and `isolate_clock`.'.format(
+                            listed(started), name, monomial, clock, clock))
+                if not moving:
+                    if monomial.as_powers_dict()[clock] < 0:
+                        raise ValueError(
+                            'The invariant {} = {} is not defined at {} = 0, where the '
+                            'initial conditions are given.'.format(name, monomial, clock))
+                    new_initial_conditions[name] = sympy.Integer(0)
+                continue
+            if not started:
+                continue
+            if started != moving:
+                raise ValueError(
+                    'The invariant {} = {} involves {}, which has an initial condition, '
+                    'and {}, which does not.  Give all of them initial conditions, or '
+                    'none.'.format(name, monomial, listed(started),
+                                   listed(moving - started)))
+            powers = monomial.as_powers_dict()
+            at_zero = sorted((dependent for dependent in started
+                              if powers[dependent] < 0
+                              and system.parameter_values.get(given[dependent]) == 0),
+                             key=str)
+            if at_zero:
+                raise ValueError(
+                    'The invariant {} = {} divides by {}, whose initial value is 0, so '
+                    'it has no initial value.'.format(name, monomial, listed(at_zero)))
+            value = monomial.subs(given, simultaneous=True).subs(to_sub, simultaneous=True)
+            if value.free_symbols - parameter_names:
+                raise ValueError(
+                    'The initial value of {} = {} is {}, which this choice of invariants '
+                    'does not express in the reduced parameters alone.'.format(
+                        name, monomial, value))
+            new_initial_conditions[name] = value
+        return new_initial_conditions
 
     def _is_translate_parameter_compatible(self, system):
         '''
