@@ -1,12 +1,18 @@
 """
 A two-compartment model of a vaccine injection.
 
-The equations are Example 13.6 of J. DiStefano, Dynamic Systems Biology Modeling and
-Simulation, Elsevier (2015), a model for the study of R. P. Weissburg et al.,
-Characterization of the MN gp120 HIV-1 vaccine: antigen binding to alum,
-Pharmaceutical Research 12 (1995) 1439-1446, https://doi.org/10.1023/A:1016266916893.
-That paper gives its model as a diagram, its Scheme 1, and the equations here have not
-been compared with the book.
+The model is that of the second experiment in Example 13.6 of J. DiStefano, Dynamic
+Systems Biology Modeling and Simulation, Elsevier (2015), an example the book bases on
+R. P. Weissburg et al., Characterization of the MN gp120 HIV-1 vaccine: antigen binding
+to alum, Pharmaceutical Research 12 (1995) 1439-1446,
+https://doi.org/10.1023/A:1016266916893.  The protein is given into muscle, compartment
+2, and is taken up in one direction into plasma, compartment 1.  The book's rate
+constants k_12 (uptake into plasma), k_01 (elimination from plasma) and k_02 (loss in
+muscle) are a_12, a_1 and a_2 here.
+
+The equations were written from the book's description of the experiment; its figure of
+the model, Fig. 13.7, was not consulted.  Weissburg et al. give their model as a
+diagram, their Scheme 1, and do not write out equations.
 
 Three versions are reduced: as written (A), with the total loss rate a_2 + a_12
 replaced by b_22 (B), and with b_22 and the relation that defines it (C).
