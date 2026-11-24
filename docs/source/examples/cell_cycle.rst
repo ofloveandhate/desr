@@ -4,12 +4,10 @@ A cell cycle control network
 ==============================
 
 The model of the cell cycle machinery regulating mitosis in frog egg extracts that
-Sible and Tyson use as their example in *Mathematical modeling as a tool for
-investigating cell cycle control networks*, Methods 41 (2007) 238–247,
-`doi:10.1016/j.ymeth.2006.08.003 <https://doi.org/10.1016/j.ymeth.2006.08.003>`_.  The
-equations are their Figure 2.  With seven species and thirty parameters it is the
-largest model among the examples; it is read directly from its LaTeX, and its
-reduction removes seven parameters.
+Sible and Tyson use as their example in :cite:`sible-tyson`.  The equations are their
+Figure 2.  With seven species and thirty parameters it is the largest model among the
+examples; it is read directly from its LaTeX, and its reduction removes seven
+parameters.
 
 The model
 -----------
