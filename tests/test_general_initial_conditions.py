@@ -267,3 +267,71 @@ class TestWhatDoesNotCarryOver(TestCase):
         reduced = ODETranslator.from_ode_system(system).translate_general(system)
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
+
+
+class TestTheDependentVariableScheme(TestCase):
+    '''
+    The scaling does not act on the independent variable.  The reduced symbols are
+    monomials in the other symbols, so they start by the same rule.
+    '''
+
+    EQUATIONS = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
+
+    def system(self, initial_conditions, order=None):
+        system = ODESystem.from_equations(self.EQUATIONS)
+        system.update_initial_conditions(initial_conditions)
+        if order:
+            system.reorder_variables(order)
+        return system
+
+    def test_every_stated_initial_value_is_the_one_the_definition_gives(self):
+        for initial_conditions in ({'z1': 'a', 'z2': 'b'}, {'z1': 'a'}, {'z2': 'b'}):
+            for options in ({}, {'normalise_parameters': False}):
+                with self.subTest(initial_conditions=initial_conditions, **options):
+                    system = self.system(initial_conditions)
+                    reduced = ODETranslator.from_ode_system(system).translate_dep_var(
+                        system, **options)
+                    self.assertEqual([], wrong_initial_values(system, reduced))
+                    reached = set()
+                    for symbol in reduced.initial_conditions:
+                        reached |= reduced.named_symbols[symbol].free_symbols
+                    self.assertLessEqual(set(system.initial_conditions), reached)
+
+    def test_it_states_what_the_general_scheme_states(self):
+        system = self.system({'z1': 'a', 'z2': 'b'})
+        translator = ODETranslator.from_ode_system(system)
+
+        def in_original_symbols(reduced):
+            denotes = reduced.named_symbols
+            return {denotes[symbol]: sympy.sympify(value).subs(denotes)
+                    for symbol, value in reduced.initial_conditions.items()}
+
+        dep_var = translator.translate_dep_var(system)
+        self.assertEqual(2, len(dep_var.initial_conditions))
+        self.assertEqual(in_original_symbols(translator.translate_general(system)),
+                         in_original_symbols(dep_var))
+
+    def test_an_initial_value_takes_the_dependents_place_as_the_unit(self):
+        # Without initial conditions the one symmetry scales z1 against z2 and there is
+        # no parameter, so this is the dependent-variable scheme.  An initial value is a
+        # parameter that scales as its dependent does, so with one given the default
+        # order makes it the unit and `translate` takes the parameter scheme.
+        from desr import ReductionScheme
+        bare = ODESystem.from_equations(self.EQUATIONS)
+        self.assertEqual(ReductionScheme.DEP_VAR,
+                         ODETranslator.from_ode_system(bare).scheme())
+        system = self.system({'z1': 'a', 'z2': 'b'})
+        translator = ODETranslator.from_ode_system(system)
+        self.assertEqual(ReductionScheme.PARAMETER, translator.scheme())
+        reduced = translator.translate(system)
+        self.assertEqual([], wrong_initial_values(system, reduced))
+        self.assertEqual(2, len(reduced.initial_conditions))
+
+    def test_a_dependent_used_as_a_unit_is_refused_and_the_fix_works(self):
+        system = self.system({'z1': 'a', 'z2': 'b'}, order=['t', 'z1', 'z2', 'a', 'b'])
+        with self.assertRaises(ValueError) as caught:
+            ODETranslator.from_ode_system(system).translate_dep_var(system)
+        self.assertIn('uses z1 as a unit', str(caught.exception))
+        system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
+        reduced = ODETranslator.from_ode_system(system).translate_dep_var(system)
+        self.assertEqual([], wrong_initial_values(system, reduced))

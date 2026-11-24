@@ -22,7 +22,8 @@ each can be turned off.
     constant, so it can be set to 1.  That is a choice of units, not an
     assumption, and the choice is recorded in the caller's own symbols on
     the reduced system's `normalisations`.
-  - `translate_general` takes a system with initial conditions.  Each reduced
+  - `translate_general` and `translate_dep_var` take a system with initial
+    conditions.  Each reduced
     dependent starts at the value of its monomial at the start, stated in the
     reduced parameters.  A case with no such value is refused by name: the
     independent variable in an invariant with a dependent that has an initial
