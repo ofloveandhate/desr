@@ -1,0 +1,103 @@
+dt/dt = 1
+dAPC/dt = -APC*IEP*k_c/(-APC + K_c + totalAPC) - APC*PPase*k_d/(APC + K_d) + IEP*k_c*totalAPC/(-APC + K_c + totalAPC)
+dCdc25P/dt = -Cdc25P*MPF*k_a/(-Cdc25P + K_a + totalCdc25) - Cdc25P*PPase*k_b/(Cdc25P + K_b) + MPF*k_a*totalCdc25/(-Cdc25P + K_a + totalCdc25)
+dCyclin/dt = APC*Cyclin*V_2prime - APC*Cyclin*V_2primeprime + Cyclin*MPF*k_3 - Cyclin*V_2prime*totalAPC + Cyclin*k_3*preMPF - Cyclin*k_3*totalCdk + k_1
+dIEP/dt = -IEP*MPF*k_g/(-IEP + K_g + totalIE) - IEP*PPase*k_h/(IEP + K_h) + MPF*k_g*totalIE/(-IEP + K_g + totalIE)
+dMPF/dt = APC*MPF*V_2prime - APC*MPF*V_2primeprime - Cdc25P*V_25prime*preMPF + Cdc25P*V_25primeprime*preMPF - Cyclin*MPF*k_3 - Cyclin*k_3*preMPF + Cyclin*k_3*totalCdk - MPF*V_2prime*totalAPC - MPF*V_weeprime*Wee1P + MPF*V_weeprimeprime*Wee1P - MPF*V_weeprimeprime*totalWee1 + V_25prime*preMPF*totalCdc25
+dWee1P/dt = -MPF*Wee1P*k_e/(K_e - Wee1P + totalWee1) + MPF*k_e*totalWee1/(K_e - Wee1P + totalWee1) - PPase*Wee1P*k_f/(K_f + Wee1P)
+dpreMPF/dt = APC*V_2prime*preMPF - APC*V_2primeprime*preMPF + Cdc25P*V_25prime*preMPF - Cdc25P*V_25primeprime*preMPF + MPF*V_weeprime*Wee1P - MPF*V_weeprimeprime*Wee1P + MPF*V_weeprimeprime*totalWee1 - V_25prime*preMPF*totalCdc25 - V_2prime*preMPF*totalAPC
+parameters: K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, PPase, k_1, k_3, k_a, k_b, k_c, k_d, k_e, k_f, k_g, k_h, totalAPC, totalCdc25, totalIE, totalWee1, V_25prime, V_25primeprime, V_2prime, V_2primeprime, V_weeprime, V_weeprimeprime, totalCdk
+
+
+---------
+
+system in the chosen variable order:
+dt/dt = 1
+dCyclin/dt = APC*Cyclin*V_2prime - APC*Cyclin*V_2primeprime + Cyclin*MPF*k_3 - Cyclin*V_2prime*totalAPC + Cyclin*k_3*preMPF - Cyclin*k_3*totalCdk + k_1
+dMPF/dt = APC*MPF*V_2prime - APC*MPF*V_2primeprime - Cdc25P*V_25prime*preMPF + Cdc25P*V_25primeprime*preMPF - Cyclin*MPF*k_3 - Cyclin*k_3*preMPF + Cyclin*k_3*totalCdk - MPF*V_2prime*totalAPC - MPF*V_weeprime*Wee1P + MPF*V_weeprimeprime*Wee1P - MPF*V_weeprimeprime*totalWee1 + V_25prime*preMPF*totalCdc25
+dpreMPF/dt = APC*V_2prime*preMPF - APC*V_2primeprime*preMPF + Cdc25P*V_25prime*preMPF - Cdc25P*V_25primeprime*preMPF + MPF*V_weeprime*Wee1P - MPF*V_weeprimeprime*Wee1P + MPF*V_weeprimeprime*totalWee1 - V_25prime*preMPF*totalCdc25 - V_2prime*preMPF*totalAPC
+dCdc25P/dt = -Cdc25P*MPF*k_a/(-Cdc25P + K_a + totalCdc25) - Cdc25P*PPase*k_b/(Cdc25P + K_b) + MPF*k_a*totalCdc25/(-Cdc25P + K_a + totalCdc25)
+dWee1P/dt = -MPF*Wee1P*k_e/(K_e - Wee1P + totalWee1) + MPF*k_e*totalWee1/(K_e - Wee1P + totalWee1) - PPase*Wee1P*k_f/(K_f + Wee1P)
+dIEP/dt = -IEP*MPF*k_g/(-IEP + K_g + totalIE) - IEP*PPase*k_h/(IEP + K_h) + MPF*k_g*totalIE/(-IEP + K_g + totalIE)
+dAPC/dt = -APC*IEP*k_c/(-APC + K_c + totalAPC) - APC*PPase*k_d/(APC + K_d) + IEP*k_c*totalAPC/(-APC + K_c + totalAPC)
+parameters: PPase, K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, k_1, k_3, k_a, k_b, k_c, k_d, k_e, k_f, k_g, k_h, V_25prime, V_25primeprime, V_weeprime, V_weeprimeprime, V_2prime, V_2primeprime, totalCdc25, totalIE, totalAPC, totalCdk, totalWee1
+
+system.symbols=(PPase, K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, k_1, k_3, k_a, k_b, k_c, k_d, k_e, k_f, k_g, k_h, V_25prime, V_25primeprime, V_weeprime, V_weeprimeprime, V_2prime, V_2primeprime, totalCdc25, totalIE, totalAPC, totalCdk, totalWee1, t, Cyclin, MPF, preMPF, Cdc25P, Wee1P, IEP, APC)
+
+system.parameters=(PPase, K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, k_1, k_3, k_a, k_b, k_c, k_d, k_e, k_f, k_g, k_h, V_25prime, V_25primeprime, V_weeprime, V_weeprimeprime, V_2prime, V_2primeprime, totalCdc25, totalIE, totalAPC, totalCdk, totalWee1)
+30 parameters
+
+system.dependents=(Cyclin, MPF, preMPF, Cdc25P, Wee1P, IEP, APC)
+7 dependent variables
+
+Variable order:  (PPase, K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, k_1, k_3, k_a, k_b, k_c, k_d, k_e, k_f, k_g, k_h, V_25prime, V_25primeprime, V_weeprime, V_weeprimeprime, V_2prime, V_2primeprime, totalCdc25, totalIE, totalAPC, totalCdk, totalWee1, t, Cyclin, MPF, preMPF, Cdc25P, Wee1P, IEP, APC)
+
+Scaling matrix Matrix([
+[-1, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0,  0,  1,  0,  1,  0,  1,  0, 1,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+[-1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1,  0, -1,  0, -1,  0, -1, 0, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+[ 0, 0, 0, 0, 0, 0, 0, 0, 0,  1, -1, -1,  0,  0,  0, -1,  0, -1, 0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0],
+[ 0, 1, 1, 0, 0, 0, 0, 0, 0,  0,  0,  1,  1,  0,  0,  0,  0,  0, 0, -1, -1,  0,  0,  0,  0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+[ 0, 0, 0, 0, 0, 1, 1, 0, 0,  0,  0,  0,  0,  0,  0,  1,  1,  0, 0,  0,  0, -1, -1,  0,  0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+[ 1, 0, 0, 0, 0, 0, 0, 1, 1,  0,  0,  0, -1, -1, -1,  0, -1,  1, 0,  0,  0,  0,  0,  0,  0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+[ 0, 0, 0, 1, 1, 0, 0, 0, 0,  0,  0,  0,  0,  1,  1,  0,  0,  0, 0,  0,  0,  0,  0, -1, -1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+Scaling matrix size (7, 38)
+
+Hermite multiplier Matrix([
+[ 0,  1,  1, 0, 0, 0, 0,  0,  0,  0,  0,  0,  2,  1,  2,  0,  2,  0,  2,  1,  1,  1,  1,  1,  1,  0,  0,  0,  1,  0,  1,  1,  1,  1,  0,  0,  0,  0],
+[-1, -1, -1, 1, 0, 0, 0, -1,  0,  0,  0, -1, -2, -1, -1,  0, -1,  0, -1,  0,  0, -1, -1, -1, -1, -1,  0,  0, -1,  0, -1, -1, -1, -1, -1,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 1,  0, -1,  0,  0,  0,  0, -1, -1,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  0,  0, -1,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 1, 0, 0,  0,  0, -1,  0,  0,  0,  0,  0, -1, -1,  0,  0,  0,  0,  1,  1,  0,  0,  0,  0,  0,  0, -1,  0,  0,  0,  0,  0, -1,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 1,  0,  0, 0, 0, 1, 0,  0,  0,  0, -1,  0,  0,  1,  0,  0,  0, -1, -1,  0,  0,  0,  0,  0,  0,  0, -1,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0, -1,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0, -1, -1, -1,  0, -1,  0, -1, -1, -1, -1, -1, -1, -1,  0,  0,  0, -1,  0,  0, -1, -1, -1,  0,  0,  0,  0],
+[ 0, -1, -1, 0, 0, 0, 0,  0,  0,  0,  0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 1,  1,  1, 0, 0, 0, 0,  0,  0,  0,  0,  0,  2,  1,  1,  0,  1,  0,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  1,  0,  1,  1,  1,  1,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0],
+[ 0,  0,  0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1]])
+
+Invariants:  Matrix([[K_b/K_a, K_d/K_c, K_f/K_e, K_h/K_g, k_a/(K_a*k_3), PPase**2*k_b**2/(K_a**2*k_1*k_3), K_g*PPase*k_b*k_c/(K_a*K_c*k_1*k_3), PPase**2*k_b*k_d/(K_a*K_c*k_1*k_3), k_e/(K_e*k_3), PPase**2*k_b*k_f/(K_a*K_e*k_1*k_3), k_g/(K_g*k_3), PPase**2*k_b*k_h/(K_a*K_g*k_1*k_3), PPase*V_25prime*k_b/(k_1*k_3), PPase*V_25primeprime*k_b/(k_1*k_3), K_e*PPase*V_weeprime*k_b/(K_a*k_1*k_3), K_e*PPase*V_weeprimeprime*k_b/(K_a*k_1*k_3), K_c*PPase*V_2prime*k_b/(K_a*k_1*k_3), K_c*PPase*V_2primeprime*k_b/(K_a*k_1*k_3), totalCdc25/K_a, totalIE/K_g, totalAPC/K_c, PPase*k_b*totalCdk/(K_a*k_1), totalWee1/K_e, PPase*k_b*t/K_a, Cyclin*PPase*k_b/(K_a*k_1), MPF*PPase*k_b/(K_a*k_1), PPase*k_b*preMPF/(K_a*k_1), Cdc25P/K_a, Wee1P/K_e, IEP/K_g, APC/K_c]])
+(1, 31) invariants
+
+substitutions: {PPase: kappa6, K_a: 1, K_b: kappa1, K_c: 1, K_d: kappa2, K_e: 1, K_f: kappa3, K_g: 1, K_h: kappa4, k_1: 1, k_3: kappa6, k_a: kappa5*kappa6, k_b: 1, k_c: kappa7, k_d: kappa8/kappa6, k_e: kappa6*kappa9, k_f: kappa10/kappa6, k_g: kappa11*kappa6, k_h: kappa12/kappa6, V_25prime: kappa13, V_25primeprime: kappa14, V_weeprime: kappa15, V_weeprimeprime: kappa16, V_2prime: kappa17, V_2primeprime: kappa18, totalCdc25: kappa19, totalIE: kappa20, totalAPC: kappa21, totalCdk: kappa22/kappa6, totalWee1: kappa23, t: tau/kappa6, Cyclin: nu1/kappa6, MPF: nu2/kappa6, preMPF: nu3/kappa6, Cdc25P: nu4, Wee1P: nu5, IEP: nu6, APC: nu7}
+
+Reduced system:
+\frac{d\tau}{d\tau} &= 1 \\
+\frac{d\nu_{1}}{d\tau} &= 1 + \frac{\nu_{1} \left(\kappa_{17} \left(- \kappa_{21} + \nu_{7}\right) - \kappa_{18} \nu_{7} - \kappa_{22} + \nu_{2} + \nu_{3}\right)}{\kappa_{6}} \\
+\frac{d\nu_{2}}{d\tau} &= \frac{\nu_{1} \left(\kappa_{22} - \nu_{2} - \nu_{3}\right) + \nu_{2} \left(- \kappa_{15} \nu_{5} + \kappa_{16} \left(- \kappa_{23} + \nu_{5}\right) + \kappa_{17} \left(- \kappa_{21} + \nu_{7}\right) - \kappa_{18} \nu_{7}\right) + \nu_{3} \left(\kappa_{13} \left(\kappa_{19} - \nu_{4}\right) + \kappa_{14} \nu_{4}\right)}{\kappa_{6}} \\
+\frac{d\nu_{3}}{d\tau} &= \frac{\nu_{2} \left(\kappa_{15} \nu_{5} + \kappa_{16} \left(\kappa_{23} - \nu_{5}\right)\right) + \nu_{3} \left(\kappa_{13} \left(- \kappa_{19} + \nu_{4}\right) - \kappa_{14} \nu_{4} + \kappa_{17} \left(- \kappa_{21} + \nu_{7}\right) - \kappa_{18} \nu_{7}\right)}{\kappa_{6}} \\
+\frac{d\nu_{4}}{d\tau} &= \frac{\kappa_{5} \nu_{2} \left(\frac{\kappa_{19}}{\kappa_{19} - \nu_{4} + 1} - \frac{\nu_{4}}{\kappa_{19} - \nu_{4} + 1}\right)}{\kappa_{6}} - \frac{\nu_{4}}{\kappa_{1} + \nu_{4}} \\
+\frac{d\nu_{5}}{d\tau} &= \frac{- \frac{\kappa_{10} \nu_{5}}{\kappa_{3} + \nu_{5}} + \kappa_{9} \nu_{2} \left(\frac{\kappa_{23}}{\kappa_{23} - \nu_{5} + 1} - \frac{\nu_{5}}{\kappa_{23} - \nu_{5} + 1}\right)}{\kappa_{6}} \\
+\frac{d\nu_{6}}{d\tau} &= \frac{\kappa_{11} \nu_{2} \left(\frac{\kappa_{20}}{\kappa_{20} - \nu_{6} + 1} - \frac{\nu_{6}}{\kappa_{20} - \nu_{6} + 1}\right) - \frac{\kappa_{12} \nu_{6}}{\kappa_{4} + \nu_{6}}}{\kappa_{6}} \\
+\frac{d\nu_{7}}{d\tau} &= \frac{\kappa_{7} \nu_{6} \left(\frac{\kappa_{21}}{\kappa_{21} - \nu_{7} + 1} - \frac{\nu_{7}}{\kappa_{21} - \nu_{7} + 1}\right) - \frac{\kappa_{8} \nu_{7}}{\kappa_{2} + \nu_{7}}}{\kappa_{6}}
+system_translated.symbols=(kappa1, kappa10, kappa11, kappa12, kappa13, kappa14, kappa15, kappa16, kappa17, kappa18, kappa19, kappa2, kappa20, kappa21, kappa22, kappa23, kappa3, kappa4, kappa5, kappa6, kappa7, kappa8, kappa9, tau, nu1, nu2, nu3, nu4, nu5, nu6, nu7)
+system_translated.parameters=(kappa1, kappa10, kappa11, kappa12, kappa13, kappa14, kappa15, kappa16, kappa17, kappa18, kappa19, kappa2, kappa20, kappa21, kappa22, kappa23, kappa3, kappa4, kappa5, kappa6, kappa7, kappa8, kappa9)
+23  parameters
+system_translated.dependents=(nu1, nu2, nu3, nu4, nu5, nu6, nu7)
+7  dependent variables

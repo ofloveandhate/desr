@@ -1,0 +1,113 @@
+
+
+----------------------
+michaelis_menten_two_variable
+-----------------------
+
+
+
+
+Adding in the initial conditions
+-------------------------------------
+initial conditions: {s: s0, c: c_0}
+as values         : {c: 0}
+System: dt/dt = 1
+dc/dt = -c*k_1*s - c*k_2 - c*k_m1 + e_0*k_1*s
+ds/dt = c*k_1*s + c*k_m1 - e_0*k_1*s
+c(0) = c_0
+s(0) = s0
+Km == (k_2 + k_m1)/k_1
+parameters: s0, e_0, k_1, k_2, k_m1, Km, c_0
+parameter values: c_0 = 0
+Variable order:  (s0, e_0, k_1, k_2, k_m1, Km, c_0, t, c, s)
+Exponent Matrix: Matrix([
+[0, 0, 0,  0, 0, 0,  0, -1,  0,  0,  0],
+[0, 0, 0,  1, 1, 0,  0,  0,  0,  0,  0],
+[1, 0, 0,  1, 1, 1,  0,  0,  0,  1,  0],
+[0, 1, 0,  0, 0, 0,  0,  0,  0,  0,  1],
+[0, 0, 1,  0, 0, 0,  1,  0,  0, -1, -1],
+[0, 0, 0,  0, 0, 0,  0,  0,  0,  1,  0],
+[0, 0, 0,  0, 0, 0,  0,  0, -1,  0,  0],
+[1, 1, 1,  1, 1, 1,  1,  0,  0,  0,  0],
+[0, 0, 0, -1, 0, 1,  1,  0,  1,  0,  0],
+[1, 0, 0,  1, 0, 0, -1,  1,  0,  0,  0]])
+symbols this reduction divides by, so none of them may be zero: (s0, k_1)
+Scaling matrix: Matrix([
+[0, 0, -1, -1, -1, 0, 0, 1, 0, 0],
+[1, 1, -1,  0,  0, 1, 1, 0, 1, 1]])
+Hermite multiplier Matrix([
+[-1, 1, -1, -1, -1, -1, -1, 1, -1, -1],
+[ 0, 0,  1,  0,  0,  0,  0, 0,  0,  0],
+[-1, 0,  0, -1, -1,  0,  0, 1,  0,  0],
+[ 0, 0,  0,  1,  0,  0,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  1,  0,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  1,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  1, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 1,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 0,  1,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 0,  0,  1]])
+Invariants:  Matrix([[e_0/s0, k_2/(k_1*s0), k_m1/(k_1*s0), Km/s0, c_0/s0, k_1*s0*t, c/s0, s/s0]])
+Reduced system:
+dtau/dtau = 1
+du/dtau = -kappa0*u + kappa2*v + u*v
+dv/dtau = kappa0*u - kappa1*v - kappa2*v - u*v
+u(0) = 1
+v(0) = kappa4
+kappa3 == kappa1 + kappa2
+parameters: kappa0, kappa1, kappa2, kappa3, kappa4
+parameter values: kappa4 = 0
+Changing invariants by column operations on the Hermite multiplier
+clock=7, epsilon=2, complexed=8
+Invariants:  ['kappa0=e_0/s0', 'kappa1=k_2/(k_1*s0)', 'kappa2=k_m1/(k_1*s0)', 'kappa3=Km/s0', 'kappa4=c_0/s0', 'tau=e_0*k_1*t', 'v=c/e_0', 'u=s/s0']
+Hermite multiplier Matrix([
+[-1, 1, -1, -1, -1, -1, -1, 0,  0, -1],
+[ 0, 0,  1,  0,  0,  0,  0, 1, -1,  0],
+[-1, 0,  0, -1, -1,  0,  0, 1,  0,  0],
+[ 0, 0,  0,  1,  0,  0,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  1,  0,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  1,  0, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  1, 0,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 1,  0,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 0,  1,  0],
+[ 0, 0,  0,  0,  0,  0,  0, 0,  0,  1]])
+W: Matrix([
+[0, 0, -1, -1, -1, 0, 0,  1, 0, 0],
+[1, 1, -1,  0,  0, 1, 1,  0, 1, 1],
+[0, 1,  0,  0,  0, 0, 0, -1, 1, 0],
+[0, 0,  0,  1,  0, 0, 0,  0, 0, 0],
+[0, 0,  0,  0,  1, 0, 0,  0, 0, 0],
+[0, 0,  0,  0,  0, 1, 0,  0, 0, 0],
+[0, 0,  0,  0,  0, 0, 1,  0, 0, 0],
+[0, 0,  0,  0,  0, 0, 0,  1, 0, 0],
+[0, 0,  0,  0,  0, 0, 0,  0, 1, 0],
+[0, 0,  0,  0,  0, 0, 0,  0, 0, 1]])
+substitutions: {s0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, Km: kappa3, c_0: kappa4, t: tau/kappa0, c: kappa0*v, s: u}
+Reduced system, in arbitrary parameter names:
+dtau/dtau = 1
+du/dtau = kappa2*v + u*v - u
+dv/dtau = -kappa1*v/kappa0 - kappa2*v/kappa0 - u*v/kappa0 + u/kappa0
+u(0) = 1
+v(0) = kappa4/kappa0
+kappa3 == kappa1 + kappa2
+parameters: kappa0, kappa1, kappa2, kappa3, kappa4
+parameter values: kappa4 = 0
+the initial conditions, as values: {u: 1, v: 0}
+substituting Murray's names: {kappa0: 'epsilon', kappa1: 'L', kappa2: 'K - L', kappa3: 'K', kappa4: 'gamma'}
+after subbing into canonical names from Murray
+dtau/dtau = 1
+du/dtau = K*v - L*v + u*v - u
+dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
+u(0) = 1
+v(0) = gamma/epsilon
+parameters: K, L, epsilon, gamma
+parameter values: gamma = 0
+the initial conditions, as values: {u: 1, v: 0}
+
+Substituting the initial complex, which is known to be zero
+-----------------------------------------------------------
+dtau/dtau = 1
+du/dtau = K*v - L*v + u*v - u
+dv/dtau = -K*v/epsilon - u*v/epsilon + u/epsilon
+u(0) = 1
+v(0) = 0
+parameters: K, L, epsilon

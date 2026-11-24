@@ -1,0 +1,219 @@
+>>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
+... \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c \\\\'''
+>>> system = ODESystem.from_tex(system_tex)
+>>> system.update_initial_conditions({'s': 's_0'})
+>>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
+>>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+>>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
+>>> clock = translator.column_of('k_1*s_0*t')
+>>> scale = translator.column_of('e_0/s_0')
+>>> concentration = translator.column_of('c/s_0')
+>>> clock, scale, concentration
+(6, 2, 8)
+>>> translator.multiplier_add_columns(clock, scale)  # Multiply time by e_0/s_0
+>>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0 rather than s_0
+>>> translator.invariant_monomials()
+Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), e_0*k_1*t, s/s_0, c/e_0]])
+>>> translator.translate_parameter_substitutions(system)
+{s_0: 1, e_0: c0, K_m: c1, k_1: 1, k_2: c2, k_m1: c3, t: H/c0, s: y, c: c0*z}
+>>> reduced_system = translator.translate(system)
+>>> reduced_system.subs({'c0': 'epsilon', 'c1': 'mu', 'c2': 'lamda', 'c3': 'mu-lamda'},
+...                    subs_constraints=True,
+...                    expand_after=True,
+...                    factor_after=True)
+dH/dH = 1
+dy/dH = -lamda*z + mu*z + y*z - y
+dz/dH = -(mu*z + y*z - y)/epsilon
+y(0) = 1
+parameters: epsilon, lamda, mu
+>>> system = ODESystem.from_tex(system_tex)
+>>> system.update_initial_conditions({'s': 's_0'})
+>>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
+>>> system.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
+>>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
+>>> system.symbols
+(s_0, e_0, K_m, k_1, k_2, k_m1, epsilon, t, s, c)
+>>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
+>>> translator.scaling_matrix
+Matrix([
+[0, 0, 0, -1, -1, -1, 0, 1, 0, 0],
+[1, 1, 1, -1,  0,  0, 0, 0, 1, 1]])
+>>> translator.translate(system)
+dtau/dtau = 1
+dc/dtau = -c*c2 - c*c3 - c*s + c0*s
+ds/dtau = c*c3 + c*s - c0*s
+s(0) = 1
+c1 == c2 + c3
+epsilon == c0/(c1 + 1)
+parameters: c0, c1, c2, c3, epsilon
+>>> translator.invariant_monomials()
+Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), epsilon, k_1*s_0*t, s/s_0, c/s_0]])
+>>> clock = translator.column_of('k_1*s_0*t')
+>>> scale = translator.column_of('e_0/s_0')
+>>> eps = translator.column_of('epsilon')
+>>> concentration = translator.column_of('c/s_0')
+>>> michaelis = translator.column_of('K_m/s_0')
+>>> k_m1_ratio = translator.column_of('k_m1/(k_1*s_0)')
+>>> k_2_ratio = translator.column_of('k_2/(k_1*s_0)')
+>>> clock, scale, eps, concentration, michaelis, k_m1_ratio, k_2_ratio
+(7, 2, 6, 9, 3, 5, 4)
+>>> translator.multiplier_add_columns(clock, scale)
+>>> translator.multiplier_add_columns(clock, eps, power=-1)
+>>> translator.multiplier_add_columns(concentration, eps, power=-1)
+>>> translator.multiplier_negate_column(michaelis)
+>>> translator.multiplier_add_columns(k_m1_ratio, k_2_ratio, power=-1)
+>>> translator.invariant_monomials()
+Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, e_0*k_1*t/epsilon, s/s_0, c/(epsilon*s_0)]])
+>>> reduced_system = translator.translate(system)
+>>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
+...                                          'c2': '1 / (sigma * (kappa + 1))'},subs_constraints=True,
+...                    expand_after=True,
+...                    factor_after=True)
+>>> reduced_system = reduced_system.subs({'c1': 'sigma',
+...                          'c3': 'kappa'},
+...                         subs_constraints=True,
+...                         expand_after=True,
+...                         factor_after=True)
+>>> reduced_system
+dtau/dtau = 1
+dc/dtau = -(c*s*sigma + c - s*sigma - s)/(sigma + 1)
+ds/dtau = epsilon*(c*kappa*s*sigma + c*kappa + c*s*sigma - kappa*s*sigma - kappa*s - s*sigma - s)/((kappa + 1)*(sigma + 1))
+s(0) = 1
+1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+parameters: epsilon, kappa, sigma
+>>> reduced_system_murray = reduced_system.subs({'c': 'v', 's':'u'},
+...                         subs_constraints=True,
+...                         expand_after=True,
+...                         factor_after=True)
+>>> reduced_system_murray
+dtau/dtau = 1
+dv/dtau = -(sigma*u*v - sigma*u - u + v)/(sigma + 1)
+du/dtau = epsilon*(kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u)/((kappa + 1)*(sigma + 1))
+u(0) = 1
+1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+parameters: epsilon, kappa, sigma
+>>> import copy
+>>> translator_24 = copy.deepcopy(translator)
+>>> clock_24 = translator_24.column_of('e_0*k_1*t/epsilon')
+>>> clock_24, k_2_ratio, scale, eps
+(7, 4, 2, 6)
+>>> translator_24.multiplier_add_columns(clock_24, k_2_ratio)
+>>> translator_24.multiplier_add_columns(clock_24, scale, power=-1)
+>>> translator_24.multiplier_add_columns(clock_24, eps, power=2)
+>>> translator_24.invariant_monomials()
+Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
+>>> reduced_system = translator_24.translate(system)
+>>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
+...                                          'c2': '1 / (sigma * (kappa + 1))'
+...                                          },subs_constraints=True,
+...                    expand_after=True,
+...                    factor_after=True)
+>>> reduced_system.subs({'c': 'v',
+...                          'c1': 'sigma',
+...                          'c3': 'kappa',
+...                          's': 'u'},
+...                         subs_constraints=True,
+...                         expand_after=True,
+...                         factor_after=True)
+dtau/dtau = 1
+dv/dtau = -(kappa + 1)*(sigma*u*v - sigma*u - u + v)/epsilon
+du/dtau = kappa*sigma*u*v - kappa*sigma*u - kappa*u + kappa*v + sigma*u*v - sigma*u - u
+u(0) = 1
+1/sigma == kappa/(sigma*(kappa + 1)) + 1/(sigma*(kappa + 1))
+parameters: epsilon, kappa, sigma
+>>> system_tex_l = system_tex.replace('k_{-1}', '(K - k_2)').replace('K', 'K_m k_1')
+>>> system_l = ODESystem.from_tex(system_tex_l)
+>>> system_l
+dt/dt = 1
+dc/dt = -c*k_1*s - c*k_2 - c*(K_m*k_1 - k_2) + e_0*k_1*s
+ds/dt = c*k_1*s + c*(K_m*k_1 - k_2) - e_0*k_1*s
+parameters: K_m, e_0, k_1, k_2
+>>> system_l.update_initial_conditions({'s': 's_0'})
+>>> system_l.add_constraint('L', 's_0 + K_m')
+>>> system_l.reorder_variables(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
+>>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
+>>> translator.scaling_matrix
+Matrix([
+[0, 0, 0, -1, -1, 0, 1, 0, 0],
+[1, 1, 1, -1,  0, 1, 0, 1, 1]])
+>>> translator.invariant_monomials()
+Matrix([[L/s_0, e_0/s_0, k_2/(k_1*s_0), K_m/s_0, k_1*s_0*t, s/s_0, c/s_0]])
+>>> translator.translate(system_l)
+dt/dt = 1
+dc/dt = -c*c3 - c*s + c1*s
+ds/dt = -c*c2 + c*c3 + c*s - c1*s
+s(0) = 1
+c0 == c3 + 1
+parameters: c0, c1, c2, c3
+>>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
+>>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
+>>> clock = translator.column_of('K_m*k_1*t')
+>>> total = translator.column_of('L/K_m')
+>>> substrate = translator.column_of('s/K_m')
+>>> sigma = translator.column_of('s_0/K_m')
+>>> complexed = translator.column_of('c/K_m')
+>>> enzyme = translator.column_of('e_0/K_m')
+>>> k_2_ratio = translator.column_of('k_2/(K_m*k_1)')
+>>> clock, total, substrate, sigma, complexed, enzyme, k_2_ratio
+(6, 2, 7, 3, 8, 4, 5)
+>>> translator.multiplier_add_columns(clock, total)
+>>> translator.multiplier_add_columns(substrate, sigma, power=-1)
+>>> translator.multiplier_add_columns(complexed, total)
+>>> translator.multiplier_add_columns(complexed, enzyme, power=-1)
+>>> translator.multiplier_add_columns(complexed, sigma, power=-1)
+>>> translator.multiplier_add_columns(enzyme, total, power=-1)
+>>> translator.multiplier_negate_column(k_2_ratio)
+>>> translator.invariant_monomials()
+Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, L*k_1*t, s/s_0, L*c/(e_0*s_0)]])
+>>> translator.translate_parameter_substitutions(system_l)
+{K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3, t: tau/c0, s: c1*s, c: c*c1*c2}
+>>> reduced_system = translator.translate(system_l)
+>>> reduced_system
+dtau/dtau = 1
+dc/dtau = -c*c1*s/c0 - c/c0 + s
+ds/dtau = c*c1*c2*s/c0 + c*c2/c0 - c*c2/(c0*c3) - c2*s
+s(0) = 1
+c0 == c1 + 1
+parameters: c0, c1, c2, c3
+>>> system_segel = reduced_system.subs({'c0':'sigma+1', 'c1':'sigma', 'c2':'epsilon', 'c3':'kappa+1'},expand_after=True, factor_after=False)
+>>> system_segel
+dtau/dtau = 1
+dc/dtau = -c*s*sigma/(sigma + 1) - c/(sigma + 1) + s
+ds/dtau = c*epsilon*s*sigma/(sigma + 1) - c*epsilon/(kappa*sigma + kappa + sigma + 1) + c*epsilon/(sigma + 1) - epsilon*s
+s(0) = 1
+parameters: epsilon, kappa, sigma
+>>> translator.herm_mult.shape
+(9, 9)
+>>> clock = translator.column_of('L*k_1*t')
+>>> epsilon = translator.column_of('e_0/L')
+>>> kappa_plus_one = translator.column_of('K_m*k_1/k_2')
+>>> clock, epsilon, kappa_plus_one, total
+(6, 4, 5, 2)
+>>> translator.multiplier_add_columns(clock, epsilon)
+>>> translator.multiplier_add_columns(clock, kappa_plus_one, power=-1)
+>>> translator.multiplier_add_columns(clock, total, power=-1)
+>>> translator.invariant_monomials()
+Matrix([[L/K_m, s_0/K_m, e_0/L, K_m*k_1/k_2, e_0*k_2*t/L, s/s_0, L*c/(e_0*s_0)]])
+>>> translator.translate_parameter_substitutions(system_l)
+{K_m: 1, L: c0, s_0: c1, e_0: c0*c2, k_1: 1, k_2: 1/c3, t: c3*tau/c2, s: c1*s, c: c*c1*c2}
+>>> translator.set_naming_scheme({'parameters': 'c', 'independent': 'T', 'dependents': ['s','c']})
+>>> reduced_system = translator.translate(system_l)
+>>> reduced_system
+dT/dT = 1
+dc/dT = -c*c1*c3*s/c2 - c*c3/c2 + c0*c3*s/c2
+ds/dT = c*c1*c3*s + c*c3 - c - c0*c3*s
+s(0) = 1
+c0 == c1 + 1
+parameters: c0, c1, c2, c3
+>>> system_murray = reduced_system.subs({#     ...                         'c':'v', 's':'u',
+...                         'c0':'sigma+1', 'c1':'sigma',
+...                         'c2':'epsilon', 'c3':'kappa+1'},
+...                         subs_constraints=True,
+...                         expand_after=True,
+...                         factor_after=True)
+>>> system_murray
+dT/dT = 1
+dc/dT = -(kappa + 1)*(c*s*sigma + c - s*sigma - s)/epsilon
+ds/dT = c*kappa*s*sigma + c*kappa + c*s*sigma - kappa*s*sigma - kappa*s - s*sigma - s
+s(0) = 1
+parameters: epsilon, kappa, sigma

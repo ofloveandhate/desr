@@ -1,0 +1,81 @@
+
+
+A
+
+
+original variables: (a_1, a_12, a_2, u_2, t, z_1, z_2)
+original system: dt/dt = 1
+dz_1/dt = -a_1*z_1 + a_12*z_2
+dz_2/dt = u_2 + z_2*(-a_12 - a_2)
+parameters: a_1, a_12, a_2, u_2
+
+Scaling matrix:
+Matrix([
+[-1, -1, -1, -1, 1, 0, 0],
+[ 0,  0,  0,  1, 0, 1, 1]])
+Dimension of scaling action:  2
+Invariants:  Matrix([[a_12/a_1, a_2/a_1, a_1*t, a_1*z_1/u_2, a_1*z_2/u_2]])
+Substitutions:  {a_1: 1, a_12: kappa0, a_2: kappa1, u_2: 1, t: tau, z_1: nu0, z_2: nu1}
+
+reduced variables: (kappa0, kappa1, tau, nu0, nu1)
+
+Reduced system:
+dtau/dtau = 1
+dnu0/dtau = kappa0*nu1 - nu0
+dnu1/dtau = -kappa0*nu1 - kappa1*nu1 + 1
+parameters: kappa0, kappa1
+
+
+B
+
+
+original variables: (a_1, a_12, b_22, u_2, t, z_1, z_2)
+original system: dt/dt = 1
+dz_1/dt = -a_1*z_1 + a_12*z_2
+dz_2/dt = -b_22*z_2 + u_2
+parameters: a_1, a_12, b_22, u_2
+
+Scaling matrix:
+Matrix([
+[-1, -1, -1, -1, 1, 0, 0],
+[ 0,  1,  0,  0, 0, 1, 0],
+[ 0, -1,  0,  1, 0, 0, 1]])
+Dimension of scaling action:  3
+Invariants:  Matrix([[b_22/a_1, a_1*t, a_1**2*z_1/(a_12*u_2), a_1*z_2/u_2]])
+Substitutions:  {a_1: 1, a_12: 1, b_22: kappa0, u_2: 1, t: tau, z_1: nu0, z_2: nu1}
+
+reduced variables: (kappa0, tau, nu0, nu1)
+
+Reduced system:
+dtau/dtau = 1
+dnu0/dtau = -nu0 + nu1
+dnu1/dtau = -kappa0*nu1 + 1
+parameters: kappa0
+
+
+C
+
+
+original variables: (a_1, a_12, b_22, u_2, a_2, t, z_1, z_2)
+original system: dt/dt = 1
+dz_1/dt = -a_1*z_1 + a_12*z_2
+dz_2/dt = -b_22*z_2 + u_2
+b_22 == a_12 + a_2
+parameters: a_1, a_12, b_22, u_2, a_2
+
+Scaling matrix:
+Matrix([
+[-1, -1, -1, -1, -1, 1, 0, 0],
+[ 0,  0,  0,  1,  0, 0, 1, 1]])
+Dimension of scaling action:  2
+Invariants:  Matrix([[a_12/a_1, b_22/a_1, a_2/a_1, a_1*t, a_1*z_1/u_2, a_1*z_2/u_2]])
+Substitutions:  {a_1: 1, a_12: kappa0, b_22: kappa1, u_2: 1, a_2: kappa2, t: tau, z_1: nu0, z_2: nu1}
+
+reduced variables: (kappa0, kappa1, kappa2, tau, nu0, nu1)
+
+Reduced system:
+dtau/dtau = 1
+dnu0/dtau = kappa0*nu1 - nu0
+dnu1/dtau = -kappa1*nu1 + 1
+kappa1 == kappa0 + kappa2
+parameters: kappa0, kappa1, kappa2
