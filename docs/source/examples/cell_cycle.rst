@@ -3,22 +3,26 @@
 A cell cycle control network
 ==============================
 
-A model of the control of entry into mitosis, with seven species and thirty
-parameters, from *Mathematical modeling as a tool for investigating cell cycle control
-networks* (Tyson and co-author, 2007).  It is the largest model among the examples, it
-is read directly from its LaTeX, and its reduction removes seven parameters.
+The model of the cell cycle machinery regulating mitosis in frog egg extracts that
+Sible and Tyson use as their example in *Mathematical modeling as a tool for
+investigating cell cycle control networks*, Methods 41 (2007) 238–247,
+`doi:10.1016/j.ymeth.2006.08.003 <https://doi.org/10.1016/j.ymeth.2006.08.003>`_.  The
+equations are their Figure 2.  With seven species and thirty parameters it is the
+largest model among the examples; it is read directly from its LaTeX, and its
+reduction removes seven parameters.
 
 The model
 -----------
 
-The equations, as transcribed, say this.  Cyclin is made at the constant rate
-:math:`k_1`, is degraded at the rate :math:`k_2`, and binds Cdk at the rate
-:math:`k_3` to form MPF.  MPF and preMPF convert into one another at the rates
-:math:`k_{\mathrm{wee}}` and :math:`k_{25}`.  Four further species, Cdc25P, Wee1P, IEP
-and APC, each follow an equation of one form: a Michaelis–Menten rate forward, driven
-by MPF, and one backward, driven by a phosphatase.  Three of them feed back:
-:math:`k_{25}` depends on Cdc25P, :math:`k_{\mathrm{wee}}` on Wee1P, and :math:`k_2`
-on APC.
+Cyclin is made at the constant rate :math:`k_1`, is degraded at the rate
+:math:`k_2`, and binds Cdk at the rate :math:`k_3` to form MPF.  MPF and preMPF convert
+into one another at the rates :math:`k_{\mathrm{wee}}` and :math:`k_{25}`.  Four
+further species, Cdc25P, Wee1P, IEP and APC, each follow an equation of one form: a
+Michaelis–Menten rate forward and one backward, the backward one driven by a
+phosphatase.  MPF drives the forward rate of the first three.  IEP, the phosphorylated
+form of an intermediate enzyme, drives APC's.  Three of the four feed back on the
+first three equations: :math:`k_{25}` depends on Cdc25P, :math:`k_{\mathrm{wee}}` on
+Wee1P, and :math:`k_2`, the rate of cyclin degradation, on APC.
 
 The system is seven differential equations followed by four definitions.  The
 definitions give :math:`[\mathrm{Cdk}]`, :math:`k_{25}`, :math:`k_{\mathrm{wee}}` and
@@ -30,7 +34,7 @@ definitions give :math:`[\mathrm{Cdk}]`, :math:`k_{25}`, :math:`k_{\mathrm{wee}}
     ... \frac{d}{dt}\textrm{[Cdc25P]} &= \frac{k_a \textrm{[MPF]}\left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right)}{K_a + \textrm{[total Cdc25]} - \textrm{[Cdc25P]}} - \frac{k_b \textrm{[PPase]} \textrm{[Cdc25P]}}{K_b + \textrm{[Cdc25P]}} \\
     ... \frac{d}{dt}\textrm{[Wee1P]} &= \frac{k_e \textrm{[MPF]}\left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right)}{K_e + \textrm{[total Wee1]} - \textrm{[Wee1P]}} - \frac{k_f \textrm{[PPase]} \textrm{[Wee1P]}}{K_f + \textrm{[Wee1P]}} \\
     ... \frac{d}{dt}\textrm{[IEP]} &= \frac{k_g \textrm{[MPF]}\left( \textrm{[total IE]} - \textrm{[IEP]} \right)}{K_g + \textrm{[total IE]} - \textrm{[IEP]}} - \frac{k_h \textrm{[PPase]} \textrm{[IEP]}}{K_h + \textrm{[IEP]}} \\
-    ... \frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[MPF]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}} \\
+    ... \frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[IEP]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}} \\
     ... \textrm{[Cdk]} &= \textrm{[total Cdk]} - \textrm{[MPF]} - \textrm{[preMPF]} \\
     ... k_{25} &= V_{25}' \left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right) + V_{25}'' \textrm{[Cdc25P]} \\
     ... k_{\textrm{wee}} &= V_{\textrm{wee}}' \textrm{[Wee1P]} + V_{\textrm{wee}}'' \left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right) \\
@@ -68,11 +72,11 @@ The units the reduction infers show what they are.  For the species:
     preMPF [totalCdk]
 
 Five units of concentration.  Cyclin, MPF and preMPF share one, because they turn into
-one another.  Each of the other four species has its own: it appears only inside its
-own Michaelis–Menten terms and, for three of them, in one of the rates
-:math:`k_{25}`, :math:`k_{\mathrm{wee}}`, :math:`k_2`, where it is multiplied by a
-parameter.  So its amount can be measured in any unit if that parameter is adjusted to
-match.
+one another.  Each of the other four species has its own.  Outside its own
+Michaelis–Menten terms it appears in one place only: Cdc25P, Wee1P and APC in one of
+the rates :math:`k_{25}`, :math:`k_{\mathrm{wee}}`, :math:`k_2`, and IEP in APC's
+equation.  In each of those places it is multiplied by a parameter, so its amount can
+be measured in any unit if that parameter is adjusted to match.
 
 The sixth unit is time.  The seventh is not a unit of anything measured:
 
@@ -84,6 +88,13 @@ The phosphatase concentration appears in the model only multiplied by one of the
 rate constants :math:`k_b`, :math:`k_d`, :math:`k_f`, :math:`k_h`.  Scaling it up and
 those four down by the same factor changes nothing, so the model cannot tell the
 phosphatase's amount from its activity.  The reduction finds that as a symmetry.
+
+Sible and Tyson's own parameter file, their Table 1, sets five parameters to 1 under
+the comment "These parameters are arbitrarily set to 1": the four totals
+:math:`[\mathrm{total\ Cdc25}]`, :math:`[\mathrm{total\ Wee1}]`,
+:math:`[\mathrm{total\ IE}]`, :math:`[\mathrm{total\ APC}]`, and the phosphatase.
+Those are five of the seven symmetries used by hand: a unit for each of the four
+species, and the phosphatase's amount.
 
 The reduction
 ---------------

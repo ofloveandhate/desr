@@ -255,9 +255,9 @@ class TestLineClassification(TestCase):
 
 class TestTheTysonCellCycleSystem(TestCase):
     '''
-    The system that motivated all of this: Tyson's cell-cycle control network, transcribed
-    from the 2007 paper.  Seven derivative lines and four definitions, every one of which
-    involves a dependent variable.
+    The system that motivated all of this: the cell-cycle control network of Sible &
+    Tyson, Methods 41 (2007) 238-247, transcribed from their Figure 2.  Seven derivative
+    lines and four definitions, every one of which involves a dependent variable.
     '''
 
     DERIVATIVE_LINES = r'''\frac{d}{dt}\textrm{[Cyclin]} &= k_1 - k_2 \textrm{[Cyclin]} - k_3 \textrm{[Cyclin]} \textrm{[Cdk]} \\
@@ -266,7 +266,7 @@ class TestTheTysonCellCycleSystem(TestCase):
 \frac{d}{dt}\textrm{[Cdc25P]} &= \frac{k_a \textrm{[MPF]}\left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right)}{K_a + \textrm{[total Cdc25]} - \textrm{[Cdc25P]}} - \frac{k_b \textrm{[PPase]} \textrm{[Cdc25P]}}{K_b + \textrm{[Cdc25P]}} \\
 \frac{d}{dt}\textrm{[Wee1P]} &= \frac{k_e \textrm{[MPF]}\left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right)}{K_e + \textrm{[total Wee1]} - \textrm{[Wee1P]}} - \frac{k_f \textrm{[PPase]} \textrm{[Wee1P]}}{K_f + \textrm{[Wee1P]}} \\
 \frac{d}{dt}\textrm{[IEP]} &= \frac{k_g \textrm{[MPF]}\left( \textrm{[total IE]} - \textrm{[IEP]} \right)}{K_g + \textrm{[total IE]} - \textrm{[IEP]}} - \frac{k_h \textrm{[PPase]} \textrm{[IEP]}}{K_h + \textrm{[IEP]}} \\
-\frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[MPF]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}}'''
+\frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[IEP]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}}'''
 
     DEFINITION_LINES = r'''\textrm{[Cdk]} &= \textrm{[total Cdk]} - \textrm{[MPF]} - \textrm{[preMPF]} \\
 k_{25} &= V_{25}' \left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right) + V_{25}'' \textrm{[Cdc25P]} \\
@@ -322,6 +322,26 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         translator = ODETranslator.from_ode_system(system)
         self.assertTrue(translator.translate(system).symbols)
+
+    def test_which_species_drives_which_as_in_their_figure_2(self):
+        # Equations 4 to 7.  MPF drives the forward rate of Cdc25P, Wee1P and IEP, and
+        # IEP drives APC's.  The transcription once had MPF in equation 7 as well, which
+        # left IEP in no equation but its own.
+        system = ODESystem.from_tex(self.DERIVATIVE_LINES)
+        MPF, IEP = sympy.symbols('MPF IEP')
+        rates = {str(symbol): rate for symbol, rate in system.derivative_dict.items()}
+        for driven in ('Cdc25P', 'Wee1P', 'IEP'):
+            with self.subTest(species=driven):
+                self.assertTrue(rates[driven].has(MPF))
+        self.assertTrue(rates['APC'].has(IEP))
+        self.assertFalse(rates['APC'].has(MPF))
+        # Every species appears in some equation other than its own.
+        for name in self.SPECIES:
+            with self.subTest(species=name):
+                self.assertTrue(any(rate.has(sympy.Symbol(name))
+                                    for other, rate in ODESystem.from_tex(
+                                        self.TEX, sub_defns=True).derivative_dict.items()
+                                    if str(other) not in (name, 't')))
 
     # What docs/source/examples/cell_cycle.rst says about this model.
 
