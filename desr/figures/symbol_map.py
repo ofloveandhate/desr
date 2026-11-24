@@ -42,10 +42,6 @@ them.  A reduction with none of them is the parameter scheme.
 guess at them: a normalised auxiliary is 1 in the units the reduction chose, and taking
 that for its value in the caller's units would hand back a rescaled system wearing the
 original's symbols.
-
-Run with::
-
-    python examples/reduction_chain.py
 """
 
 import matplotlib

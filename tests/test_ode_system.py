@@ -353,7 +353,7 @@ class TestCanonicalOrder(TestCase):
     parameter appended to the *end* of the variable list lands after the dependents, which
     costs the parameter reduction scheme while leaving `repr` looking correct, since `repr`
     groups the variables by classification.  That is how this escaped notice until
-    `examples/linear_compartment.py` tripped over it, so the invariant is asserted directly
+    the linear compartment example tripped over it, so the invariant is asserted directly
     here rather than inferred from a reduction succeeding.
     '''
 
@@ -371,7 +371,7 @@ class TestCanonicalOrder(TestCase):
         self.assertCanonicalOrder(system)
 
     def test_add_constraint_naming_a_new_parameter(self):
-        ''' The `examples/linear_compartment.py` case: the constraint introduces `a_2`. '''
+        ''' The linear compartment example's case: the constraint introduces `a_2`. '''
         system = ODESystem.from_equations(['dz_1/dt = -a_1*z_1 + a_12*z_2',
                                            'dz_2/dt = -b_22*z_2 + u_2'])
         self.assertCanonicalOrder(system)

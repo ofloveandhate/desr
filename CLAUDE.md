@@ -36,11 +36,6 @@ numpy and scipy are optional for *using* desr but required for *testing* it: the
 imports them unconditionally rather than skipping, since a suite that skips a module when
 its dependency is missing reports a success it has not earned.
 
-**Run an example:**
-```bash
-python examples/cell_cycle_control_network.py
-```
-
 ## Architecture
 
 The reduction pipeline flows: `ODESystem` → `ODETranslator` → reduced `ODESystem`.
@@ -104,13 +99,13 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   once printed its result and returned `None` with its doctest passing. Behaviour shown in
   `docs/source/examples/*.rst` should also be asserted in `tests/`, so a regression surfaces
   before anyone builds the docs.
-- Example code lives in two places, by what it is for. `docs/source/examples/*.rst` are
-  the worked examples, and a figure one of them draws is a script beside it in
-  `docs/source/examples/scripts/`, rendered into the page by `.. plot::`. What remains in
-  the top-level `examples/` is a handful of print-based scripts with no page yet; each is
-  run by CI and is tested by nothing else, which is how a parameter-ordering bug survived
-  until one of them tripped over it. If a script opens a plot window, set
-  `matplotlib.use('Agg')` first and `plt.show()` becomes a no-op.
+- Example code lives in the documentation. `docs/source/examples/*.rst` are the worked
+  examples, as prose with doctests, and a figure one of them draws is a script beside it
+  in `docs/source/examples/scripts/`, rendered into the page by `.. plot::`. There is no
+  top-level `examples/` folder: its scripts were run by CI and tested by nothing else,
+  which is how a parameter-ordering bug survived until one of them tripped over it. In
+  an `.rst` page, put a sentence between a `.. math::` block and a doctest block; an
+  indented doctest directly after the math is taken as part of it and never runs.
 - The figures are library code, in `desr/figures/`, behind the `graphs` extra:
   `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
   draws it as a chain of systems. Neither computes anything — every matrix, monomial,

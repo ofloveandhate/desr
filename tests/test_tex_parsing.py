@@ -2,7 +2,7 @@
 Reading the LaTeX that papers are actually written in.
 
 The constructs here were all taken from one place: the Tyson cell-cycle system as
-transcribed in `examples/cell_cycle_control_network.py`, which needed sixty lines of
+once transcribed in a script under `examples/`, which needed sixty lines of
 hand-rolled regex preprocessing before `from_tex` would look at it.  That preprocessing is
 the specification, and this is it in test form.
 
@@ -322,6 +322,83 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         translator = ODETranslator.from_ode_system(system)
         self.assertTrue(translator.translate(system).symbols)
+
+    # What docs/source/examples/cell_cycle.rst says about this model.
+
+    def reduction(self):
+        from desr import ODETranslator
+        system = ODESystem.from_tex(self.TEX, sub_defns=True)
+        translator = ODETranslator.from_ode_system(system)
+        return system, translator, translator.translate(system)
+
+    def test_seven_symmetries_remove_seven_of_thirty_parameters(self):
+        system, translator, reduced = self.reduction()
+        self.assertEqual(30, len(system.parameters))
+        self.assertEqual(7, translator.num_scaling_symmetries)
+        self.assertEqual(23, len(reduced.parameters))
+        self.assertEqual(7, len(reduced.dependents))
+
+    def test_every_reduced_equation_is_true(self):
+        from oracles import false_equations
+        system, _, reduced = self.reduction()
+        self.assertEqual([], false_equations(system, reduced))
+
+    def test_the_species_have_five_units_of_concentration(self):
+        system, _, _ = self.reduction()
+        dimensions = system.dimensions_of()
+        units = {str(species): dimensions[species] for species in system.dependents}
+        self.assertEqual(5, len(set(units.values())))
+        self.assertEqual(units['Cyclin'], units['MPF'])
+        self.assertEqual(units['MPF'], units['preMPF'])
+        four = {units[name] for name in ('Cdc25P', 'Wee1P', 'IEP', 'APC')}
+        self.assertEqual(4, len(four))
+        self.assertNotIn(units['MPF'], four)
+
+    def test_the_phosphatase_appears_only_times_one_of_four_rate_constants(self):
+        # So scaling it up and those four down by the same factor is a symmetry:
+        # substitute, and every equation is unchanged.
+        system, translator, _ = self.reduction()
+        PPase = sympy.Symbol('PPase')
+        partners = sympy.symbols('k_b k_d k_f k_h')
+        scale = sympy.Symbol('lambda_', positive=True)
+        moved = {PPase: scale * PPase}
+        moved.update({k: k / scale for k in partners})
+        touched = 0
+        for rate in system.derivatives:
+            if rate is None:
+                continue
+            self.assertEqual(0, sympy.simplify(rate.subs(moved, simultaneous=True) - rate))
+            touched += rate.has(PPase)
+        self.assertEqual(4, touched)
+        # And it is among the symmetries the library finds: this direction is in the
+        # row space of the scaling matrix.
+        direction = sympy.Matrix([[1 if s == PPase else -1 if s in partners else 0
+                                   for s in system.symbols]])
+        A = translator.scaling_matrix
+        self.assertEqual(A.rank(), sympy.Matrix.vstack(A, direction).rank())
+
+    def test_the_four_switch_species_are_measured_in_their_michaelis_constants(self):
+        _, _, reduced = self.reduction()
+        images = set(map(str, reduced.named_symbols.values()))
+        for expected in ('APC/K_c', 'Cdc25P/K_a', 'IEP/K_g', 'Wee1P/K_e'):
+            with self.subTest(monomial=expected):
+                self.assertIn(expected, images)
+
+    def test_another_variable_order_removes_as_many_parameters(self):
+        from desr import ODETranslator
+        from oracles import false_equations
+        system, translator, _ = self.reduction()
+        reordered = ODESystem.from_tex(self.TEX, sub_defns=True)
+        order = sorted(reordered.parameters, key=str, reverse=True)
+        order += [reordered.independent_variable] + list(reordered.dependents)
+        reordered.reorder_variables(order)
+        other = ODETranslator.from_ode_system(reordered)
+        reduced = other.translate(reordered)
+        self.assertEqual(7, other.num_scaling_symmetries)
+        self.assertEqual(23, len(reduced.parameters))
+        self.assertEqual([], false_equations(reordered, reduced))
+        self.assertNotEqual(set(other.auxiliary_monomials()),
+                            set(translator.auxiliary_monomials()))
 
 
 class TestMultiLine(TestCase):

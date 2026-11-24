@@ -38,10 +38,6 @@ monomial in the new ones.  Its top block is the scaling matrix again, entry for 
 needs no solving -- set the auxiliary columns to 1 and read off what is left.
 
 The last panel is the reduced system, where the equations come back.
-
-Run with::
-
-    python examples/reduction_flowchart.py
 """
 
 import re

@@ -13,3 +13,4 @@ Examples
    dimensional_consistency
    linear_compartment
    signalling_networks
+   cell_cycle
