@@ -44,10 +44,30 @@ species that change in time, so they are not parameters and not constraints;
 name, so :math:`V_{25}'` and :math:`V_{25}''` are two parameters.
 
     >>> system = ODESystem.from_tex(tex, sub_defns=True)
-    >>> system.dependents
-    (APC, Cdc25P, Cyclin, IEP, MPF, Wee1P, preMPF)
-    >>> len(system.parameters)
-    30
+    >>> len(system.dependents), len(system.parameters)
+    (7, 30)
+
+The order of the variables
+----------------------------
+
+The reduction uses as units the parameters at the front of the variable order; see
+:meth:`~desr.ode_system.ODESystem.reorder_variables`.  The order is parameters, then
+the independent variable, then the dependent variables.
+
+Here the five total amounts come first, so that each species is measured in its total,
+followed by :math:`V_2''` and :math:`k_h`.  The other twenty-three parameters follow in
+a fixed order, which is the order their reduced counterparts are numbered in.
+
+    >>> used_as_units = ['totalWee1', 'totalCdk', 'totalAPC', 'totalIE', 'totalCdc25',
+    ...                  'V_2primeprime', 'k_h']
+    >>> remaining_parameters = ['PPase',
+    ...                         'K_a', 'K_b', 'K_c', 'K_d', 'K_e', 'K_f', 'K_g', 'K_h',
+    ...                         'k_1', 'k_3',
+    ...                         'k_a', 'k_b', 'k_c', 'k_d', 'k_e', 'k_f', 'k_g',
+    ...                         'V_25prime', 'V_25primeprime',
+    ...                         'V_weeprime', 'V_weeprimeprime', 'V_2prime']
+    >>> species = ['Cyclin', 'MPF', 'preMPF', 'Cdc25P', 'Wee1P', 'IEP', 'APC']
+    >>> system.reorder_variables(used_as_units + remaining_parameters + ['t'] + species)
 
 Seven scaling symmetries
 --------------------------
@@ -59,15 +79,15 @@ Seven scaling symmetries
 The units the reduction infers show what they are.  For the species:
 
     >>> dimensions = system.dimensions_of()
-    >>> for species in system.dependents:
-    ...     print(species, dimensions[species])
-    APC [K_c]
-    Cdc25P [K_a]
+    >>> for symbol in system.dependents:
+    ...     print(symbol, dimensions[symbol])
     Cyclin [totalCdk]
-    IEP [K_g]
     MPF [totalCdk]
-    Wee1P [K_e]
     preMPF [totalCdk]
+    Cdc25P [totalCdc25]
+    Wee1P [totalWee1]
+    IEP [totalIE]
+    APC [totalAPC]
 
 Five units of concentration.  Cyclin, MPF and preMPF share one, because they turn into
 one another.  Each of the other four species has its own.  Outside its own
@@ -76,14 +96,23 @@ the rates :math:`k_{25}`, :math:`k_{\mathrm{wee}}`, :math:`k_2`, and IEP in APC'
 equation.  In each of those places it is multiplied by a parameter, so its amount can
 be measured in any unit if that parameter is adjusted to match.
 
-The sixth unit is time.  The seventh is not a unit of anything measured:
+The sixth unit is time.  The seventh is not a unit of anything measured.  It belongs to
+the phosphatase:
 
-    >>> PPase, k_b, k_h = sympy.symbols('PPase k_b k_h')
-    >>> dimensions[k_h], dimensions[PPase] * dimensions[k_h]
-    ([k_h], [K_g]/[t])
+    >>> PPase = sympy.Symbol('PPase')
+    >>> dimensions[PPase]
+    [totalWee1]/([k_f]*[t])
+    >>> for name in ('k_b', 'k_d', 'k_f', 'k_h'):
+    ...     print(name, dimensions[PPase] * dimensions[sympy.Symbol(name)])
+    k_b [totalCdc25]/[t]
+    k_d [totalAPC]/[t]
+    k_f [totalWee1]/[t]
+    k_h [totalIE]/[t]
 
 The phosphatase concentration appears in the model only multiplied by one of the four
-rate constants :math:`k_b`, :math:`k_d`, :math:`k_f`, :math:`k_h`.  Scaling it up and
+rate constants :math:`k_b`, :math:`k_d`, :math:`k_f`, :math:`k_h`.  Each product is a
+concentration per unit time; the phosphatase alone carries a unit, written
+:math:`[k_f]` above, that cancels in every product.  Scaling the phosphatase up and
 those four down by the same factor changes nothing, so the model cannot tell the
 phosphatase's amount from its activity.  The reduction finds that as a symmetry.
 
@@ -92,7 +121,9 @@ the comment "These parameters are arbitrarily set to 1": the four totals
 :math:`[\mathrm{total\ Cdc25}]`, :math:`[\mathrm{total\ Wee1}]`,
 :math:`[\mathrm{total\ IE}]`, :math:`[\mathrm{total\ APC}]`, and the phosphatase.
 Those are five of the seven symmetries used by hand: a unit for each of the four
-species, and the phosphatase's amount.
+species, and the phosphatase's amount.  The order chosen above makes the same choice
+for the four species.  For the phosphatase's symmetry it sets :math:`k_h` to 1 where
+the table sets the phosphatase.
 
 The reduction
 ---------------
@@ -104,70 +135,76 @@ The reduction
     (23, 7)
 
 Seven symmetries, and seven parameters fewer: twenty-three in place of thirty.  The
-clock is rescaled time, and each species is measured in a unit built from the
-parameters:
+clock is rescaled time, and each species is measured in its total:
 
     >>> names = reduced.named_symbols
     >>> names[reduced.independent_variable]
-    PPase*k_b*t/K_a
+    V_2primeprime*t*totalAPC
     >>> for symbol in reduced.dependents:
     ...     print(symbol, '=', names[symbol])
-    nu0 = APC/K_c
-    nu1 = Cdc25P/K_a
-    nu2 = Cyclin*PPase*k_b/(K_a*k_1)
-    nu3 = IEP/K_g
-    nu4 = MPF*PPase*k_b/(K_a*k_1)
-    nu5 = Wee1P/K_e
-    nu6 = PPase*k_b*preMPF/(K_a*k_1)
+    nu0 = Cyclin/totalCdk
+    nu1 = MPF/totalCdk
+    nu2 = preMPF/totalCdk
+    nu3 = Cdc25P/totalCdc25
+    nu4 = Wee1P/totalWee1
+    nu5 = IEP/totalIE
+    nu6 = APC/totalAPC
 
-Each of the four is measured in its own Michaelis constant.  Four of the remaining
-parameters are then ratios of Michaelis constants, and five are the total amounts,
-each in the unit of its species:
+Among the twenty-three parameters, the first is what is left of the phosphatase, and
+the next eight are the Michaelis constants, each as a fraction of the total of its
+species:
 
-    >>> for name in ('kappa0', 'kappa1', 'kappa2', 'kappa3'):
-    ...     print(name, '=', names[sympy.Symbol(name)])
-    kappa0 = K_b/K_a
-    kappa1 = K_d/K_c
-    kappa2 = K_f/K_e
-    kappa3 = K_h/K_g
-    >>> totals = [symbol for symbol in reduced.parameters
-    ...           if any(str(s).startswith('total') for s in names[symbol].free_symbols)]
-    >>> for symbol in totals:
+    >>> for index in range(9):
+    ...     symbol = sympy.Symbol('kappa{}'.format(index))
     ...     print(symbol, '=', names[symbol])
-    kappa12 = totalAPC/K_c
-    kappa13 = totalCdc25/K_a
-    kappa14 = totalIE/K_g
-    kappa15 = totalWee1/K_e
-    kappa22 = PPase*k_b*totalCdk/(K_a*k_1)
+    kappa0 = PPase*k_h/(V_2primeprime*totalAPC*totalIE)
+    kappa1 = K_a/totalCdc25
+    kappa2 = K_b/totalCdc25
+    kappa3 = K_c/totalAPC
+    kappa4 = K_d/totalAPC
+    kappa5 = K_e/totalWee1
+    kappa6 = K_f/totalWee1
+    kappa7 = K_g/totalIE
+    kappa8 = K_h/totalIE
 
-One equation of the reduced system, for the species that was cyclin:
+The equation of the reduced system for cyclin:
 
-    >>> Cyclin = sympy.Symbol('Cyclin')
-    >>> cyclin = next(s for s in reduced.dependents if names[s].has(Cyclin))
-    >>> reduced.derivative_dict[cyclin]
-    -kappa12*kappa18*nu2/kappa5 + kappa18*nu0*nu2/kappa5 - kappa19*nu0*nu2/kappa5 - kappa22*nu2/kappa5 + 1 + nu2*nu4/kappa5 + nu2*nu6/kappa5
+    >>> reduced.derivative_dict[sympy.Symbol('nu0')]
+    kappa10*nu0*nu1 + kappa10*nu0*nu2 - kappa10*nu0 + kappa22*nu0*nu6 - kappa22*nu0 + kappa9 - nu0*nu6
+    >>> for name in ('kappa9', 'kappa10', 'kappa22'):
+    ...     print(name, '=', names[sympy.Symbol(name)])
+    kappa9 = k_1/(V_2primeprime*totalAPC*totalCdk)
+    kappa10 = k_3*totalCdk/(V_2primeprime*totalAPC)
+    kappa22 = V_2prime/V_2primeprime
 
-The whole reduced system can be printed with ``reduced`` or typeset with
+It is the original equation with :math:`1 - \nu_1 - \nu_2` for the free Cdk and
+:math:`\kappa_{22} (1 - \nu_6) + \nu_6` for the rate of degradation.  The whole
+reduced system can be printed with ``reduced`` or typeset with
 :meth:`~desr.ode_system.ODESystem.to_tex`.
 
-The order of the variables
-----------------------------
+Another order
+---------------
 
-Which parameters are used as units depends on the order of the variables; see
-:meth:`~desr.ode_system.ODESystem.reorder_variables`.  The number of symmetries, and so
-the number of parameters removed, does not.  Here the parameters are put in the
-reverse of their default order:
+The number of symmetries, and so the number of parameters removed, does not depend on
+the order.  The choice of units does.  Left in its default order, which is
+alphabetical, the system reduces to twenty-three parameters as well:
 
-    >>> reordered = ODESystem.from_tex(tex, sub_defns=True)
-    >>> order = sorted(reordered.parameters, key=str, reverse=True)
-    >>> order += [reordered.independent_variable] + list(reordered.dependents)
-    >>> reordered.reorder_variables(order)
-    >>> other = ODETranslator.from_ode_system(reordered)
+    >>> default = ODESystem.from_tex(tex, sub_defns=True)
+    >>> other = ODETranslator.from_ode_system(default)
     >>> other.num_scaling_symmetries
     7
-    >>> len(other.translate(reordered).parameters)
+    >>> otherwise = other.translate(default)
+    >>> len(otherwise.parameters)
     23
-    >>> set(other.auxiliary_monomials()) == set(translator.auxiliary_monomials())
-    False
 
-Seven symmetries and twenty-three parameters again, with a different choice of units.
+The four species that have a unit of their own are then measured in Michaelis
+constants, which come before the totals in the alphabet:
+
+    >>> images = otherwise.named_symbols
+    >>> for symbol in otherwise.dependents:
+    ...     if len(images[symbol].free_symbols) == 2:
+    ...         print(symbol, '=', images[symbol])
+    nu0 = APC/K_c
+    nu1 = Cdc25P/K_a
+    nu3 = IEP/K_g
+    nu5 = Wee1P/K_e

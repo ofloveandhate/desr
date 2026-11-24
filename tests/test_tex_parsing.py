@@ -345,11 +345,33 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
 
     # What docs/source/examples/cell_cycle.rst says about this model.
 
+    # The page's variable order.  The reduction uses as units the parameters at the front:
+    # the five totals, then V_2'' and k_h.
+    USED_AS_UNITS = ('totalWee1', 'totalCdk', 'totalAPC', 'totalIE', 'totalCdc25',
+                     'V_2primeprime', 'k_h')
+    REMAINING_PARAMETERS = ('PPase',
+                            'K_a', 'K_b', 'K_c', 'K_d', 'K_e', 'K_f', 'K_g', 'K_h',
+                            'k_1', 'k_3',
+                            'k_a', 'k_b', 'k_c', 'k_d', 'k_e', 'k_f', 'k_g',
+                            'V_25prime', 'V_25primeprime',
+                            'V_weeprime', 'V_weeprimeprime', 'V_2prime')
+    TOTAL_OF = {'Cyclin': 'totalCdk', 'MPF': 'totalCdk', 'preMPF': 'totalCdk',
+                'Cdc25P': 'totalCdc25', 'Wee1P': 'totalWee1', 'IEP': 'totalIE',
+                'APC': 'totalAPC'}
+
     def reduction(self):
         from desr import ODETranslator
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
+        system.reorder_variables(
+            self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES)
         translator = ODETranslator.from_ode_system(system)
         return system, translator, translator.translate(system)
+
+    def test_the_order_names_every_variable_once(self):
+        system = ODESystem.from_tex(self.TEX, sub_defns=True)
+        order = self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES
+        self.assertEqual(len(order), len(set(order)))
+        self.assertEqual(set(order), set(map(str, system.symbols)))
 
     def test_seven_symmetries_remove_seven_of_thirty_parameters(self):
         system, translator, reduced = self.reduction()
@@ -397,28 +419,68 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         A = translator.scaling_matrix
         self.assertEqual(A.rank(), sympy.Matrix.vstack(A, direction).rank())
 
-    def test_the_four_switch_species_are_measured_in_their_michaelis_constants(self):
+    def test_the_seven_parameters_at_the_front_are_the_ones_set_to_one(self):
+        system, translator, _ = self.reduction()
+        substitutions = translator.translate_parameter_substitutions(system)
+        set_to_one = {str(symbol) for symbol, image in substitutions.items() if image == 1}
+        self.assertEqual(set(self.USED_AS_UNITS), set_to_one)
+
+    def test_each_species_is_measured_in_its_total(self):
         _, _, reduced = self.reduction()
+        images = set(reduced.named_symbols[symbol] for symbol in reduced.dependents)
+        expected = {sympy.Symbol(species) / sympy.Symbol(total)
+                    for species, total in self.TOTAL_OF.items()}
+        self.assertEqual(expected, images)
+
+    def test_time_is_measured_against_the_degradation_of_cyclin_by_all_the_apc(self):
+        _, _, reduced = self.reduction()
+        t, V, total = sympy.symbols('t V_2primeprime totalAPC')
+        self.assertEqual(V * total * t, reduced.named_symbols[reduced.independent_variable])
+
+    def test_the_michaelis_constants_become_fractions_of_the_totals(self):
+        _, _, reduced = self.reduction()
+        images = set(reduced.named_symbols.values())
+        for constants, total in (('ab', 'totalCdc25'), ('cd', 'totalAPC'),
+                                 ('ef', 'totalWee1'), ('gh', 'totalIE')):
+            for letter in constants:
+                with self.subTest(constant='K_' + letter):
+                    self.assertIn(sympy.Symbol('K_' + letter) / sympy.Symbol(total), images)
+
+    def test_the_reduced_cyclin_equation_is_the_original_in_fractions(self):
+        # Synthesis, less degradation at a rate between V_2'/V_2'' and 1 according to the
+        # fraction of APC that is active, less binding to the Cdk that is free.
+        _, _, reduced = self.reduction()
+        denotes = {image: symbol for symbol, image in reduced.named_symbols.items()}
+
+        def reduced_symbol(text):
+            return denotes[sympy.sympify(text)]
+
+        cyclin, mpf, pre, apc = (reduced_symbol(species + '/' + self.TOTAL_OF[species])
+                                 for species in ('Cyclin', 'MPF', 'preMPF', 'APC'))
+        synthesis = reduced_symbol('k_1/(V_2primeprime*totalAPC*totalCdk)')
+        binding = reduced_symbol('k_3*totalCdk/(V_2primeprime*totalAPC)')
+        ratio = reduced_symbol('V_2prime/V_2primeprime')
+        expected = (synthesis - (ratio * (1 - apc) + apc) * cyclin
+                    - binding * cyclin * (1 - mpf - pre))
+        self.assertEqual(0, sympy.expand(reduced.derivative_dict[cyclin] - expected))
+
+    def test_the_default_order_removes_as_many_parameters_with_other_units(self):
+        from desr import ODETranslator
+        from oracles import false_equations
+        _, translator, _ = self.reduction()
+        default = ODESystem.from_tex(self.TEX, sub_defns=True)
+        other = ODETranslator.from_ode_system(default)
+        reduced = other.translate(default)
+        self.assertEqual(7, other.num_scaling_symmetries)
+        self.assertEqual(23, len(reduced.parameters))
+        self.assertEqual([], false_equations(default, reduced))
+        self.assertNotEqual(set(other.auxiliary_monomials()),
+                            set(translator.auxiliary_monomials()))
+        # The four species with a unit of their own are measured in Michaelis constants.
         images = set(map(str, reduced.named_symbols.values()))
         for expected in ('APC/K_c', 'Cdc25P/K_a', 'IEP/K_g', 'Wee1P/K_e'):
             with self.subTest(monomial=expected):
                 self.assertIn(expected, images)
-
-    def test_another_variable_order_removes_as_many_parameters(self):
-        from desr import ODETranslator
-        from oracles import false_equations
-        system, translator, _ = self.reduction()
-        reordered = ODESystem.from_tex(self.TEX, sub_defns=True)
-        order = sorted(reordered.parameters, key=str, reverse=True)
-        order += [reordered.independent_variable] + list(reordered.dependents)
-        reordered.reorder_variables(order)
-        other = ODETranslator.from_ode_system(reordered)
-        reduced = other.translate(reordered)
-        self.assertEqual(7, other.num_scaling_symmetries)
-        self.assertEqual(23, len(reduced.parameters))
-        self.assertEqual([], false_equations(reordered, reduced))
-        self.assertNotEqual(set(other.auxiliary_monomials()),
-                            set(translator.auxiliary_monomials()))
 
 
 class TestMultiLine(TestCase):
