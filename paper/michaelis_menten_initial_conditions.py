@@ -41,11 +41,12 @@ def figures():
     Each is drawn from the system alone: the figure functions compute the reduction
     themselves, with the library's own choice of invariants and names.
     '''
-    from desr.figures import flowchart_figure
+    from desr.figures import flowchart_figure, symbol_map_figure
 
     from _figures import save
 
     save(flowchart_figure(the_system()), 'michaelis_menten_initial_conditions_flowchart')
+    save(symbol_map_figure(the_system()), 'michaelis_menten_initial_conditions_symbol_map')
 
 
 def michaelis_menten_two_variable(verbose=True):

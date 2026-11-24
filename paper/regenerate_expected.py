@@ -20,7 +20,8 @@ FIGURES = HERE / 'figures'
 
 #: The figures each script draws, by the script's name.  A script not listed draws none.
 DRAWN = {
-    'michaelis_menten_initial_conditions': ['michaelis_menten_initial_conditions_flowchart'],
+    'michaelis_menten_initial_conditions': ['michaelis_menten_initial_conditions_flowchart',
+                                            'michaelis_menten_initial_conditions_symbol_map'],
 }
 
 
