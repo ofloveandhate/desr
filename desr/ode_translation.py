@@ -2556,11 +2556,14 @@ class ODETranslator(object):
                                    forward_monomials=forward_monomials)
         reduced_system.default_order_variables()
 
-        # Since z(0) / z_0 is a rational invariant, we can rewrite it using to_sub substitutions.
+        # By the one rule every scheme uses: a reduced symbol starts where its monomial
+        # does.  Here every reduced dependent is one dependent times parameters, so none
+        # of that rule's refusals can arise.
         if system.initial_conditions:
-            # For parameter substitution, the dependent variables keep their name
-            new_initial_conditions = {variable_map[var]: (init_cond.subs(to_sub) * variable_map[var] / to_sub[var]).expand()
-                                      for var, init_cond in system.initial_conditions.items()}
+            denotes = reduced_system.named_symbols
+            named = [symbol for symbol in reduced_system.symbols if symbol != new_indep]
+            new_initial_conditions = self._reduced_initial_conditions(
+                system, named, [denotes[symbol] for symbol in named], [], to_sub)
             reduced_system.update_initial_conditions(new_initial_conditions)
 
         if system.constraints:
@@ -2687,8 +2690,6 @@ class ODETranslator(object):
         self = self._for(system)
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
-        if system.initial_conditions:
-            raise NotImplementedError('`translate_dep_var` not yet implemented for systems with initial conditions')
         # This scheme is for a scaling that does not act on the independent variable.
         if not self.scaling_matrix[:, system.independent_variable_index].is_zero_matrix:
             raise ValueError('The independent variable of\n{}\nis acted on by\n{}.'.format(system, self))
@@ -2748,6 +2749,10 @@ class ODETranslator(object):
         dxdt_kept = [rate for column, rate in enumerate(dxdt)
                      if column not in normalised_columns]
 
+        # By the same rule as the general scheme, and with the same refusals.
+        new_initial_conditions = self._reduced_initial_conditions(
+            system, named, monomials, kept_auxiliaries, to_sub)
+
         new_variables = [system.independent_variable] + named
         rates = _classify_reduced_derivatives(
             named, monomials, list(dxdt_kept) + list(dydt), dynamic)
@@ -2773,6 +2778,8 @@ class ODETranslator(object):
         # symbols other than the independent variable, so none of its invariants can turn
         # out to be one -- and so it keeps the system's own clock unless told otherwise.
         reduced = _rename_indep_var(reduced, self._clock_name_for(system, (), ()))
+        if new_initial_conditions:
+            reduced.update_initial_conditions(new_initial_conditions)
         reduced.update_parameter_values(
             self._propagated_parameter_values(system, reduced,
                                               ReductionScheme.DEP_VAR))
@@ -3031,7 +3038,7 @@ class ODETranslator(object):
                         name,
                         ', '.join(sorted(map(str, rate.free_symbols & normalised)))))
 
-        new_initial_conditions = self._general_initial_conditions(
+        new_initial_conditions = self._reduced_initial_conditions(
             system, named, monomials, kept_auxiliaries, to_sub)
 
         new_variables = [system.independent_variable] + named
@@ -3068,10 +3075,13 @@ class ODETranslator(object):
         self._refuse_name_clashes(system, reduced)
         return reduced
 
-    def _general_initial_conditions(self, system, named, monomials, kept_auxiliaries,
+    def _reduced_initial_conditions(self, system, named, monomials, kept_auxiliaries,
                                     to_sub):
         '''
-        The initial conditions of a general-scheme reduction.
+        The initial conditions of a reduction, under whichever scheme.
+
+        One rule, and one place for its refusals.  The three schemes differ in which
+        monomials their reduced symbols denote and not in what an initial value is.
 
         A reduced symbol denotes a monomial in the original symbols.  Its initial value is
         that monomial at the start: the independent variable at 0 and each dependent
@@ -3119,6 +3129,8 @@ class ODETranslator(object):
             return listed(given[variable] for variable in variables)
 
         new_initial_conditions = {}
+        position = {dependent: index for index, dependent in enumerate(given)}
+        given_at = {}
         for name, monomial in zip(named, monomials):
             involved = monomial.free_symbols
             moving = involved & dependents
@@ -3175,7 +3187,12 @@ class ODETranslator(object):
                     'does not express in the reduced parameters alone.'.format(
                         name, monomial, value))
             new_initial_conditions[name] = value
-        return new_initial_conditions
+            given_at[name] = min(position[dependent] for dependent in started)
+
+        # In the order the caller gave them, with any clock invariant's 0 after.
+        return {name: new_initial_conditions[name]
+                for name in sorted(new_initial_conditions,
+                                   key=lambda name: given_at.get(name, len(position)))}
 
     def _is_translate_parameter_compatible(self, system):
         '''
