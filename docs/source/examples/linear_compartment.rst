@@ -12,11 +12,8 @@ the rate :math:`a_{12}`.  Compartment 1 loses material at the rate :math:`a_1`.
     \frac{dz_1}{dt} &= -a_1 z_1 + a_{12} z_2 \\
     \frac{dz_2}{dt} &= -(a_2 + a_{12})\, z_2 + u_2
 
-The model is from Weissburg et al., *Characterization of the MN gp120 HIV-1 vaccine:
-antigen binding to alum*, Pharmaceutical Research 12 (1995) 1439–1446,
-`doi:10.1023/A:1016266916893 <https://doi.org/10.1023/A:1016266916893>`_, and is
-Example 13.6 of DiStefano, *Dynamic Systems Biology Modeling and Simulation*, Elsevier
-(2015).
+The model is from Weissburg et al. :cite:`WeissburgEtal`, and is Example 13.6 of
+DiStefano :cite:`DiStefano`.
 
 The page reduces the model, and then shows what happens to the reduction when the
 total loss rate :math:`a_2 + a_{12}` is replaced by a single symbol.  It is the effect
