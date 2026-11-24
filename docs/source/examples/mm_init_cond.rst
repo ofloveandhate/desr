@@ -294,8 +294,8 @@ disagree about.  Going out they are normalised to 1, which is how :math:`s_0` an
 needs two of them supplied from somewhere, which is what
 :class:`desr.numerics.InsufficientKnownValues` is raised about.
 
-Drawing needs :mod:`networkx` and :mod:`matplotlib`, which the rest of `desr` does not --
-``pip install desr[graphs]``.
+Drawing needs :mod:`matplotlib`, which `desr` does not install --
+``pip install matplotlib``.
 
 Matching the names in the literature
 *************************************************

@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17671203.svg)](https://doi.org/10.5281/zenodo.17671203)
 
-*desr* is a package used for Differential Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems. It implements algorithms outlined by Evelyne Hubert and George Labahn <sup>[1](#myfootnote1)</sup>. See the full documentation on [readthedocs](https://desr.readthedocs.io/en/latest/).
+*desr* is a package used for Differential Equation Symmetry Reduction and is particularly useful for reducing the number of parameters in dynamical systems. It implements algorithms outlined by Evelyne Hubert and George Labahn <sup>[1](#myfootnote1)</sup>. See the full documentation on [readthedocs](https://desr.readthedocs.io).
 
 This package accompanies a paper "Nondimensionalisation is more science than art".  The Masters dissertation [Differential Algebra and Applications](http://tanbur.github.io/desr/dissertation/differential_algebra_and_applications.pdf) that this code originally accompanied places the algorithms into the theoretical framework of <em>differential algebraic geometry</em> and shows how to extend them to parameter reduction of arbitrary systems of partial differential equations, though this is not yet implemented.
 
@@ -11,20 +11,27 @@ This package accompanies a paper "Nondimensionalisation is more science than art
 
 ## Getting Started
 
-### Prerequisites
-
-This package requires the Sympy package.
-
 ### Installing
 
-To install, download the package and run:
+From PyPI:
+
+`$ pip install desr`
+
+The figures also need matplotlib, which desr does not install:
+
+`$ pip install matplotlib`
+
+From a clone of the repository:
 
 `$ pip install .`
 
 ## Running the tests
 
-Doctests are included in most files. To run them, simply run the module. E.g. "python -m doctest -v module.py"
-To run all tests, use Sphinx's `make doctest`.
+From a clone of the repository, with matplotlib and pytest installed:
+
+`$ python -m pytest tests/`
+
+The worked examples in the documentation are doctests too: `python -m sphinx -b doctest docs/source docs/build/doctest`.
 
 ## Built With
 
@@ -41,9 +48,8 @@ Submissions for contribution are always welcome.
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the Apache 2.0 License - see the [LICENSE](https://github.com/ofloveandhate/desr/blob/main/LICENSE) file for details
 
 ## Acknowledgments
 
 * Dr. Heather Harrington and Dr. Emilie Dufresne for their supervision of the dissertation.
-* Thomas Close for writing his diophantine module, which is included in this package.

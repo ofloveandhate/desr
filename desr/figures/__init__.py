@@ -18,8 +18,8 @@ either page comes from a method of :class:`~desr.ode_system.ODESystem` or
 library does not perform, and a figure drawn for a model desr has never met is as
 right as the library is.
 
-Both need :mod:`matplotlib`, and the symbol map needs :mod:`networkx` through
-:mod:`desr.symbol_graph`; they are the ``graphs`` extra.  Neither is imported by
+Both need :mod:`matplotlib`, which desr does not install, and the symbol map needs
+:mod:`networkx` through :mod:`desr.symbol_graph`.  Neither is imported by
 ``import desr``.
 
     >>> from desr import ODESystem                        # doctest: +SKIP

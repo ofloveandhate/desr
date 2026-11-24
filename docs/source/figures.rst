@@ -18,11 +18,11 @@ scripts to adapt.  Give either one a system and it draws that system:
     flowchart_figure(system, 'Michaelis-Menten').savefig('flowchart.pdf')
     symbol_map_figure(system, 'Michaelis-Menten').savefig('symbol_map.pdf')
 
-Both need the ``graphs`` extra::
+Both draw with matplotlib, which desr does not install::
 
-    pip install desr[graphs]
+    pip install matplotlib
 
-which brings matplotlib and networkx.  ``import desr`` needs neither.
+``import desr`` does not need it.
 
 
 The flowchart
