@@ -7,10 +7,14 @@ Mass-action models of phosphorylation cycles and cascades.  They are larger than
 other examples, with up to eleven species and twelve rate constants, and they all
 reduce in the same way.  This page works the smallest in full and tabulates the rest.
 
+Four of the five are motifs studied by Feliu and Wiuf :cite:`FeliuWiuf2011`, whose
+Figure 1 draws them.  The references to that paper are to version 2 of the preprint,
+which is where the equations cited here are written out.
+
 One-site modification
 -----------------------
 
-A substrate :math:`S_0` is phosphorylated to :math:`S_1` by a kinase :math:`E`, and
+This is Motif (a) of :cite:`FeliuWiuf2011`, with its equations (5)–(7).  A substrate :math:`S_0` is phosphorylated to :math:`S_1` by a kinase :math:`E`, and
 dephosphorylated by a phosphatase :math:`F`.  :math:`X` is the complex of the kinase
 with :math:`S_0`, and :math:`Y` the complex of the phosphatase with :math:`S_1`.
 
@@ -108,16 +112,19 @@ The other four
 
 The same construction gives four larger networks.  They are built in
 ``tests/example_networks.py``, each with an assertion of the conservation law it
-satisfies.
+satisfies, and the tests check each against the mass-action equations of its
+reactions.
 
-- **Two-step phosphorelay.**  A signal activates :math:`X_1`, whose activated form
-  passes its phosphate group to :math:`X_2`; each has a phosphatase.
 - **Two-site modification.**  A substrate with two phosphorylation sites,
   :math:`S_0 \to S_1 \to S_2`, with a kinase and a phosphatase for each step.
+  Motif (e), equations (21)–(24).
 - **Two-substrate modification.**  One kinase acting on two substrates, each with its
-  own phosphatase.
+  own phosphatase.  Motif (h), in section B.3.
 - **Two-layer cascade.**  The activated form of one substrate is the kinase for a
-  second.
+  second.  Motif (j), equations (53)–(58).
+- **Two-step phosphorelay.**  A signal activates :math:`X_1`, whose activated form
+  passes its phosphate group to :math:`X_2`; each has a phosphatase.  This one is not
+  from that paper.
 
 .. list-table::
    :header-rows: 1
@@ -157,8 +164,5 @@ satisfies.
 All five have the same two symmetries, and all five reductions choose the same two
 units: time in :math:`1/k_2` and concentration in :math:`k_2/k_1`.  In each, the
 reduction removes two rate constants, whatever the size of the network.
-
-The two-layer cascade is equations (35)–(38) of
-`arXiv:1101.5799 <https://arxiv.org/abs/1101.5799>`_.
 
 The reduction applies the parameter scheme to each of them; see :ref:`three-schemes`.

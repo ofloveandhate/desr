@@ -1,6 +1,10 @@
 '''
 Five reaction networks from the literature on signalling cascades, as systems.
 
+Four are motifs of Feliu & Wiuf, "Enzyme sharing as a cause of multistationarity in
+signaling systems", arXiv:1101.5799v2; each builder says which, and where its equations
+are in that version.  The two-step phosphorelay is not in that paper.
+
 Each is written out by hand as mass-action equations, with the intermediate species'
 equations fixed by conservation, and each builder asserts the conservation law it was
 written to satisfy.  They are the largest systems the tests use: the two-step
@@ -17,7 +21,8 @@ from desr import ODESystem
 
 
 def example_two_step_phosphorelay():
-    ''' Two-step Phosphorelay example.
+    ''' Two-step Phosphorelay example.  Not from arXiv:1101.5799; its source is not
+        recorded.
         Let S be a signal that activates X 1 . The activated form of X 1 gives its phosphate group to X 2
         to activate it. Both X 1 and X 2 have phosphatases, F 1 and F 2 , respectively. Y 1 , Y 2 and Y 3 are
         intermediate species.
@@ -29,7 +34,7 @@ def example_two_step_phosphorelay():
     equations = [
         'k2*Y1 + km3*Y2 - (k3*F1 + k5*X2)*Xs1',  # Xs1
         'km1*Y1 + k4*Y2 + k5*Xs1*X2 - k1*X1*S0',  # X1
-        'km5*Y3 + k5*Xs1*X2 - k6*Xs2*F2',  # Xs2
+        'km6*Y3 + k5*Xs1*X2 - k6*Xs2*F2',  # Xs2
         'k7*Y3 - k5*Xs1*X2',  # X2
         '(km1 + k2)*Y1 - k1*X1*S0',  # S
         '(km3 + k4)*Y2 - k3*Xs1*F1',  # F1
@@ -44,19 +49,19 @@ def example_two_step_phosphorelay():
     deriv_dict[Y2] = - deriv_dict[F1]
     deriv_dict[Y3] = - deriv_dict[F2]
 
+    # The term km6*Y3 in the equation for Xs2 was once written km5*Y3.  There is no
+    # reaction with a rate km5: Y3 forms from Xs2 and F2 at the rate k6 and comes apart
+    # again at the rate km6.  With km5 there the seven species below did not sum to a
+    # conserved total, and the two constants were set equal to make them.
     eq_const = sum([deriv_dict[v] for v in [Xs1, X1, Xs2, X2, Y1, Y2, Y3]])
-    km5, km6 = sympy.symbols('km5 km6')
-    assert eq_const.expand() == Y3 * km5 - Y3 * km6
-    # The seven species sum to a conserved total only if km5 == km6, so the model is
-    # taken with the two equal.
-    for key in deriv_dict.keys():
-        deriv_dict[key] = deriv_dict[key].subs({km6: km5})
+    assert eq_const.expand() == 0
 
     system = ODESystem.from_dict(deriv_dict)
     return system
 
 def example_one_site_modification():
-    ''' One-site modification example.
+    ''' One-site modification example.  Motif (a) of arXiv:1101.5799v2, equations
+        (5)-(7).
         Consider the substrate S0 , with kinase E and phosphatase F , and active form S1. X and Y are
         the intermediate species. As before, all the species need to be highly diffusible in order to verify
         the conservation laws.
@@ -85,7 +90,8 @@ def example_one_site_modification():
     return system
 
 def example_two_site_modification():
-    ''' Two-site modification example.
+    ''' Two-site modification example.  Motif (e) of arXiv:1101.5799v2, equations
+        (21)-(24).
         Consider species S0, S1 and S2, with kinases E1 and E2, and phosphatases F1 and F2. X1, X2, Y1
         and Y2 are intermediate species.
     '''
@@ -119,7 +125,8 @@ def example_two_site_modification():
 
 
 def example_two_substrate_modification():
-    ''' Modification of two substrates example.
+    ''' Modification of two substrates example.  Motif (h) of arXiv:1101.5799v2,
+        section B.3.
         Consider the kinase E acting on the substrates S0 and P0 , with phosphatases F1 and F2 ,
         respectively.
         X1 , X2 , Y1 and Y2 are intermediate species. Once again, all the species are highly
@@ -158,7 +165,8 @@ def example_two_layer_cascade():
         Consider a substrate S0 with kinase E and phosphatase F1 , with active form S1 that acts as a
         kinase on the substrate P0 , which has phosphatase F2 . All the species are highly diffusible.
 
-        This is equations (35)-(38) in https://arxiv.org/pdf/1101.5799
+        Motif (j) of arXiv:1101.5799v2, equations (53)-(58).  (Equations (35)-(38)
+        of that version are Motif (g), a different network.)
     '''
     variables = 'S0, S1, P0, P1, Ev, F1, F2, X1, X2, Y1, Y2'
     variables = sympy.symbols(variables)
