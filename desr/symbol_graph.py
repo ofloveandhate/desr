@@ -191,6 +191,18 @@ def symbol_graph(translator, system, direction=FORWARD):
         ``value``
             present only when known: given for the original symbols, derived for the
             reduced ones.
+        ``initial_value``
+            present on a dependent variable that has an initial condition: the symbol the
+            caller gave on the original side, and on the reduced side what the reduction
+            states, in the reduced parameters.
+
+    Graph attributes:
+        ``direction``
+            ``'forward'`` or ``'reverse'``.
+        ``initial_conditions_refused``
+            present when the system has initial conditions and the reduction this
+            multiplier gives does not carry them over: the reason, as the reduction
+            states it.  The reduced nodes then have no ``initial_value``.
 
     Edge attributes:
         ``exponent``
@@ -272,6 +284,18 @@ def symbol_graph(translator, system, direction=FORWARD):
     original_values = dict(system.parameter_values)
     reduced_values = translator.propagated_parameter_values()
 
+    # Where each dependent starts.  The reduced side is asked of the reduction itself,
+    # which is the one place that works it out, and which may refuse: this graph is for
+    # looking at a multiplier, including one whose reduction cannot carry the initial
+    # conditions over, so a refusal is recorded on the graph rather than raised.
+    original_initial = system.initial_conditions
+    reduced_initial, refused = {}, None
+    if original_initial:
+        try:
+            reduced_initial = translator.translate(system).initial_conditions
+        except (ValueError, NotImplementedError) as error:
+            refused = str(error)
+
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is
     # a monomial in the original parameters alone, because only then is it constant, and a
@@ -299,6 +323,8 @@ def symbol_graph(translator, system, direction=FORWARD):
 
     graph = networkx.DiGraph()
     graph.graph['direction'] = direction
+    if refused is not None:
+        graph.graph['initial_conditions_refused'] = refused
 
     for index, symbol in enumerate(originals):
         attributes = {
@@ -316,6 +342,8 @@ def symbol_graph(translator, system, direction=FORWARD):
         }
         if symbol in original_values:
             attributes['value'] = original_values[symbol]
+        if symbol in original_initial:
+            attributes['initial_value'] = original_initial[symbol]
         graph.add_node((ORIGINAL, symbol), **attributes)
 
     for index, symbol in enumerate(names):
@@ -345,6 +373,8 @@ def symbol_graph(translator, system, direction=FORWARD):
         # shown by the hatch rather than by an equation.
         if not normalised and symbol in reduced_values:
             attributes['value'] = reduced_values[symbol]
+        if symbol in reduced_initial:
+            attributes['initial_value'] = reduced_initial[symbol]
         graph.add_node((REDUCED, symbol), **attributes)
 
     # The multiplier is indexed [original, reduced] and its inverse [reduced, original], so
@@ -424,6 +454,9 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
     direction: the reduction normalises on the way out, and on the way back those same
     auxiliaries are the values a recovery has to be told.
 
+    A dependent variable with an initial condition has a second line, where it starts:
+    :math:`\\nu_1(0) = \\kappa_2`.
+
     Set in mathtext by default, which :mod:`matplotlib` renders itself -- no LaTeX
     installation -- so ``kappa0`` prints as :math:`\\kappa_0` and a quotient as a built-up
     fraction rather than with a slash.
@@ -440,9 +473,17 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
         # which sympy sets as a literal m.  display_tex because this is a figure, where
         # an inline fraction comes out half height.
         chain = ' = '.join(display_tex(expr_to_tex(part)) for part in parts)
-        return '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
+        label = '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
+        if 'initial_value' in data:
+            label += '\n${}(0) = {}$'.format(
+                display_tex(expr_to_tex(data['symbol'])),
+                display_tex(expr_to_tex(data['initial_value'])))
+        return label
     chain = ' = '.join(str(part) for part in parts)
-    return chain + (' |-> 1' if normalised else '')
+    label = chain + (' |-> 1' if normalised else '')
+    if 'initial_value' in data:
+        label += '\n{}(0) = {}'.format(data['symbol'], data['initial_value'])
+    return label
 
 
 #: Where along an edge its exponent is written.  Every edge of a two-column layout has its

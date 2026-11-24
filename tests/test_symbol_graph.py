@@ -862,3 +862,88 @@ class TestTheTranslatorMethods(TestCase):
         _, ax = matplotlib.pyplot.subplots()
         self.assertIs(self.translator.draw_symbol_graph(ax=ax), ax)
         matplotlib.pyplot.close('all')
+
+
+class TestWhereTheDependentsStart(TestCase):
+    '''
+    A dependent variable with an initial condition carries where it starts: the symbol
+    the caller gave on the original side, and on the reduced side the reduction's own
+    statement of it.
+    '''
+
+    def setUp(self):
+        self.system = michaelis_menten_with_initial_conditions()
+        self.translator = ODETranslator.from_ode_system(self.system)
+
+    def test_an_original_dependent_carries_the_symbol_it_was_given(self):
+        for direction in ('forward', 'reverse'):
+            graph = symbol_graph(self.translator, self.system, direction=direction)
+            for variable, given in self.system.initial_conditions.items():
+                with self.subTest(direction=direction, variable=variable):
+                    self.assertEqual(
+                        given, graph.nodes[(ORIGINAL, variable)]['initial_value'])
+
+    def test_only_dependents_with_an_initial_condition_carry_one(self):
+        graph = symbol_graph(self.translator, self.system)
+        carrying = {data['symbol'] for node, data in graph.nodes(data=True)
+                    if data['layer'] == ORIGINAL and 'initial_value' in data}
+        self.assertEqual(set(self.system.initial_conditions), carrying)
+
+    def test_a_reduced_dependent_starts_where_its_monomial_does(self):
+        # The node says what the reduced symbol is, in the original symbols, and where
+        # it starts, in the reduced parameters.  Written back in the original symbols,
+        # the start is the monomial with t = 0 and each dependent at its initial value.
+        for prepare in (lambda translator: None,
+                        lambda translator: translator.multiplier_add_columns(
+                            translator.column_of('c/s_0'),
+                            translator.column_of('s/s_0'))):
+            translator = ODETranslator.from_ode_system(self.system)
+            prepare(translator)
+            graph = symbol_graph(translator, self.system)
+            self.assertNotIn('initial_conditions_refused', graph.graph)
+            reduced = {data['symbol']: data for node, data in graph.nodes(data=True)
+                       if data['layer'] == REDUCED}
+            denotes = {symbol: data['monomial'] for symbol, data in reduced.items()}
+            at_the_start = dict(self.system.initial_conditions)
+            at_the_start[self.system.independent_variable] = 0
+            starting = {symbol: data['initial_value']
+                        for symbol, data in reduced.items() if 'initial_value' in data}
+            self.assertEqual(2, len(starting))
+            for symbol, stated in starting.items():
+                with self.subTest(symbol=symbol):
+                    defined = denotes[symbol].subs(at_the_start, simultaneous=True)
+                    written_back = sympy.sympify(stated).subs(denotes, simultaneous=True)
+                    self.assertEqual(0, sympy.simplify(defined - written_back))
+
+    def test_a_refusal_is_recorded_and_the_graph_is_still_built(self):
+        # Multiply c's invariant by the clock invariant: its start no longer depends on
+        # c(0), which the reduction refuses.  The graph is for looking at exactly such a
+        # multiplier, so it says why and carries no reduced starts.
+        self.translator.multiplier_add_columns(
+            self.translator.column_of('c/s_0'), self.translator.column_of('k_1*s_0*t'))
+        with self.assertRaises(ValueError) as caught:
+            self.translator.translate(self.system)
+        graph = symbol_graph(self.translator, self.system)
+        self.assertEqual(str(caught.exception), graph.graph['initial_conditions_refused'])
+        self.assertEqual(2 * len(self.system.symbols), graph.number_of_nodes())
+        self.assertFalse([node for node, data in graph.nodes(data=True)
+                          if data['layer'] == REDUCED and 'initial_value' in data])
+
+    def test_a_system_with_no_initial_conditions_carries_none(self):
+        system = ODESystem.from_equations(MICHAELIS_MENTEN)
+        graph = symbol_graph(ODETranslator.from_ode_system(system), system)
+        self.assertFalse([node for node, data in graph.nodes(data=True)
+                          if 'initial_value' in data])
+        self.assertNotIn('initial_conditions_refused', graph.graph)
+
+    def test_the_label_has_a_second_line_for_the_start(self):
+        graph = symbol_graph(self.translator, self.system)
+        s = sympy.Symbol('s')
+        plain = _node_label(graph.nodes[(ORIGINAL, s)], latex=False)
+        self.assertEqual('s\ns(0) = s_0', plain)
+        set_in_tex = _node_label(graph.nodes[(ORIGINAL, s)])
+        self.assertEqual(2, len(set_in_tex.split('\n')))
+        self.assertIn('(0) =', set_in_tex.split('\n')[1])
+        # A parameter has one line.
+        k_1 = sympy.Symbol('k_1')
+        self.assertNotIn('\n', _node_label(graph.nodes[(ORIGINAL, k_1)]))
