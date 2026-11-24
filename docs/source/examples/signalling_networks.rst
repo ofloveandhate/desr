@@ -158,7 +158,7 @@ All five have the same two symmetries, and all five reductions choose the same t
 units: time in :math:`1/k_2` and concentration in :math:`k_2/k_1`.  In each, the
 reduction removes two rate constants, whatever the size of the network.
 
-The script this page replaces identified the two-layer cascade with equations
-(35)–(38) of `arXiv:1101.5799 <https://arxiv.org/abs/1101.5799>`_.
+The two-layer cascade is equations (35)–(38) of
+`arXiv:1101.5799 <https://arxiv.org/abs/1101.5799>`_.
 
 The reduction applies the parameter scheme to each of them; see :ref:`three-schemes`.
