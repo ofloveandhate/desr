@@ -191,6 +191,23 @@ def symbol_graph(translator, system, direction=FORWARD):
         ``value``
             present only when known: given for the original symbols, derived for the
             reduced ones.
+        ``initial_value``
+            present on a dependent variable that has an initial condition: the symbol the
+            caller gave on the original side, and on the reduced side what the reduction
+            states, in the reduced parameters.
+        ``initial_value_of``
+            present on a parameter that is the initial value of dependent variables in its
+            own layer: a tuple of them.  On the original side every initial value is such
+            a parameter.  On the reduced side one may instead be a number or a monomial in
+            several parameters, and then no node has it.
+
+    Graph attributes:
+        ``direction``
+            ``'forward'`` or ``'reverse'``.
+        ``initial_conditions_refused``
+            present when the system has initial conditions and the reduction this
+            multiplier gives does not carry them over: the reason, as the reduction
+            states it.  The reduced nodes then have no ``initial_value``.
 
     Edge attributes:
         ``exponent``
@@ -272,6 +289,18 @@ def symbol_graph(translator, system, direction=FORWARD):
     original_values = dict(system.parameter_values)
     reduced_values = translator.propagated_parameter_values()
 
+    # Where each dependent starts.  The reduced side is asked of the reduction itself,
+    # which is the one place that works it out, and which may refuse: this graph is for
+    # looking at a multiplier, including one whose reduction cannot carry the initial
+    # conditions over, so a refusal is recorded on the graph rather than raised.
+    original_initial = system.initial_conditions
+    reduced_initial, refused = {}, None
+    if original_initial:
+        try:
+            reduced_initial = translator.translate(system).initial_conditions
+        except (ValueError, NotImplementedError) as error:
+            refused = str(error)
+
     # Which auxiliary columns the reduction normalises, **one at a time**.  It is not an
     # all-or-nothing property of the scheme: an auxiliary is normalised exactly when it is
     # a monomial in the original parameters alone, because only then is it constant, and a
@@ -297,8 +326,21 @@ def symbol_graph(translator, system, direction=FORWARD):
         REDUCED: set(translator.reverse_symbols_that_must_not_be_zero()),
     }
 
+    def started_by(initial):
+        '''Each symbol that is an initial value, with the dependents that start at it.'''
+        starts = {}
+        for variable, value in initial.items():
+            if isinstance(value, sympy.Symbol):
+                starts.setdefault(value, []).append(variable)
+        return {value: tuple(variables) for value, variables in starts.items()}
+
+    original_starts = started_by(original_initial)
+    reduced_starts = started_by(reduced_initial)
+
     graph = networkx.DiGraph()
     graph.graph['direction'] = direction
+    if refused is not None:
+        graph.graph['initial_conditions_refused'] = refused
 
     for index, symbol in enumerate(originals):
         attributes = {
@@ -316,6 +358,10 @@ def symbol_graph(translator, system, direction=FORWARD):
         }
         if symbol in original_values:
             attributes['value'] = original_values[symbol]
+        if symbol in original_initial:
+            attributes['initial_value'] = original_initial[symbol]
+        if symbol in original_starts:
+            attributes['initial_value_of'] = original_starts[symbol]
         graph.add_node((ORIGINAL, symbol), **attributes)
 
     for index, symbol in enumerate(names):
@@ -345,6 +391,10 @@ def symbol_graph(translator, system, direction=FORWARD):
         # shown by the hatch rather than by an equation.
         if not normalised and symbol in reduced_values:
             attributes['value'] = reduced_values[symbol]
+        if symbol in reduced_initial:
+            attributes['initial_value'] = reduced_initial[symbol]
+        if symbol in reduced_starts and symbol in names:
+            attributes['initial_value_of'] = reduced_starts[symbol]
         graph.add_node((REDUCED, symbol), **attributes)
 
     # The multiplier is indexed [original, reduced] and its inverse [reduced, original], so
@@ -424,25 +474,80 @@ def _node_label(data, with_monomial=False, latex=True, show_normalisation=True):
     direction: the reduction normalises on the way out, and on the way back those same
     auxiliaries are the values a recovery has to be told.
 
+    Where a dependent variable starts is said once, on the parameter that is its initial
+    value: :math:`s_0 = s(0)`, :math:`\\kappa_2 = \\nu_1(0) = s_0/e_0`.  A reduced
+    dependent may start at something that is not one parameter, a number or a monomial in
+    several, and then it is a second line under the dependent itself:
+    :math:`\\nu_1(0) = 1`.
+
     Set in mathtext by default, which :mod:`matplotlib` renders itself -- no LaTeX
     installation -- so ``kappa0`` prints as :math:`\\kappa_0` and a quotient as a built-up
     fraction rather than with a slash.
     '''
     parts = [data['symbol']]
+    for variable in data.get('initial_value_of', ()):
+        parts.append(sympy.Function(str(variable))(0))
     if with_monomial:
         parts.append(data['monomial'])
     if 'value' in data:
         parts.append(data['value'])
 
     normalised = data['normalised'] and show_normalisation
+    # A start that is a parameter is written on that parameter's node.
+    own_line = ('initial_value' in data
+                and not isinstance(data['initial_value'], sympy.Symbol))
     if latex:
         # expr_to_tex rather than sympy.latex: desr writes a negative subscript `k_m1`,
         # which sympy sets as a literal m.  display_tex because this is a figure, where
         # an inline fraction comes out half height.
         chain = ' = '.join(display_tex(expr_to_tex(part)) for part in parts)
-        return '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
+        label = '${}{}$'.format(chain, r' \mapsto 1' if normalised else '')
+        if own_line:
+            label += '\n${}(0) = {}$'.format(
+                display_tex(expr_to_tex(data['symbol'])),
+                display_tex(expr_to_tex(data['initial_value'])))
+        return label
     chain = ' = '.join(str(part) for part in parts)
-    return chain + (' |-> 1' if normalised else '')
+    label = chain + (' |-> 1' if normalised else '')
+    if own_line:
+        label += '\n{}(0) = {}'.format(data['symbol'], data['initial_value'])
+    return label
+
+
+def _node_label_lines(data, with_monomial=False, latex=True, show_normalisation=True):
+    '''
+    A label as a symbol and two continuation lines, where it is long enough to want them.
+
+    A parameter that is an initial value and also has an expression or a value reads
+    :math:`\\kappa_3 = \\nu_0(0) = c_0/e_0 = 0` in one line.  Here it is the symbol, then
+    ``= nu0(0)``, then ``= c_0/e_0 = 0``, for the drawing to set on two lines with the
+    equals signs under one another.  The same parts as :func:`_node_label`, in the same
+    order.
+
+    Returns:
+        tuple or None: ``(symbol, [first line, second line])``, each line starting with
+        its equals sign; :const:`None` for a label that stays on one line.
+    '''
+    whose = data.get('initial_value_of', ())
+    rest = []
+    if with_monomial:
+        rest.append(data['monomial'])
+    if 'value' in data:
+        rest.append(data['value'])
+    if not whose or not rest or data['auxiliary']:
+        return None
+    starts = [sympy.Function(str(variable))(0) for variable in whose]
+    normalised = data['normalised'] and show_normalisation
+    if latex:
+        def line(parts, arrow=False):
+            return '$= {}{}$'.format(
+                ' = '.join(display_tex(expr_to_tex(part)) for part in parts),
+                r' \mapsto 1' if arrow else '')
+        return ('${}$'.format(display_tex(expr_to_tex(data['symbol']))),
+                [line(starts), line(rest, normalised)])
+    return (str(data['symbol']),
+            ['= ' + ' = '.join(map(str, starts)),
+             '= ' + ' = '.join(map(str, rest)) + (' |-> 1' if normalised else '')])
 
 
 #: Where along an edge its exponent is written.  Every edge of a two-column layout has its
@@ -536,7 +641,7 @@ _KIND_SWATCHES = {'parameter': _square_swatch, 'dependent': _circle_swatch}
 def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                       latex=True, legend=True, width=1.0, height=1.0, font_size=10,
                       node_size=320, faded=None, show_normalisation=None,
-                      legend_kwargs=None):
+                      legend_kwargs=None, label_padding=0.11):
     '''
     Draw an exponent graph.
 
@@ -571,6 +676,8 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
             only described when something carries it.
         width, height (float): The box the layout is drawn in.
         font_size (int): For the node and edge labels.
+        label_padding (float): How far outside its column a label is written, as a
+            fraction of `width`.
         node_size (int): Passed to :mod:`networkx`.
         faded (set, optional): Nodes to draw as removed -- pale, and every edge touching
             one pale with them.  They keep their places, which is the point: drawing the
@@ -658,7 +765,7 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     # Labels go *outside* the columns, not on the markers: a marker big enough to hold
     # `kappa0` or `c_0 = 0` would be a box of text rather than a vertex, and the middle of
     # the figure is needed for the edges.
-    padding = 0.11 * width
+    padding = label_padding * width
     target_layer = REDUCED if graph.graph.get('direction', FORWARD) == FORWARD else ORIGINAL
     for node, data in graph.nodes(data=True):
         x, y = positions[node]
@@ -669,13 +776,48 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                 'edgecolor': _BORDER, 'linewidth': 0.8,
                 'hatch': _AUXILIARY_LABEL_HATCH}
                if data['auxiliary'] else None)
-        ax.text(x + (-padding if on_the_left else padding), y,
-                _node_label(data,
-                            with_monomial=label_expressions
-                            and data['layer'] == target_layer,
-                            latex=latex, show_normalisation=normalisation),
-                fontsize=font_size, ha='right' if on_the_left else 'left', va='center',
-                bbox=box, alpha=_GONE_ALPHA if node in faded else None)
+        anchor = (x + (-padding if on_the_left else padding), y)
+        with_monomial = label_expressions and data['layer'] == target_layer
+        alpha = _GONE_ALPHA if node in faded else None
+        lines = _node_label_lines(data, with_monomial=with_monomial, latex=latex,
+                                  show_normalisation=normalisation)
+        if lines is None:
+            ax.text(anchor[0], anchor[1],
+                    _node_label(data, with_monomial=with_monomial, latex=latex,
+                                show_normalisation=normalisation),
+                    fontsize=font_size, ha='right' if on_the_left else 'left',
+                    va='center', bbox=box, alpha=alpha)
+            continue
+
+        # Two lines with the equals signs under one another.  Each piece is placed in
+        # points from the anchor, so the block keeps its shape whatever the axes'
+        # limits become; the widths are the text's own, which is measured.
+        head, tails = lines
+        renderer = getattr(ax.figure.canvas, 'get_renderer', ax.figure._get_renderer)()
+        to_points = 72.0 / ax.figure.dpi
+
+        def piece(words, align):
+            return ax.annotate(words, xy=anchor, xytext=(0, 0),
+                               textcoords='offset points', fontsize=font_size,
+                               ha=align, va='center', alpha=alpha,
+                               # Measured before the axes' limits are set, when the
+                               # anchor is still outside them; clipped, an annotation
+                               # reports no size at all.
+                               annotation_clip=False)
+
+        symbol = piece(head, 'right')
+        continued = [piece(words, 'left') for words in tails]
+        sizes = [written.get_window_extent(renderer) for written in continued]
+        gap = 0.15 * font_size
+        if on_the_left:
+            equals = -max(size.width for size in sizes) * to_points
+        else:
+            equals = symbol.get_window_extent(renderer).width * to_points + gap
+        upper, lower = (size.height * to_points for size in sizes)
+        leading = 0.35 * font_size
+        symbol.set_position((equals - gap, (lower + leading) / 2))
+        continued[0].set_position((equals, (lower + leading) / 2))
+        continued[1].set_position((equals, -(upper + leading) / 2))
 
     if label_edges:
         grouped = {}

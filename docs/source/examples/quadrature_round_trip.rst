@@ -187,7 +187,7 @@ and whose auxiliary is :math:`t z_1^2 = 0.25`.
     >>> y0_exact = sympy.lambdify(t, exact[y0].subs(constants), modules='numpy')
     >>> y1_exact = sympy.lambdify(t, exact[y1].subs(constants), modules='numpy')
 
-We do note that we cannot start time at :math:`t = 0`, because of the division by :math:`t` in the differential equations.  This also presents difficulties for the scale reduction of initial conditions in the general reduction scheme, which is why that is not currently supported by desr.
+We do note that we cannot start time at :math:`t = 0`, because of the division by :math:`t` in the differential equations.  It is also why an initial condition does not always carry over to a general-scheme reduction: a reduced variable that involves :math:`t` together with a dependent variable has no value at :math:`t = 0` that depends on the initial condition, and :meth:`~desr.ode_translation.ODETranslator.translate_general` refuses such a case.
 
 Solving the reduced system
 --------------------------

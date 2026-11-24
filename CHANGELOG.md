@@ -22,6 +22,13 @@ each can be turned off.
     constant, so it can be set to 1.  That is a choice of units, not an
     assumption, and the choice is recorded in the caller's own symbols on
     the reduced system's `normalisations`.
+  - `translate_general` and `translate_dep_var` take a system with initial
+    conditions.  Each reduced
+    dependent starts at the value of its monomial at the start, stated in the
+    reduced parameters.  A case with no such value is refused by name: the
+    independent variable in an invariant with a dependent that has an initial
+    condition, a dependent used as a unit, an invariant mixing dependents with
+    and without initial conditions, or a division by a zero initial value.
   - A reduced system reports as parameters only the ones its equations use.
   - The reduced clock is called `t` only when it denotes `t`.  Where an
     invariant has been identified with it, the clock is a rescaled time and
@@ -115,7 +122,14 @@ each can be turned off.
   - `desr.figures.flowchart_figure` draws a reduction as nine numbered boxes
     of matrices, page-text wide and as tall as it needs.
   - `desr.figures.symbol_map_figure` draws it as a chain of five systems and
-    the four maps between them.
+    the four maps between them.  Its width is measured from what is in it,
+    so a small system gives a figure about one page-text wide; `size` sets
+    it by hand.
+  - A dependent variable with an initial condition is shown where it starts.
+    The symbol graph's nodes carry `initial_value`, and the parameter that is
+    an initial value carries `initial_value_of` and is drawn as
+    `s_0 = s(0)`.  A reduction that refuses the initial conditions still has
+    a graph, which records the reason as `initial_conditions_refused`.
   - `desr.symbol_graph` is the exponent graph both are built on, with
     `ODETranslator.symbol_graph` and `draw_symbol_graph` as the way in.
   - Neither figure computes anything.  Every matrix, monomial, dimension and
