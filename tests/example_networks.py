@@ -21,8 +21,19 @@ from desr import ODESystem
 
 
 def example_two_step_phosphorelay():
-    ''' Two-step Phosphorelay example.  Not from arXiv:1101.5799; its source is not
-        recorded.
+    ''' Two-step Phosphorelay example.
+
+        Source unknown.  It is not in arXiv:1101.5799.  It was added to the library's
+        examples on 2017-01-18 with the description below and no reference, and no
+        paper, draft or dissertation connected with the library has been found to
+        contain it.  The description was pasted from some document, and the other
+        networks' descriptions, pasted from the same one, speak of species being
+        "highly diffusible", which may help identify it.
+
+        What can be checked is that it is self-consistent: `test_example_networks.py`
+        derives the mass-action equations of the reactions the description gives and
+        requires them to be these.
+
         Let S be a signal that activates X 1 . The activated form of X 1 gives its phosphate group to X 2
         to activate it. Both X 1 and X 2 have phosphatases, F 1 and F 2 , respectively. Y 1 , Y 2 and Y 3 are
         intermediate species.

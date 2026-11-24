@@ -127,7 +127,10 @@ reactions.
   second.  Motif (j), equations (53)–(58).
 - **Two-step phosphorelay.**  A signal activates :math:`X_1`, whose activated form
   passes its phosphate group to :math:`X_2`; each has a phosphatase.  This one is not
-  from that paper.
+  from that paper, and where it is from is not known: it has been in the library's
+  examples since 2017 with a description and no reference.  Its equations are the
+  mass-action equations of the reactions that description gives, which the tests
+  check.
 
 .. list-table::
    :header-rows: 1
