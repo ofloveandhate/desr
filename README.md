@@ -11,10 +11,6 @@ This package accompanies a paper "Nondimensionalisation is more science than art
 
 ## Getting Started
 
-### Prerequisites
-
-This package requires the Sympy package.
-
 ### Installing
 
 From PyPI:
@@ -31,8 +27,11 @@ From a clone of the repository:
 
 ## Running the tests
 
-Doctests are included in most files. To run them, simply run the module. E.g. "python -m doctest -v module.py"
-To run all tests, use Sphinx's `make doctest`.
+From a clone of the repository, with matplotlib and pytest installed:
+
+`$ python -m pytest tests/`
+
+The worked examples in the documentation are doctests too: `python -m sphinx -b doctest docs/source docs/build/doctest`.
 
 ## Built With
 
@@ -49,9 +48,8 @@ Submissions for contribution are always welcome.
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the Apache 2.0 License - see the [LICENSE](https://github.com/ofloveandhate/desr/blob/main/LICENSE) file for details
 
 ## Acknowledgments
 
 * Dr. Heather Harrington and Dr. Emilie Dufresne for their supervision of the dissertation.
-* Thomas Close for writing his diophantine module, which is included in this package.

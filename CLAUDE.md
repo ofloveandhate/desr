@@ -77,9 +77,6 @@ Integer matrix algorithms: Hermite Normal Form (`hnf_row`, `hnf_col`, `normal_hn
 **`desr/chemical_reaction_network.py` — `ChemicalReactionNetwork`**
 Builds `ODESystem` objects from chemical reaction networks specified via `ChemicalSpecies`, `Complex`, and `Reaction` objects.
 
-**`desr/diophantine.py`**
-Third-party module (Thomas Close) for solving Diophantine equations; used internally by `matrix_normal_forms`.
-
 **`desr/sympy_helper.py`, `desr/tex_tools.py`**
 Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
 

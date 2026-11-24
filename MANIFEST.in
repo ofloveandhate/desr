@@ -1,5 +1,9 @@
 # What the source distribution carries besides the package: the changelog, and the tests,
 # so that someone who unpacks it can run them.  README.md and LICENSE are included by
 # setuptools itself.
+#
+# Not tests/test_repository.py: it tests the repository's own tooling and reads files the
+# archive does not carry, and every test shipped has to run from the archive alone.
 include CHANGELOG.md
 recursive-include tests *.py
+exclude tests/test_repository.py
