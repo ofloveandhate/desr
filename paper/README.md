@@ -21,6 +21,16 @@ python paper/cell_cycle.py
 
 Two of the scripts, `michaelis_menten_two_variable.py` and `segel_slemrod.py`, have no code of their own. Those examples are worked out on pages of the documentation, `docs/source/examples/mm_basic.rst` and `segel_slemrod.rst`, and the scripts run the computations on those pages in order and print each with its result. `_from_page.py` is what does that.
 
+## Figures
+
+A script that has figures in the paper draws them when it is run, into `figures/`, each as a PDF for the paper and a PNG for looking at. The PDF is written without a creation date, so the same figure gives the same file. `figures/` is not kept in the repository; run the script, or `regenerate_expected.py`, to make them.
+
+| script | figures |
+|---|---|
+| `michaelis_menten_initial_conditions.py` | `michaelis_menten_initial_conditions_flowchart` |
+
+The figures need the `graphs` extra: `pip install 'desr[graphs]'`.
+
 ## The expected output
 
 `expected/` holds what each script printed when it was last looked at. `tests/test_paper_scripts.py` runs every script and compares. If a change to the library alters something a script prints, the test fails and shows which lines moved, so a result that is in the paper cannot change without anyone noticing.

@@ -12,12 +12,13 @@ did to `paper/expected/`, and commit both.
 import difflib
 import pathlib
 import sys
+import tempfile
 from unittest import TestCase
 
 PAPER = pathlib.Path(__file__).resolve().parent.parent / 'paper'
 sys.path.insert(0, str(PAPER))
 
-from regenerate_expected import EXPECTED, output_of, scripts    # noqa: E402
+from regenerate_expected import DRAWN, EXPECTED, output_of, scripts    # noqa: E402
 
 #: The examples the paper has.  A script added or removed has to be added or removed
 #: here too, so that the list is a decision and not an accident of what is in the folder.
@@ -38,13 +39,24 @@ class TestThePaperScripts(TestCase):
                 expected = (EXPECTED / (script.stem + '.txt')).read_text()
                 # Another hash seed than the one the expected output was written with,
                 # so that output depending on the order a set iterates in fails here.
-                printed = output_of(script, hash_seed='1')
+                # Figures go to a directory of the test's own, so that running the
+                # tests does not rewrite the ones in paper/figures/.
+                with tempfile.TemporaryDirectory() as scratch:
+                    printed = output_of(script, hash_seed='1', figures=scratch)
+                    for name in DRAWN.get(script.stem, []):
+                        for suffix in ('.pdf', '.png'):
+                            drawn = pathlib.Path(scratch) / (name + suffix)
+                            self.assertTrue(drawn.is_file(), drawn.name)
+                            self.assertGreater(drawn.stat().st_size, 2000, drawn.name)
                 if printed != expected:
                     difference = '\n'.join(list(difflib.unified_diff(
                         expected.splitlines(), printed.splitlines(),
                         'expected', 'printed', lineterm='', n=1))[:60])
                     self.fail('{} no longer prints what paper/expected/{}.txt holds:\n{}'
                               .format(script.name, script.stem, difference))
+
+    def test_only_the_papers_examples_draw_figures(self):
+        self.assertLessEqual(set(DRAWN), set(EXAMPLES))
 
     def test_an_expected_output_is_not_empty(self):
         for name in EXAMPLES:

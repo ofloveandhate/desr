@@ -1,5 +1,5 @@
 """
-Write the output of every script here into `expected/`.
+Write the output of every script here into `expected/`, and its figures into `figures/`.
 
 Run this after a change that is meant to alter what a script prints, read the
 difference it makes to `expected/` as you would any other change, and commit both.
@@ -16,6 +16,12 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 EXPECTED = HERE / 'expected'
+FIGURES = HERE / 'figures'
+
+#: The figures each script draws, by the script's name.  A script not listed draws none.
+DRAWN = {
+    'michaelis_menten_initial_conditions': ['michaelis_menten_initial_conditions_flowchart'],
+}
 
 
 def scripts():
@@ -24,15 +30,16 @@ def scripts():
                   if not path.name.startswith('_') and path.name != pathlib.Path(__file__).name)
 
 
-def output_of(script, hash_seed='0'):
+def output_of(script, hash_seed='0', figures=FIGURES):
     '''
-    What a script prints.
+    What a script prints.  Any figures it draws are written into `figures`.
 
     Run in a process of its own, as a reader would run it.  The hash seed is fixed so
     that a script which prints a set in whatever order it happens to iterate in is
     caught: the test runs with another seed and must get the same text.
     '''
-    environment = dict(os.environ, PYTHONHASHSEED=hash_seed, MPLBACKEND='Agg')
+    environment = dict(os.environ, PYTHONHASHSEED=hash_seed, MPLBACKEND='Agg',
+                       DESR_PAPER_FIGURES=str(figures))
     result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True,
                             cwd=str(HERE.parent), env=environment)
     if result.returncode != 0:

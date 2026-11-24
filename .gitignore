@@ -97,3 +97,6 @@ docs/source/figures/*.pdf
 
 # Local notes
 z_notes/
+
+# Figures the scripts in paper/ draw.  Made on demand, not kept.
+paper/figures/

@@ -11,6 +11,42 @@ import sympy
 
 from desr import ODESystem, ODETranslator
 
+#: The order of the variables.  The front is the end that is scaled by, so `s0`, `e_0`
+#: and `k_1` are what this reduction normalises.  `c_0` goes towards the back, the end
+#: that is kept: it is zero, and a zero must not be scaled by.
+VARIABLE_ORDER = ['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0', 't', 'c', 's']
+
+
+def the_system():
+    '''
+    The two-variable system with the Michaelis constant and its initial conditions.
+
+    The complex starts at nothing.  `c(0) = 0` records the value against a symbol `c_0`,
+    and `c_0` carries the units: a zero concentration is a concentration, so the
+    reduction stays symbolic.
+    '''
+    system = ODESystem.from_tex(
+        '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
+             \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c''')
+    system.add_constraint('Km', '(k_m1 + k_2) / k_1')
+    system.update_initial_conditions(['s(0) = s0', 'c(0) = 0'])
+    system.reorder_variables(VARIABLE_ORDER)
+    return system
+
+
+def figures():
+    '''
+    The figures the paper has for this example, written by `_figures.save`.
+
+    Each is drawn from the system alone: the figure functions compute the reduction
+    themselves, with the library's own choice of invariants and names.
+    '''
+    from desr.figures import flowchart_figure
+
+    from _figures import save
+
+    save(flowchart_figure(the_system()), 'michaelis_menten_initial_conditions_flowchart')
+
 
 def michaelis_menten_two_variable(verbose=True):
     """
@@ -22,37 +58,16 @@ def michaelis_menten_two_variable(verbose=True):
     # Enable pretty printing
     sympy.init_printing(pretty_print=True, use_latex=True)
 
-    def system_tex_two_var():
-        return '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
-             \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
-
-
     def with_initial_conditions_and_a_constant():
         '''
         this code reproduces the michaelis-menten example in the literature.
         '''
-        system_tex = system_tex_two_var()
-
-
-        system = ODESystem.from_tex(system_tex)
-        system.add_constraint('Km', '(k_m1 + k_2) / k_1')
-
-
-
+        system = the_system()
 
         print('\n\nAdding in the initial conditions')
         print('-------------------------------------')
-        # The complex starts at nothing.  `c(0) = 0` records the value against a symbol
-        # `c_0`, and `c_0` carries the units: a zero concentration is a concentration, so
-        # the reduction stays symbolic.
-        system.update_initial_conditions(['s(0) = s0', 'c(0) = 0'])
         print('initial conditions:', system.initial_conditions)
         print('as values         :', system.initial_condition_values)
-
-        # `c_0` goes towards the back, which is the end that is *kept*.  A zero must not be
-        # scaled by, and the front of the order is the scale-by end.
-        system.reorder_variables(['s0','e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0', 't', 'c', 's'])
-
 
         print('System:', system)
         print('Variable order: ', system.symbols)
@@ -177,3 +192,4 @@ def michaelis_menten_two_variable(verbose=True):
 
 if __name__ == '__main__':
     michaelis_menten_two_variable()
+    figures()
