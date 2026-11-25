@@ -1,6 +1,3 @@
-
-
-
 Michaelis-Menten with initial conditions and a constant
 =============================================================
 
@@ -20,7 +17,7 @@ There are two chemical species :math:`E` and :math:`S`, which reversibly combine
     E+S\leftrightarrow ES \rightarrow E+P
     \]
 
-After using the law of mass action, we are able to translate to the ODE system
+After using the law of mass action, we are able to reduce to the two-variable ODE system
 
 .. math::
     :nowrap:
@@ -31,7 +28,7 @@ After using the law of mass action, we are able to translate to the ODE system
     s(0) &= s_0, & c(0) &= 0.
     \end{align}
 
-Both initial conditions are part of the model: the complex starts at nothing.
+Both initial conditions are part of the model.
 
 
 
@@ -41,37 +38,39 @@ Model reduction in `desr`
 First we must create the system in Python.  We start with the same system, represented in a string in TeX.
 
     >>> system_tex = '''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\\\
-    ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
+    ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c\\\\
+    ...          s(0) &= s_0\\\\
+    ...          c(0) &= 0'''
     >>> system = ODESystem.from_tex(system_tex)
 
 Add the constraint with the Michaelis-Menten constant :math:`K_m = k_2 + k_{-1}`.
-    
-    >>> system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
+
+    >>> system.add_constraint('K_m = (k_m1 + k_2) / k_1')
 
 To match the analysis in Murray, we need our initial conditions.  Both of them: the
-substrate starts at :math:`s_0`, and the complex starts at nothing.
+substrate starts at :math:`s_0`, and the complex starts at nothing.  Note that initial
+conditions are always symbol names.
 
-    >>> system.update_initial_conditions(['s(0) = s_0', 'c(0) = 0'])
     >>> system.initial_conditions
     {s: s_0, c: c_0}
 
 A number still carries units in a system that has not been reduced -- a zero concentration
 is a concentration -- so it is recorded as the *value* of a symbol, and the symbol is what
-carries the units into the scaling.  The name is inferred from the variable's:
+carries the units into the scaling.  The name is inferred from the variable:
 
     >>> system.initial_condition_values
     {c: 0}
 
-Reading the two together: :math:`c(0)` is :math:`c_0`, and :math:`c_0` is zero.
+Reading the two together: the name for :math:`c(0)` is :math:`c_0`, and :math:`c_0` has value zero.
 
 Choose the variable order.  :math:`c_0` goes towards the back, which is the end that is
 *kept*: the front is the end that gets scaled by, and a quantity known to be zero must not
-be scaled by.
+be scaled by, lest we are required to divide by zero.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
 Now the exponent matrix can be read against that order: one row per variable, in the order
-just chosen, and one column per monomial appearing in the system.
+just chosen; one column per monomial appearing in the system.
 
     >>> system.exponent_matrix()
     Matrix([
@@ -88,7 +87,7 @@ just chosen, and one column per monomial appearing in the system.
 
 Compute the reduced system by making an `ODETranslator` from the original system,
 
-The reduced parameters are named :math:`\kappa_i`.  Here :math:`c` is a dependent variable
+Reduced parameters are named :math:`\kappa_i`.  Here :math:`c` is a dependent variable
 and its initial value is :math:`c_0`, which a parameter named :math:`c_0` would be hard to
 read beside.
 
@@ -109,7 +108,9 @@ The corresponding scaling invariants:
 These don't match those from Murray, but they are very close.   We'll recover it next.
 
 The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
-among them.
+among them.  (the forward part of this function's name indicates this is for those that
+must not be 0 when translating in the forward direction -- the reverse has another
+set of symbols that must not be 0)
 
     >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, k_1)
@@ -145,20 +146,20 @@ Returning back to the original system with initial conditions,
     parameter values: c_0 = 0
     >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['u','v']})
 
-Do some column operations on the Hermite multiplier
+Let's do some column operations on the Hermite multiplier to manipulate the invariants.
 
 Rather than writing the column numbers in directly, ask which column holds which invariant.
 The numbers are the same, and still worth knowing -- but now they are derived on the page
 instead of appearing from nowhere.
 
-    >>> clock = translator.column_of('k_1*s_0*t')
-    >>> scale = translator.column_of('e_0/s_0')
-    >>> concentration = translator.column_of('c/s_0')
-    >>> clock, scale, concentration
+    >>> clock_col = translator.column_of('k_1*s_0*t')
+    >>> scale_col = translator.column_of('e_0/s_0')
+    >>> concentration_col = translator.column_of('c/s_0')
+    >>> clock_col, scale_col, concentration_col
     (7, 2, 9)
 
-    >>> translator.multiplier_add_columns(clock, scale)  # Scale time by e_0 not s_0
-    >>> translator.multiplier_add_columns(concentration, scale, power=-1)  # Scale c by e_0
+    >>> translator.multiplier_add_columns(clock_col, scale_col)  # Scale time by e_0 not s_0.  Default power is 1.
+    >>> translator.multiplier_add_columns(concentration_col, scale_col, power=-1)  # Scale c by e_0
 
 Optionally, see the invariants and substitutions
 
@@ -170,7 +171,7 @@ We have substitutions to make.  Note that many get normalised to :math:`1`.
     >>> translator.translate_parameter_substitutions(system)
     {s_0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, K_m: kappa3, c_0: kappa4, t: tau/kappa0, s: u, c: kappa0*v}
 
-Translate
+Once we're done manipulating the multiplier, we finally translate.
 
     >>> reduced_system = translator.translate(system)
     >>> reduced_system
@@ -194,17 +195,16 @@ Reading the reduction as a graph
 *************************************************
 
 The Hermite multiplier is the weighted biadjacency matrix of a bipartite graph: the
-original symbols on one side, the reduced ones on the other, and an edge carrying the
+original symbols on one side, the reduced symbols on the other, and an edge carrying the
 exponent with which its source appears in its target.  So the reduction can be drawn as
-well as printed, and the zero can be followed through it.
+well as printed, and the initial condition's value of zero can be followed through it.
 
     >>> graph = translator.symbol_graph()
     >>> graph.number_of_nodes(), graph.number_of_edges()
     (20, 22)
 
-:math:`c_0` has exactly one edge.  It is positive, and it runs to an invariant rather than
-to an auxiliary -- which is the whole of why a zero initial condition survives this
-reduction.  Nothing divides by :math:`c_0`, so the invariant it feeds is simply zero.
+:math:`c_0` has exactly one edge.  It is positive, and it runs to a (scale-) invariant symbol rather than
+to an auxiliary.  Nothing divides by :math:`c_0`, so the invariant it feeds into is simply zero.  (Note that desr reports division by zero via an exception, not demonstrated here)
 
     >>> list(graph.out_edges(('original', sympy.Symbol('c_0')), data='exponent'))
     [(('original', c_0), ('reduced', kappa4), 1)]
@@ -233,7 +233,8 @@ side, so the reverse graph gives :math:`c_0` as a monomial in the reduced symbol
 Drawing it is one further call --
 :meth:`~desr.ode_translation.ODETranslator.draw_symbol_graph` for a figure straight from
 the translator, or :func:`desr.symbol_graph.draw_symbol_graph` on a graph you already
-hold.
+hold.  Drawing needs :mod:`matplotlib`, which `desr` does not install --
+``pip install matplotlib``.
 
 .. plot::
     :include-source:
@@ -270,11 +271,11 @@ hold.
     coming_back.set_title('reverse', fontsize=14)
     figure.tight_layout()
 
-What the figure says about this system, which is a page of prose otherwise:
+What the figure says about this system:
 
 - the reduction divides by :math:`s_0`, :math:`e_0` and :math:`k_1` -- the heavy
   borders -- and does not divide by :math:`c_0`, which is why a zero initial condition
-  survives it;
+  is allowed in :math:`c_0` but not in `math:`s_0`;
 - :math:`c_0` has a single edge, positive, into an invariant rather than an auxiliary,
   so that invariant is simply zero: :math:`\kappa_4 = c_0/s_0 = 0`;
 - coming back, :math:`c_0 = \kappa_4 x_1`, so the zero returns the way it came;
@@ -282,26 +283,23 @@ What the figure says about this system, which is a page of prose otherwise:
   :math:`s_0` and :math:`k_1` are absorbed; coming back they are the two values a
   reverse translation has to be told.
 
-The source layer is on the left in both panels, so the reduced column ends the first and
-begins the second at the same heights, and the round trip
+The source is is on the left in both panels, and the reduced column ends the first and
+begins the second at the same heights, so the round trip
 :math:`c_0 \rightarrow \kappa_4 \rightarrow c_0` reads as one path across the pair.  Shape
-says what a symbol is and a heavy border marks what must not be zero, so the three symbols
-listed above are the three outlined ones, and :math:`c_0` is plainly not among them.
+says what a symbol is, and a heavy border marks what must not be zero.
 
-The hatched hexagons are the auxiliaries, and they are the one thing the two panels
-disagree about.  Going out they are normalised to 1, which is how :math:`s_0` and
-:math:`k_1` are absorbed.  Coming back they are unknowns: recovering the original values
+The hatched shapes are the auxiliaries, and they are the one thing the two panels
+disagree about.  In the forward translation they are normalized to 1, which is how :math:`s_0` and
+:math:`k_1` are "absorbed".  Coming back they are unknowns: recovering the original values
 needs two of them supplied from somewhere, which is what
-:class:`desr.numerics.InsufficientKnownValues` is raised about.
+:class:`desr.numerics.InsufficientKnownValues` is raised about, discussed elsewhere in the documentation.
 
-Drawing needs :mod:`matplotlib`, which `desr` does not install --
-``pip install matplotlib``.
 
 Matching the names in the literature
 *************************************************
 
 Now we have a system, but the names of symbols don't match.  We'll do substitutions.
-Murray has no name for :math:`\kappa_4`, because he sets it to zero; :math:`\gamma` until
+Murray has no name for :math:`\kappa_4`, because he sets it to zero; we'll call it :math:`\gamma` until
 we do the same.
 
     >>> to_sub =  {'kappa0': 'epsilon', 'kappa1': 'L', 'kappa2':'K-L', 'kappa3':'K', 'kappa4': 'gamma'}
@@ -317,7 +315,7 @@ we do the same.
 
 Murray writes three groups, not four, because he sets the initial complex to zero.
 Substituting the value the system holds for :math:`\gamma` does the same, and the group
-goes with it.  Substituting any other value is refused, since it would contradict
+evaporates out of the system with it.  Substituting any other value is refused, since it would contradict
 :math:`c(0) = 0`.
 
     >>> reduced_system.subs({'gamma': 0})
@@ -328,7 +326,7 @@ goes with it.  Substituting any other value is refused, since it would contradic
     v(0) = 0
     parameters: K, L, epsilon
 
-The only step that `desr` cannot do is multiply :math:`\frac{dv}{d\tau}` by :math:`\epsilon`.  That has to be done by hand.  And finally we have the result from :cite:`murray` (6.13).
+The only step that `desr` cannot currently do is multiply :math:`\frac{dv}{d\tau}` by :math:`\epsilon`.  That has to be done by hand. Finally we have the result from :cite:`murray` (6.13).
 
 .. math::
     :nowrap:
