@@ -1,0 +1,135 @@
+
+
+----------------------
+michaelis_menten_four_variables
+-----------------------
+
+
+
+
+Four-variable with ICs
+-----------------------------------
+initial conditions: {S: S_0, E: E_0, C: C_0, P: P_0}
+as values         : {C: 0, P: 0}
+system
+ dt/dt = 1
+dC/dt = -C*k_2 - C*k_m1 + E*S*k_1
+dE/dt = C*k_2 + C*k_m1 - E*S*k_1
+dP/dt = C*k_2
+dS/dt = C*k_m1 - E*S*k_1
+C(0) = C_0
+E(0) = E_0
+P(0) = P_0
+S(0) = S_0
+parameters: S_0, k_1, k_2, k_m1, E_0, C_0, P_0
+parameter values: C_0 = 0, P_0 = 0
+variable order: (S_0, k_1, k_2, k_m1, E_0, C_0, P_0, t, C, E, P, S)
+scheme: parameter
+must not be zero: (S_0, k_1)
+Scaling matrix:
+Matrix([
+[0, -1, -1, -1, 0, 0, 0, 1, 0, 0, 0, 0],
+[1, -1,  0,  0, 1, 1, 1, 0, 1, 1, 1, 1]])
+Invariants:  ['kappa0=k_2/(S_0*k_1)', 'kappa1=k_m1/(S_0*k_1)', 'kappa2=E_0/S_0', 'kappa3=C_0/S_0', 'kappa4=P_0/S_0', 'tau=S_0*k_1*t', 'nu0=C/S_0', 'nu1=E/S_0', 'nu2=P/S_0', 'nu3=S/S_0']
+Reduced system:
+dtau/dtau = 1
+dnu0/dtau = -kappa0*nu0 - kappa1*nu0 + nu1*nu3
+dnu1/dtau = kappa0*nu0 + kappa1*nu0 - nu1*nu3
+dnu2/dtau = kappa0*nu0
+dnu3/dtau = kappa1*nu0 - nu1*nu3
+nu0(0) = kappa3
+nu1(0) = kappa2
+nu2(0) = kappa4
+nu3(0) = 1
+parameters: kappa0, kappa1, kappa2, kappa3, kappa4
+parameter values: kappa3 = 0, kappa4 = 0
+initial conditions, as values: {nu3: 1, nu0: 0, nu2: 0}
+Substitutions:
+{S_0: 1, k_1: 1, k_2: kappa0, k_m1: kappa1, E_0: kappa2, C_0: kappa3, P_0: kappa4, t: tau, C: nu0, E: nu1, P: nu2, S: nu3}
+
+
+Four-variable, imposing a choice of invariants
+-----------------------------------
+Variable order: (k_1, k_2, k_m1, t, C, E, P, S)
+Invariants: k_m1/k_2, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2
+Reduced system: dtau/dtau = 1
+dnu0/dtau = -kappa0*nu0 - nu0 + nu1*nu3
+dnu1/dtau = kappa0*nu0 + nu0 - nu1*nu3
+dnu2/dtau = nu0
+dnu3/dtau = kappa0*nu0 - nu1*nu3
+parameters: kappa0
+
+Imposing a choice of invariants
+--------------------------------
+Chosen invariants: ['C*k_1/k_2', 'P*k_1/k_m1']
+Extended to: C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2
+
+The extension step, for the paper
+--------------------------------
+P =
+Matrix([
+[ 1,  1],
+[-1,  0],
+[ 0, -1],
+[ 0,  0],
+[ 1,  0],
+[ 0,  0],
+[ 0,  1],
+[ 0,  0]])
+WdP=Matrix([
+[0, -1],
+[0,  0],
+[1,  0],
+[0,  0],
+[0,  1],
+[0,  0]])
+Smith normal form of W_d P:
+Matrix([
+[-1, 0, 0, 0, 0, 0],
+[ 0, 0, 1, 0, 0, 0],
+[ 0, 1, 0, 0, 0, 0],
+[ 0, 0, 0, 1, 0, 0],
+[ 1, 0, 0, 0, 1, 0],
+[ 0, 0, 0, 0, 0, 1]])
+*
+Matrix([
+[0, -1],
+[0,  0],
+[1,  0],
+[0,  0],
+[0,  1],
+[0,  0]])
+*
+Matrix([
+[0, 1],
+[1, 0]])
+=
+Matrix([
+[1, 0],
+[0, 1],
+[0, 0],
+[0, 0],
+[0, 0],
+[0, 0]])
+U^{-1} = Matrix([
+[-1, 0, 0, 0, 0, 0],
+[ 0, 0, 1, 0, 0, 0],
+[ 0, 1, 0, 0, 0, 0],
+[ 0, 0, 0, 1, 0, 0],
+[ 1, 0, 0, 0, 1, 0],
+[ 0, 0, 0, 0, 0, 1]])
+invariants this way: C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2
+
+Rearranging into the parameter scheme
+--------------------------------
+ratio=3, product=6
+invariants now: C*k_1/k_2, k_2/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2
+permutation derived from the kinds: [1, 2, 0, 3, 4, 5]
+final invariants: k_2/k_m1, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2
+Reduced system:
+dt/dt = 1
+dC/dt = -C - C/alpha + E*S
+dE/dt = C + C/alpha - E*S
+dP/dt = C
+dS/dt = C/alpha - E*S
+parameters: alpha

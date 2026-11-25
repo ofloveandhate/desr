@@ -105,6 +105,12 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   which is how a parameter-ordering bug survived until one of them tripped over it. In
   an `.rst` page, put a sentence between a `.. math::` block and a doctest block; an
   indented doctest directly after the math is taken as part of it and never runs.
+- `paper/` holds one script for each example in the paper that describes the library.
+  Each prints what is copied into the paper, and `paper/expected/` holds that output.
+  `tests/test_paper_scripts.py` compares them, so a change that moves a result in the
+  paper fails a test. When the change is meant, run `python paper/regenerate_expected.py`,
+  read the difference to `paper/expected/`, and commit both. Two of the scripts have no
+  code of their own and print the computations of a documentation page.
 - The figures are library code, in `desr/figures/`, and need matplotlib:
   `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
   draws it as a chain of systems. Neither computes anything — every matrix, monomial,
