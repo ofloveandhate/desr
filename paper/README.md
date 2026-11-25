@@ -29,7 +29,7 @@ A script that has figures in the paper draws them when it is run, into `figures/
 |---|---|
 | `michaelis_menten_initial_conditions.py` | `michaelis_menten_initial_conditions_flowchart`, `michaelis_menten_initial_conditions_symbol_map` |
 
-The figures need the `graphs` extra: `pip install 'desr[graphs]'`.
+The figures need matplotlib, which desr does not install: `pip install matplotlib`.
 
 ## The expected output
 
