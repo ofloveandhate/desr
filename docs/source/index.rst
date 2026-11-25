@@ -11,7 +11,7 @@ Contents
 .. toctree::
    :maxdepth: 2
 
-   examples/example_index
+   examples/_example_index
    symbol_kinds
    three_schemes
    isolating_the_clock
@@ -23,7 +23,7 @@ Contents
    ode_translation_doc
    ode_system_doc
    hermite_smith_doc
-   
+
    module_reference
 
    zbibliography
