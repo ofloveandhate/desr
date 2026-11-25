@@ -2,7 +2,7 @@ Multiple timescales: Segel-Slemrod analysis
 ============================================
 
 
-This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to matching Segel and Slemrod's analysis :cite:`Segel1989`, and in Chapter 6 of Murray :cite:`murray`.
+This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to matching Segel and Slemrod's timescale analysis :cite:`Segel1989`, and Murray's in Chapter 6 of :cite:`murray`.
 
 
 The model
@@ -41,7 +41,7 @@ Primary method
 ***********************************
 
 Let's recover :cite:`Segel1989` "outer" equations (8a-b).
-    
+
 Start with a fresh system.
 
     >>> system = ODESystem.from_tex(system_tex)
@@ -120,11 +120,11 @@ Add initial conditions
 
 the Michaelis constant
 
-    >>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
+    >>> system.add_constraint('K_m = (k_2 + k_m1) / k_1')
 
 The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), and :cite:`Segel1989` p. 451
 
-    >>> system.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
+    >>> system.add_constraint('epsilon = e_0 / (s_0 + K_m)')
 
 Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
 
@@ -155,7 +155,7 @@ and translate the system
     parameters: c0, c1, c2, c3, epsilon
 
 :math:`\epsilon` is dimensionless, so the scaling leaves it alone and it comes through
-the reduction under its own name.  The other four parameters are new quantities and are
+the reduction under its own name (you can disable this, so that all reduced symbols get a new name).  The other four parameters are new quantities and are
 named by the scheme.
 
 The scaling invariants:
@@ -163,7 +163,7 @@ The scaling invariants:
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), epsilon, k_1*s_0*t, s/s_0, c/s_0]])
 
-This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.  
+This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.
 
 To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :math:`V_8' = V_8 + V_3 - V_7`
 
@@ -211,10 +211,10 @@ We have the invariants up to this point of
 
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, e_0*k_1*t/epsilon, s/s_0, c/(epsilon*s_0)]])
-    
+
 
 Making some substitutions leads to :cite:`Segel1989` (21a-d)
-    
+
     >>> reduced_system = translator.translate(system)
     >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
     ...                                          'c2': '1 / (sigma * (kappa + 1))'},subs_constraints=True,
@@ -459,7 +459,7 @@ Translate and reduce the system
     c0 == c1 + 1
     parameters: c0, c1, c2, c3
 
-These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.  
+These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.
 
 
 First, the time and state variables:
@@ -502,7 +502,7 @@ we do a few substitutions, we get (6.23) from Murray.
     parameters: epsilon, kappa, sigma
 
 
-The equation for :math:`\frac{dc}{dT}` is exactly the same as Segel (24b), after some minor algebra.  
+The equation for :math:`\frac{dc}{dT}` is exactly the same as Segel (24b), after some minor algebra.
 The equation for :math:`\frac{ds}{dT}` also requires a bit of basic algebra, and is equal to Segal (24a).
 
 We recover Murray (6.23) with a bit more algebra, not shown here.
