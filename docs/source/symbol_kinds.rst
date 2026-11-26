@@ -1,22 +1,29 @@
 .. _symbol-kinds:
 
-What kind of thing each symbol is
+Symbol kinds in desr
 ===================================
+
+
+Desr has adopted the name `symbol` to be able to clarify between parameter and variable,
+because Silviana found the software difficult to reason and write about when everything
+was just called a "variable".  Symbol.  And a symbol can have a variety of attributes.
 
 Two questions can be asked of any symbol, and they are independent of each other:
 
-1. **Does it evolve?**  A parameter sits still, a dependent variable moves, and exactly one
-   symbol is the independent variable everything is integrated against.
+1. **Does it get a differential equation?**  A parameter sits still, a dependent variable moves, and exactly one
+   symbol is the independent variable everything is integrated against.  This one is subtle, as
+   you *are* actually allowed to have constant-variables (for example, I wanted to let you
+   model the catalysts in a chemical reaction network).
 2. **Does the scaling move it?**  The symmetry rescales some quantities and leaves others
    alone.  The ones it leaves alone are the invariants; the ones it moves are, on the
    reduced side, the auxiliaries.
 
 Neither answer implies the other.  Keeping them apart is what lets a reduction be
-described exactly, and running them together is what makes the auxiliaries confusing.
+described exactly.  Running them together is what makes auxiliaries confusing.
 
 
-Does it evolve?
------------------
+Does the symbol evolve?
+----------------------------
 
 The symbols partition into three groups, and `desr` names the collective as well as the
 parts:
@@ -55,7 +62,7 @@ there are :math:`r` of them, one per scaling symmetry.
 This says nothing about whether a symbol evolves.  :math:`1/(e_0 k_1)` is moved by the
 scaling and is also perfectly constant in time, because :math:`e_0` and :math:`k_1` are.
 
-The question can be asked of an original symbol too, and there it is whether that symbol's
+The question can be asked of an original symbol too; and there it is whether that symbol's
 column of the scaling matrix is zero.  A zero column means the symbol is already
 dimensionless: the scaling leaves it exactly where it is, and it survives the reduction as
 itself rather than as part of some combination.
@@ -75,8 +82,8 @@ reason it was dimensionless to begin with.  Most models have no such symbol, and
 every original symbol is moved by the scaling.
 
 
-The two together
-------------------
+Thinking of as a table
+------------------------
 
 A symbol is a point in the product of the two, not a value of a single attribute.  Laying
 the reduced symbols out on both axes shows which combinations actually occur.
@@ -120,7 +127,7 @@ to have:
 
 
 When the cell is not empty
------------------------------
+******************************
 
 Fill in that cell and the reduction behaves differently.  An enzyme-catalysed chain, built
 from its reaction network:
@@ -187,7 +194,7 @@ not in the reduced system.
     k_2_3*t
 
 
-Which row an auxiliary is in decides what becomes of it
+Parameter auxiliaries can be normalized
 ----------------------------------------------------------
 
 The table is not only bookkeeping.  The three auxiliaries in the **parameter** row are
@@ -217,11 +224,11 @@ reduced system already carries.
     ()
 
 
-Constants or quadratures
+Constant, or quadrature?
 ---------------------------
 
-The difference between those two tables is the difference between recovering the original
-system with constants and recovering it with integrals.
+A major difference between the two examples above is between recovering the original
+system with constants (mere substitution or evalution), or having to recover it with integrals.
 
 :cite:`Hubert2013c` writes the auxiliary system as :math:`\frac{dx}{dt} = x \star
 F(y^{W_d}) \cdot V_i` and calls it a quadrature: once the reduced system is solved,
@@ -233,12 +240,12 @@ So an auxiliary that is a monomial in the parameters alone has :math:`d(\log x)/
 It is constant, and it supplies a constant of integration rather than an integral.  When
 every auxiliary is of that kind -- the two empty cells above -- the whole recovery needs
 only :math:`r` constants, and the reduction can normalise the auxiliaries to 1 and forget
-them.  When one is not, as with :math:`x_3`, that one has to be integrated and the reduced
+them.  When an auxiliary is not a parameter, as with :math:`x_3`, is has to be integrated and the reduced
 system has to carry it.
 
-This is why the distinction is worth drawing rather than glossing: it decides whether a
+This is why the distinction is worth emphasizing: it decides whether a
 reduction gives back the original system for the price of :math:`r` arbitrary constants,
-or for the price of :math:`r` integrals.
+or for the price of some integrals.
 
 
 Reading it off a figure
