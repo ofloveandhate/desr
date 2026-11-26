@@ -12,11 +12,6 @@ The preprint :cite:`Tanburn2025` describes an earlier form of this work.  It pre
 The Masters dissertation `Differential Algebra and Applications <http://tanbur.github.io/desr/dissertation/differential_algebra_and_applications.pdf>`_ that inspired this project places the algorithms into the theoretical framework of *differential algebraic geometry*.  The dissertation further shows how to extend them to parameter reduction of arbitrary systems of partial differential equations, though this is not yet implemented in this software.
 
 
-Prerequisites
--------------
-
-This package requires the Sympy package.
-
 Installing
 ----------
 
