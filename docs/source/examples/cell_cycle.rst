@@ -3,28 +3,51 @@
 A cell cycle control network
 ==============================
 
-The model of the cell cycle machinery regulating mitosis in frog egg extracts that
-Sible and Tyson use as their example in :cite:`sible-tyson`.  The equations are their
-Figure 2.  With seven species and thirty parameters it is the largest model among the
-examples; it is read directly from its LaTeX, and its reduction removes seven
-parameters.
+This example uses a model of the cell cycle machinery regulating mitosis in frog egg extracts,
+from :cite:`sible-tyson`.  The equations are their
+Figure 2.  With seven species and thirty parameters, it is the largest model among the
+examples; it is read directly from its LaTeX (initially transcribed from the paper by hand, later checked with an AI). Its nondimensionalization removes seven parameters, whereas the source paper "normalises" five parameters in their simulation code; desr's nondimensionalisation achieves a greater reduction.
 
 The model
 -----------
 
 Cyclin is made at the constant rate :math:`k_1`, is degraded at the rate
-:math:`k_2`, and binds Cdk at the rate :math:`k_3` to form MPF.  MPF and preMPF convert
-into one another at the rates :math:`k_{\mathrm{wee}}` and :math:`k_{25}`.  Four
-further species, Cdc25P, Wee1P, IEP and APC, each follow an equation of one form: a
-Michaelis–Menten rate forward and one backward, the backward one driven by a
-phosphatase.  MPF drives the forward rate of the first three.  IEP, the phosphorylated
-form of an intermediate enzyme, drives APC's.  Three of the four feed back on the
-first three equations: :math:`k_{25}` depends on Cdc25P, :math:`k_{\mathrm{wee}}` on
-Wee1P, and :math:`k_2`, the rate of cyclin degradation, on APC.
+:math:`k_2`,
+and binds Cdk at the rate :math:`k_3` to form MPF.  MPF and preMPF convert
+into one another at the rates :math:`k_{\mathrm{wee}}` and :math:`k_{25}`.
+Four further species, Cdc25P, Wee1P, IEP and APC, each follow an equation of one form:
+a Michaelis–Menten rate forward and one backward, the backward one driven by a
+phosphatase.
+MPF drives the forward rate of the first three.
+IEP, the phosphorylated
+form of an intermediate enzyme, drives APC.
+
+.. silviana proofread the above, generated with Claude Opus 5.5, on Nov 26 2026, and believes it is correct.
+
 
 The system is seven differential equations followed by four definitions.  The
 definitions give :math:`[\mathrm{Cdk}]`, :math:`k_{25}`, :math:`k_{\mathrm{wee}}` and
 :math:`k_2` in terms of species:
+
+.. math::
+    :nowrap:
+
+    \begin{align}
+    \frac{d}{dt}\textrm{[Cyclin]} &= k_1 - k_2 \textrm{[Cyclin]} - k_3 \textrm{[Cyclin]} \textrm{[Cdk]} \\
+    \frac{d}{dt}\textrm{[MPF]} &= k_3 \textrm{[Cyclin]} \textrm{[Cdk]} - k_2 \textrm{[MPF]} - k_{\textrm{wee}} \textrm{[MPF]} + k_{25} \textrm{[preMPF]} \\
+    \frac{d}{dt}\textrm{[preMPF]} &= -k_2 \textrm{[preMPF]} + k_{\textrm{wee}} \textrm{[MPF]} - k_{25} \textrm{[preMPF]} \\
+    \frac{d}{dt}\textrm{[Cdc25P]} &= \frac{k_a \textrm{[MPF]}\left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right)}{K_a + \textrm{[total Cdc25]} - \textrm{[Cdc25P]}} - \frac{k_b \textrm{[PPase]} \textrm{[Cdc25P]}}{K_b + \textrm{[Cdc25P]}} \\
+    \frac{d}{dt}\textrm{[Wee1P]} &= \frac{k_e \textrm{[MPF]}\left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right)}{K_e + \textrm{[total Wee1]} - \textrm{[Wee1P]}} - \frac{k_f \textrm{[PPase]} \textrm{[Wee1P]}}{K_f + \textrm{[Wee1P]}} \\
+    \frac{d}{dt}\textrm{[IEP]} &= \frac{k_g \textrm{[MPF]}\left( \textrm{[total IE]} - \textrm{[IEP]} \right)}{K_g + \textrm{[total IE]} - \textrm{[IEP]}} - \frac{k_h \textrm{[PPase]} \textrm{[IEP]}}{K_h + \textrm{[IEP]}} \\
+    \frac{d}{dt}\textrm{[APC]} &= \frac{k_c \textrm{[IEP]}\left( \textrm{[total APC]} - \textrm{[APC]} \right)}{K_c + \textrm{[total APC]} - \textrm{[APC]}} - \frac{k_d \textrm{[PPase]} \textrm{[APC]}}{K_d + \textrm{[APC]}} \\
+    \textrm{[Cdk]} &= \textrm{[total Cdk]} - \textrm{[MPF]} - \textrm{[preMPF]} \\
+    k_{25} &= V_{25}' \left( \textrm{[total Cdc25]} - \textrm{[Cdc25P]} \right) + V_{25}'' \textrm{[Cdc25P]} \\
+    k_{\textrm{wee}} &= V_{\textrm{wee}}' \textrm{[Wee1P]} + V_{\textrm{wee}}'' \left( \textrm{[total Wee1]} - \textrm{[Wee1P]} \right) \\
+    k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm{[APC]}
+    \end{align}
+
+
+We'll parse into an ODESystem from the tex.
 
     >>> tex = r'''\frac{d}{dt}\textrm{[Cyclin]} &= k_1 - k_2 \textrm{[Cyclin]} - k_3 \textrm{[Cyclin]} \textrm{[Cdk]} \\
     ... \frac{d}{dt}\textrm{[MPF]} &= k_3 \textrm{[Cyclin]} \textrm{[Cdk]} - k_2 \textrm{[MPF]} - k_{\textrm{wee}} \textrm{[MPF]} + k_{25} \textrm{[preMPF]} \\
@@ -54,7 +77,7 @@ The reduction uses as units the parameters at the front of the variable order; s
 :meth:`~desr.ode_system.ODESystem.reorder_variables`.  The order is parameters, then
 the independent variable, then the dependent variables.
 
-Here the five total amounts come first, so that each species is measured in its total,
+Here the five total amounts come first (so that each species is measured in its total),
 followed by :math:`V_2''` and :math:`k_h`.  The other twenty-three parameters follow in
 a fixed order, which is the order their reduced counterparts are numbered in.
 
@@ -69,7 +92,7 @@ a fixed order, which is the order their reduced counterparts are numbered in.
     >>> species = ['Cyclin', 'MPF', 'preMPF', 'Cdc25P', 'Wee1P', 'IEP', 'APC']
     >>> system.reorder_variables(used_as_units + remaining_parameters + ['t'] + species)
 
-Seven scaling symmetries
+Scaling symmetries
 --------------------------
 
     >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
@@ -91,14 +114,14 @@ The units the reduction infers show what they are.  For the species:
     IEP [totalIE]
     APC [totalAPC]
 
-Five units of concentration.  Cyclin, MPF and preMPF share one, because they turn into
+There are five units of concentration.  Cyclin, MPF and preMPF share one, because they turn into
 one another.  Each of the other four species has its own.  Outside its own
 Michaelis–Menten terms it appears in one place only: Cdc25P, Wee1P and APC in one of
 the rates :math:`k_{25}`, :math:`k_{\mathrm{wee}}`, :math:`k_2`, and IEP in APC's
 equation.  In each of those places it is multiplied by a parameter, so its amount can
 be measured in any unit if that parameter is adjusted to match.
 
-The sixth unit is time.  The seventh is not a unit of anything measured.  It belongs to
+The sixth unit is time.  The seventh belongs to
 the phosphatase:
 
     >>> PPase = sympy.Symbol('PPase')
@@ -111,23 +134,21 @@ the phosphatase:
     k_f [totalWee1]/[t]
     k_h [totalIE]/[t]
 
-The phosphatase concentration appears in the model only multiplied by one of the four
+The phosphatase concentration appears in the model multiplied by one of the four
 rate constants :math:`k_b`, :math:`k_d`, :math:`k_f`, :math:`k_h`.  Each product is a
-concentration per unit time; the phosphatase alone carries a unit, written
-:math:`[k_f]` above, that cancels in every product.  Scaling the phosphatase up and
-those four down by the same factor changes nothing, so the model cannot tell the
-phosphatase's amount from its activity.  The reduction finds that as a symmetry.
+concentration per unit time.
 
 Sible and Tyson's own parameter file, their Table 1, sets five parameters to 1 under
 the comment "These parameters are arbitrarily set to 1": the four totals
 :math:`[\mathrm{total\ Cdc25}]`, :math:`[\mathrm{total\ Wee1}]`,
 :math:`[\mathrm{total\ IE}]`, :math:`[\mathrm{total\ APC}]`, and the phosphatase.
-Those are five of the seven symmetries used by hand: a unit for each of the four
-species, and the phosphatase's amount.  The order chosen above makes the same choice
-for the four species.  For the phosphatase's symmetry it sets :math:`k_h` to 1 where
-the table sets the phosphatase.
+Those are five of the seven symmetries: a unit for each of the four
+species, and the phosphatase's amount.  The variable order chosen above in this example
+makes the same choice for the four species.
+For the phosphatase's symmetry it sets :math:`k_h` to 1 whereas
+the table sets the phosphatase.  Changing the variable order produces different normalizations.
 
-The reduction
+Reduction
 ---------------
 
     >>> reduced = translator.translate(system)
@@ -136,7 +157,8 @@ The reduction
     >>> len(reduced.parameters), len(reduced.dependents)
     (23, 7)
 
-Seven symmetries, and seven parameters fewer: twenty-three in place of thirty.  The
+Seven symmetries, and seven parameters fewer: 23 in the reduced system, rather than 30 in the original.
+The clock in the reduced system
 clock is rescaled time, and each species is measured in its total:
 
     >>> names = reduced.named_symbols
@@ -184,12 +206,31 @@ It is the original equation with :math:`1 - \nu_2 - \nu_3` for the free Cdk and
 reduced system can be printed with ``reduced`` or typeset with
 :meth:`~desr.ode_system.ODESystem.to_tex`.
 
-Another order
----------------
+
+    >>> reduced.to_tex()
+    '\\frac{d\\tau}{d\\tau} &= 1 \\\\\n\\frac{d\\nu_{1}}{d\\tau} &= \\kappa_{10} + \\kappa_{11} \\nu_{1} \\nu_{2} + \\kappa_{11} \\nu_{1} \\nu_{3} - \\kappa_{11} \\nu_{1} + \\kappa_{23} \\nu_{1} \\nu_{7} - \\kappa_{23} \\nu_{1} - \\nu_{1} \\nu_{7} \\\\\n\\frac{d\\nu_{2}}{d\\tau} &= - \\kappa_{11} \\nu_{1} \\nu_{2} - \\kappa_{11} \\nu_{1} \\nu_{3} + \\kappa_{11} \\nu_{1} - \\kappa_{19} \\nu_{3} \\nu_{4} + \\kappa_{19} \\nu_{3} + \\kappa_{20} \\nu_{3} \\nu_{4} - \\kappa_{21} \\nu_{2} \\nu_{5} + \\kappa_{22} \\nu_{2} \\nu_{5} - \\kappa_{22} \\nu_{2} + \\kappa_{23} \\nu_{2} \\nu_{7} - \\kappa_{23} \\nu_{2} - \\nu_{2} \\nu_{7} \\\\\n\\frac{d\\nu_{3}}{d\\tau} &= \\kappa_{19} \\nu_{3} \\nu_{4} - \\kappa_{19} \\nu_{3} - \\kappa_{20} \\nu_{3} \\nu_{4} + \\kappa_{21} \\nu_{2} \\nu_{5} - \\kappa_{22} \\nu_{2} \\nu_{5} + \\kappa_{22} \\nu_{2} + \\kappa_{23} \\nu_{3} \\nu_{7} - \\kappa_{23} \\nu_{3} - \\nu_{3} \\nu_{7} \\\\\n\\frac{d\\nu_{4}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{13} \\nu_{4}}{\\kappa_{3} + \\nu_{4}} - \\frac{\\kappa_{12} \\nu_{2} \\nu_{4}}{\\kappa_{2} - \\nu_{4} + 1} + \\frac{\\kappa_{12} \\nu_{2}}{\\kappa_{2} - \\nu_{4} + 1} \\\\\n\\frac{d\\nu_{5}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{17} \\nu_{5}}{\\kappa_{7} + \\nu_{5}} - \\frac{\\kappa_{16} \\nu_{2} \\nu_{5}}{\\kappa_{6} - \\nu_{5} + 1} + \\frac{\\kappa_{16} \\nu_{2}}{\\kappa_{6} - \\nu_{5} + 1} \\\\\n\\frac{d\\nu_{6}}{d\\tau} &= - \\frac{\\kappa_{1} \\nu_{6}}{\\kappa_{9} + \\nu_{6}} - \\frac{\\kappa_{18} \\nu_{2} \\nu_{6}}{\\kappa_{8} - \\nu_{6} + 1} + \\frac{\\kappa_{18} \\nu_{2}}{\\kappa_{8} - \\nu_{6} + 1} \\\\\n\\frac{d\\nu_{7}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{15} \\nu_{7}}{\\kappa_{5} + \\nu_{7}} - \\frac{\\kappa_{14} \\nu_{6} \\nu_{7}}{\\kappa_{4} - \\nu_{7} + 1} + \\frac{\\kappa_{14} \\nu_{6}}{\\kappa_{4} - \\nu_{7} + 1}'
+
+Typesetting it here, we can see the system:
+
+.. math::
+    :nowrap:
+
+    \begin{align}
+    \frac{d\tau}{d\tau} &= 1 \\
+    \frac{d\nu_{1}}{d\tau} &= \kappa_{10} + \kappa_{11} \nu_{1} \nu_{2} + \kappa_{11} \nu_{1} \nu_{3} - \kappa_{11} \nu_{1} + \kappa_{23} \nu_{1} \nu_{7} - \kappa_{23} \nu_{1} - \nu_{1} \nu_{7} \\
+    \frac{d\nu_{2}}{d\tau} &= - \kappa_{11} \nu_{1} \nu_{2} - \kappa_{11} \nu_{1} \nu_{3} + \kappa_{11} \nu_{1} - \kappa_{19} \nu_{3} \nu_{4} + \kappa_{19} \nu_{3} + \kappa_{20} \nu_{3} \nu_{4} - \kappa_{21} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} + \kappa_{23} \nu_{2} \nu_{7} - \kappa_{23} \nu_{2} - \nu_{2} \nu_{7} \\
+    \frac{d\nu_{3}}{d\tau} &= \kappa_{19} \nu_{3} \nu_{4} - \kappa_{19} \nu_{3} - \kappa_{20} \nu_{3} \nu_{4} + \kappa_{21} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} + \kappa_{23} \nu_{3} \nu_{7} - \kappa_{23} \nu_{3} - \nu_{3} \nu_{7} \\
+    \frac{d\nu_{4}}{d\tau} &= - \frac{\kappa_{1} \kappa_{13} \nu_{4}}{\kappa_{3} + \nu_{4}} - \frac{\kappa_{12} \nu_{2} \nu_{4}}{\kappa_{2} - \nu_{4} + 1} + \frac{\kappa_{12} \nu_{2}}{\kappa_{2} - \nu_{4} + 1} \\
+    \frac{d\nu_{5}}{d\tau} &= - \frac{\kappa_{1} \kappa_{17} \nu_{5}}{\kappa_{7} + \nu_{5}} - \frac{\kappa_{16} \nu_{2} \nu_{5}}{\kappa_{6} - \nu_{5} + 1} + \frac{\kappa_{16} \nu_{2}}{\kappa_{6} - \nu_{5} + 1} \\
+    \frac{d\nu_{6}}{d\tau} &= - \frac{\kappa_{1} \nu_{6}}{\kappa_{9} + \nu_{6}} - \frac{\kappa_{18} \nu_{2} \nu_{6}}{\kappa_{8} - \nu_{6} + 1} + \frac{\kappa_{18} \nu_{2}}{\kappa_{8} - \nu_{6} + 1} \\\frac{d\nu_{7}}{d\tau} &= - \frac{\kappa_{1} \kappa_{15} \nu_{7}}{\kappa_{5} + \nu_{7}} - \frac{\kappa_{14} \nu_{6} \nu_{7}}{\kappa_{4} - \nu_{7} + 1} + \frac{\kappa_{14} \nu_{6}}{\kappa_{4} - \nu_{7} + 1}
+    \end{align}
+
+
+Reduction using a different variable order
+-------------------------------------------
 
 The number of symmetries, and so the number of parameters removed, does not depend on
-the order.  The choice of units does.  Left in its default order, which is
-alphabetical, the system reduces to twenty-three parameters as well:
+the order.  The choice of units does.  Left in desr's default variable order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
 
     >>> default = ODESystem.from_tex(tex, sub_defns=True)
     >>> other = ODETranslator.from_ode_system(default, new_indices_start_at=1)
@@ -204,7 +245,7 @@ constants, which come before the totals in the alphabet:
 
     >>> images = otherwise.named_symbols
     >>> for symbol in otherwise.dependents:
-    ...     if len(images[symbol].free_symbols) == 2:
+    ...     if len(images[symbol].free_symbols) == 2: # only print those with two symbols. this is a sympy function
     ...         print(symbol, '=', images[symbol])
     nu1 = APC/K_c
     nu2 = Cdc25P/K_a
