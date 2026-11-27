@@ -69,7 +69,7 @@ The reduction engine. Holds a `scaling_matrix` (rows = scaling dimensions, colum
 - `invariants()` — the scaling-invariant monomials (the new variables)
 - `auxiliaries()` — the auxiliary variables that get normalised to 1
 - `multiplier_add_columns(i, j, alpha)` — manually adjust which invariants are chosen
-- `translate_parameter_substitutions(system)` — get substitution rules for original parameters
+- `substitutions()` — each original symbol in terms of the reduced ones, under every scheme
 
 **`desr/matrix_normal_forms.py`**
 Integer matrix algorithms: Hermite Normal Form (`hnf_row`, `hnf_col`, `normal_hnf_col`, `normal_hnf_row`, `hnf_row_lll`) and Smith Normal Form (`smf`). These are the computational backbone.

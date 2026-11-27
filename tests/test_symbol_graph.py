@@ -354,7 +354,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
     def test_the_normalisation_lands_on_the_callers_own_symbols(self):
         # Where the 1s come from.  Setting the auxiliaries to 1 pins exactly r of the
         # original symbols, and which ones is not the graph's opinion: it is what
-        # `translate_parameter_substitutions` -- the thing that actually rewrites the
+        # `substitutions()` -- the thing that actually rewrites the
         # system -- replaces with 1.
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
         translator = ODETranslator.from_ode_system(system)
@@ -362,7 +362,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
 
         marked = {data['symbol'] for (layer, _), data in graph.nodes(data=True)
                   if layer == ORIGINAL and data['normalised']}
-        substitutions = translator.translate_parameter_substitutions(system)
+        substitutions = translator.substitutions()
         self.assertEqual(marked,
                          {symbol for symbol, replacement in substitutions.items()
                           if replacement == 1})

@@ -170,7 +170,7 @@ class TestInvariantsOfReduction(TestCase):
                     continue
                 reduced = translator.translate(system)
                 mentioned = set()
-                for value in translator.translate_parameter_substitutions(system).values():
+                for value in translator.substitutions().values():
                     mentioned |= value.free_symbols
                 self.assertFalse(mentioned - set(reduced.symbols), name)
 

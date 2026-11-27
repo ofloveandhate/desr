@@ -50,7 +50,7 @@ class TestODETranslatorTraps(TestCase):
         # Hubert & Labahn 6.6, with initial-condition constants adjoined so that each z_i0
         # scales like its z_i.  kappa0 = t0*z10**3 is the reduced initial time: it appears
         # in no right-hand side, but it is one of the n - r coordinates of the reduced
-        # system, and translate_parameter_substitutions names it.  Building the reduced
+        # system, and substitutions() names it.  Building the reduced
         # system from the symbols surviving into the equations used to lose it.
         eq1 = 'dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )'
         eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
@@ -62,15 +62,20 @@ class TestODETranslatorTraps(TestCase):
         # Parameters, then the independent variable, then the dependents.  The scaling
         # matrix below is unchanged by the move because its pattern repeats with period 3.
         extended.reorder_variables(['t0', 'z10', 'z20', 't', 'z1', 'z2'])
-        translator = ODETranslator(sympy.Matrix([[3, -1, 5, 3, -1, 5]]),
-                                     symbols_domain=extended.symbols)
+        # Each constant is a starting value, measured in the unit of its variable.
+        extended.require_same_unit({'t0': 't', 'z10': 'z1', 'z20': 'z2'})
+        translator = ODETranslator.from_ode_system(extended)
+        # The one symmetry: t, z1, z2 scale as 3, -1, 5, and each constant as its variable.
+        self.assertEqual(1, translator.r)
+        self.assertIn(translator.scaling_matrix,
+                      (sympy.Matrix([[3, -1, 5, 3, -1, 5]]), -sympy.Matrix([[3, -1, 5, 3, -1, 5]])))
         reduced = translator.translate(extended)
 
         self.assertEqual(len(reduced.symbols),
                          len(extended.symbols) - translator.r)
         # Every symbol the substitutions mention must exist in the reduced system.
         mentioned = set()
-        for value in translator.translate_parameter_substitutions(extended).values():
+        for value in translator.substitutions().values():
             mentioned |= value.free_symbols
         self.assertFalse(mentioned - set(reduced.symbols))
 

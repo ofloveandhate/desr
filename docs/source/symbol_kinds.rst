@@ -111,7 +111,7 @@ The two empty cells are the whole of what the parameter scheme is.  Every auxili
 monomial in the parameters alone, so every auxiliary is constant, so all :math:`r` of them
 can be set to 1 once and discarded:
 
-    >>> translator.translate_parameter_substitutions(system)
+    >>> translator.substitutions()
     {e_0: 1, k_1: 1, k_2: kappa0, k_m1: kappa1, t: tau, c: nu0, s: nu1}
     >>> translator.translate(system)
     dtau/dtau = 1

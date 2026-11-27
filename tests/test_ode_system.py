@@ -522,7 +522,7 @@ class TestBlockReordering(TestCase):
     def normalised_parameters(self, system):
         ''' The parameters this system's reduction sends to 1. '''
         translator = ODETranslator.from_ode_system(system)
-        substitutions = translator.translate_parameter_substitutions(system)
+        substitutions = translator.substitutions()
         return [str(v) for v in system.parameters if substitutions[v] == 1]
 
     def test_reordering_parameters_changes_which_are_normalised(self):

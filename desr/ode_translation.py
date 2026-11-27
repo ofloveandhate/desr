@@ -1224,7 +1224,7 @@ class ODETranslator(object):
 
         The parameter scheme reports none of them.  It normalises every auxiliary and
         turns its clock invariant into the new independent variable, but it does that in
-        :meth:`translate_parameter_substitutions` and :meth:`variable_map`, and its names
+        :meth:`translate_parameter` and :meth:`variable_map`, and its names
         already describe the result; saying it twice would double-count.
 
         The dependent-variable scheme never identifies anything, in either block, because
@@ -1521,8 +1521,10 @@ class ODETranslator(object):
         :meth:`names_per_column`, and a column the reduction did not keep names nothing
         there.
 
-        :meth:`translate_parameter_substitutions` answers the same question and refuses
-        any system the parameter scheme does not fit; this one holds for every scheme.
+        It holds for every scheme.  Under the parameter scheme these are the substitutions
+        :meth:`translate_parameter` makes.  They come back in the system's own variable
+        order -- parameters, then the independent variable, then the dependents -- so they
+        can be read straight down against :attr:`~desr.ode_system.ODESystem.symbols`.
 
         Returns:
             dict: ``{original symbol: image}``, one entry per symbol.
@@ -1533,6 +1535,13 @@ class ODETranslator(object):
         >>> translator = ODETranslator.from_ode_system(system)
         >>> translator.substitutions()
         {e_0: 1, k_1: 1, k_2: kappa0, k_m1: kappa1, t: tau, c: nu0, s: nu1}
+
+        The naming scheme and the first index decide the names:
+
+        >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1,
+        ...     naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['c', 's']})
+        >>> translator.substitutions()
+        {e_0: 1, k_1: 1, k_2: c1, k_m1: c2, t: t, c: c, s: s}
 
         A reduction that normalises nothing leaves every monomial standing:
 
@@ -2499,6 +2508,25 @@ class ODETranslator(object):
 
 
 
+    def _refuse_parameter_incompatible(self, system):
+        '''
+        Refuse a system the parameter scheme does not fit.
+
+        Raises:
+            ValueError: If the multiplier does not have the parameter scheme's block form
+                for this system's variable order.
+        '''
+        if self._is_translate_parameter_compatible(system):
+            return
+        p = system.num_parameters
+        err_str = ['System is not compatible for parameter translation.']
+        err_str.append('System may not be ordered properly. Must be parameters, independent, dependent. Order is: {}'.format(system.symbols))
+        err_str.append('Transformation may not be appropriate. Should be 0, 0, I. Transformation is:')
+        err_str.append(repr(self.herm_mult_i[p:, :]))
+        err_str.append(repr(self.herm_mult_n[p:, :p - self.r]))
+        err_str.append(repr(self.herm_mult_n[p:, p - self.r:]))
+        raise ValueError('\n'.join(err_str))
+
     def translate_parameter(self, system=None):
         ''' Translate according to parameter scheme '''
         # A translator built from a bare matrix is handed the system to
@@ -2508,8 +2536,8 @@ class ODETranslator(object):
         self._refuse_unfamiliar_system(system)
         self._refuse_zero_scales(system)
 
-        # make the substitutions
-        to_sub = self.translate_parameter_substitutions(system=system)
+        self._refuse_parameter_incompatible(system)
+        to_sub = self.substitutions()
 
         variable_map = self.variable_map()
         new_indep = variable_map[system.independent_variable]
@@ -2528,7 +2556,7 @@ class ODETranslator(object):
         # rather than from the symbols that happen to survive into the right-hand sides.
         # An invariant constant that cancels out of every equation is still a variable of
         # the reduced system -- it is one of the n - r coordinates, and the substitutions
-        # returned by translate_parameter_substitutions refer to it -- but inferring the
+        # returned by substitutions() refer to it -- but inferring the
         # variables from the expressions, as ODESystem.from_dict does, would lose it.
         dependents = [variable_map[var] for var in system.dependents]
         new_constants = self._new_constants(system)
@@ -3302,7 +3330,7 @@ class ODETranslator(object):
         There are :math:`k - r` of them, where :math:`k` is the number of constants of the
         original system: the reduction normalises :math:`r` of them away.  This is the one
         place the list is built, so that :meth:`translate_parameter` and
-        :meth:`translate_parameter_substitutions` cannot disagree about what exists.
+        :meth:`substitutions` cannot disagree about what exists.
 
         Args:
             system (ODESystem): The system being reduced.
@@ -3318,87 +3346,6 @@ class ODETranslator(object):
         # invariant, and keeps its name.
         monomials = list(scale_action(system.symbols, self.herm_mult_n))[:count]
         return _keeping_unchanged(names, monomials, system.symbols)
-
-    def translate_parameter_substitutions(self, system):
-        '''
-        Given a system, determine the substitutions made in the parameter reduction.
-
-        Args:
-            system (ODESystem):
-                The system in question.
-
-        The substitutions come back in the system's own variable order -- parameters, then
-        the independent variable, then the dependents -- so they can be read straight down
-        against :attr:`~desr.ode_system.ODESystem.symbols`.
-
-        :rtype: dict
-
-        >>> equations = 'dn/dt = n*( r*(1 - n/K) - k*p/(n+d) );dp/dt = s*p*(1 - h*p / n)'.split(';')
-        >>> system = ODESystem.from_equations(equations)
-        >>> system.symbols
-        (K, d, h, k, r, s, t, n, p)
-        >>> translator = ODETranslator.from_ode_system(system)
-        >>> translator.translate_parameter_substitutions(system=system)
-        {K: 1, d: kappa0, h: 1, k: 1, r: kappa1, s: kappa2, t: tau, n: nu0, p: nu1}
-
-        >>> system = ODESystem.from_equations(equations)
-        >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
-        >>> translator.translate_parameter_substitutions(system=system)
-        {K: 1, d: c0, h: 1, k: 1, r: c1, s: c2, t: t, n: n, p: p}
-
-        >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
-        >>> translator.translate_parameter_substitutions(system=system)
-        {K: 1, d: kappa1, h: 1, k: 1, r: kappa2, s: kappa3, t: tau, n: nu1, p: nu2}
-        '''
-        # A translator built from a bare matrix is handed the system to
-        # reduce; bind it, so the reporting methods below have one.
-        self = self._for(system)
-
-        p = system.num_parameters
-        m = len(system.symbols) - p  # The independent variable and the dependents
-
-        if not self._is_translate_parameter_compatible(system):
-            err_str = ['System is not compatible for parameter translation.']
-            err_str.append('System may not be ordered properly. Must be parameters, independent, dependent. Order is: {}'.format(system.symbols))
-            err_str.append('Transformation may not be appropriate. Should be 0, 0, I. Transformation is:')
-            err_str.append(repr(self.herm_mult_i[p:, :]))
-            err_str.append(repr(self.herm_mult_n[p:, :p - self.r]))
-            err_str.append(repr(self.herm_mult_n[p:, p - self.r:]))
-            raise ValueError('\n'.join(err_str))
-
-        # Extract the right bits of W.  The rows of W_d that belong to the reduced constants
-        # are the first p - r of them, since those invariants are the leading columns of
-        # V_n under this ordering; the columns follow the variable order (c, t, z).
-        inv_herm_mult_d = self.inv_herm_mult_d[:p - self.r, :]
-        W_c = inv_herm_mult_d[:, :p]
-        W_t = inv_herm_mult_d[:, p:p + 1]
-        W_v = inv_herm_mult_d[:, p + 1:]
-
-        variable_map = self.variable_map()
-        # Form new constants
-        new_consts = self._new_constants(system)
-
-        # Built in the system's own variable order -- parameters, independent, dependents --
-        # so that reading the substitutions against system.symbols needs no reshuffling.
-        to_sub = {}
-
-        # Scale parameters
-        scale = scale_action(new_consts, W_c)
-        assert len(system.parameters) == len(scale.T)
-        for const, _const_scale in zip(system.parameters, scale.T):
-            to_sub[const] = _const_scale
-
-        # Scale t
-        to_sub[system.independent_variable] = scale_action(new_consts, W_t)[0] * variable_map[system.independent_variable]
-
-        # Scale dependents
-        scale = scale_action(new_consts, W_v)
-        assert len(system.dependents) == len(scale.T)
-        for dep_var, _const_scale in zip(system.dependents, scale.T):
-            to_sub[dep_var] = _const_scale * variable_map[dep_var]
-
-        return to_sub
-
 
     def reverse_translate(self, variables, indep_var_index=0):
         """
@@ -3494,7 +3441,7 @@ class ODETranslator(object):
         dn/dt = -c1*n*p/(c0 + n) - n**2 + n
         dp/dt = c2*p - c2*p**2/n
         parameters: c0, c1, c2
-        >>> translator.translate_parameter_substitutions(system)
+        >>> translator.substitutions()
         {K: 1, h: 1, r: 1, d: c0, k: c1, s: c2, t: t, n: n, p: p}
         >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
         >>> translator.reverse_translate_parameter(soln_reduced)
