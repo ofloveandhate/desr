@@ -2,7 +2,7 @@ Multiple timescales: Segel-Slemrod analysis
 ============================================
 
 
-This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to matching Segel and Slemrod's timescale analysis :cite:`Segel1989`, and Murray's in Chapter 6 of :cite:`murray`.
+This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to match Segel and Slemrod's timescale analysis :cite:`Segel1989`, and Murray's in Chapter 6 of :cite:`murray`.
 
 
 The model

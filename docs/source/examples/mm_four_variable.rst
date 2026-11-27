@@ -4,7 +4,7 @@ Extending invariants in four-variable Michaelis-Menten
 Raw Michaelis-Menten Equation Analysis
 ---------------------------------------
 
-We perform an example analysis of the Michael-Mentis equations :cite:`Segel1989`:
+We perform an example analysis of the Michaelis-Menten equations :cite:`Segel1989`:
 
 .. math::
     :nowrap:
@@ -147,8 +147,6 @@ reduction will have more, so the copy takes the default names:
     [ 0,  0,  1, 0, 0, 0, 1, 0],
     [ 0,  0,  0, 0, 0, 0, 0, 1]])
 
-For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
-
 Now, this transformation doesn't satisfy the conditions of the parameter reduction scheme, so if we try to reduce it
 :meth:`~desr.ode_translation.ODETranslator.translate` will fall through to the general reduction scheme implemented in
 :meth:`~desr.ode_translation.ODETranslator.translate_general`.  The scaling moves :math:`t`
@@ -195,7 +193,7 @@ are our new dependent invariants; the first two are exactly the invariants we ch
 They come after :math:`k_2 t` because the columns are in the order the schemes read: the
 invariant with the clock before those with a dependent variable.
 
-To reproduce :cite:`Hubert2013c`: exactly, ask for neither step.  The auxiliaries are then
+To reproduce :cite:`Hubert2013c` exactly, ask for neither step.  The auxiliaries are then
 carried, and reported as *parameters* because each is a monomial in the original parameters
 alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
 :attr:`~desr.ode_system.ODESystem.auxiliary_names`.

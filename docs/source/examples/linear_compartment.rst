@@ -96,7 +96,7 @@ Given to the reduction in that form:
     >>> substituted.dimensions_of()
     {u_2: [z_2]/[t], b_22: 1/[t], a_12: [z_1]/([t]*[z_2]), a_1: 1/[t], t: [t], z_1: [z_1], z_2: [z_2]}
 
-The variable order is the the same, with :math:`b_{22}` in the place of :math:`a_2`, and
+The variable order is the same, with :math:`b_{22}` in the place of :math:`a_2`, and
 :math:`a_{12}` third.  There now appear to be three symmetries, and so the first three parameters
 are used as units.  The two compartments have separate units, and
 :math:`a_{12}` has become a conversion factor between them.  Nothing in these two

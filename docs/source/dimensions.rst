@@ -3,7 +3,7 @@
 Dimensions, units and normalisation
 =====================================
 
-A scaling symmetry is a fundamentally a statement about dimensions.  If rescaling both :math:`t` and
+A scaling symmetry is fundamentally a statement about dimensions.  If rescaling both :math:`t` and
 the rate constants together leaves a system unchanged, then :math:`t` and
 those constants are measured in units that trade against each other, and the system
 never depended on which units you picked.  `desr` computes these relationships from the "scaling matrix",
@@ -15,7 +15,7 @@ Dimensions
 -----------------------
 
 The scaling matrix :math:`A` is computed as part of the Hermite Normal Form of the exponent matrix,
-which is described and illustrated explictly elsewhere in the documentation.
+which is described and illustrated explicitly elsewhere in the documentation.
 :math:`A` has
 
 * one row per scaling symmetry and
@@ -37,7 +37,7 @@ So the symbols correspond in this order, in the scaling matrix's columns.
     [0, -1, -1, -1, 1, 0, 0],
     [1, -1,  0,  0, 0, 1, 1]])
 
-The scaling matrix tells you how a symbol scales, with a scaling coefficent. The values are the exponents in the scaling actions, that leave the system invariant.  From :math:`A`, we can infer the dimensions of the symbols.  I think it is useful to think of each scaling action as corresponding to a dimension.  The first column of (0,1) says that the first symbol does not scale with the first dimension, whatever it is, but it DOES scale with the second dimension since it has an exponent of 1.
+The scaling matrix tells you how a symbol scales, with a scaling coefficient. The values are the exponents in the scaling actions, that leave the system invariant.  From :math:`A`, we can infer the dimensions of the symbols.  I think it is useful to think of each scaling action as corresponding to a dimension.  The first column of (0,1) says that the first symbol does not scale with the first dimension, whatever it is, but it DOES scale with the second dimension since it has an exponent of 1.
 
 Note that in the next snippet, desr is naming the dimensions of the symbols, after the symbols themselves.
 
@@ -56,7 +56,7 @@ When there are many symbols, grouping by sharing dimension is useful.  Check thi
     >>> system.symbols_by_dimension()
     (([e_0], (e_0, c, s)), (1/([e_0]*[t]), (k_1,)), (1/[t], (k_2, k_m1)), ([t], (t,)))
 
-Any given monomial in the symbols of a system has a dimension too.  You can use this to check that whether a monomial you have in mind is dimensionless:
+Any given monomial in the symbols of a system has a dimension too.  You can use this to check whether a monomial you have in mind is dimensionless:
 
     >>> system.dimension_of('k_1*e_0*t')
     1
@@ -118,7 +118,7 @@ When an auxiliary is a monomial purely in the parameters of the system, it canno
 vary with time, so it can be "normalized" to 1.   There's a subtle thing to teach here...
 
 The decoupling of auxiliaries is not an assumption.  No non-dimensional
-symbol ever depends on an auxiliary.   Instead, a auxiliary **is** a unit, and a unit measured in itself
+symbol ever depends on an auxiliary.   Instead, an auxiliary **is** a unit, and a unit measured in itself
 is 1.  Setting :math:`1/(e_0 k_1)` to 1 says "measure time in units of
 :math:`1/(e_0 k_1)`", which merely is a choice of ruler.
 

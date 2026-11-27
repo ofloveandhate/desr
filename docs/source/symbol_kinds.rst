@@ -82,8 +82,8 @@ reason it was dimensionless to begin with.  Most models have no such symbol, and
 every original symbol is moved by the scaling.
 
 
-Thinking of as a table
-------------------------
+Thinking of it as a table
+---------------------------
 
 A symbol is a point in the product of the two, not a value of a single attribute.  Laying
 the reduced symbols out on both axes shows which combinations actually occur.
@@ -228,7 +228,7 @@ Constant, or quadrature?
 ---------------------------
 
 A major difference between the two examples above is between recovering the original
-system with constants (mere substitution or evalution), or having to recover it with integrals.
+system with constants (mere substitution or evaluation), or having to recover it with integrals.
 
 :cite:`Hubert2013c` writes the auxiliary system as :math:`\frac{dx}{dt} = x \star
 F(y^{W_d}) \cdot V_i` and calls it a quadrature: once the reduced system is solved,
@@ -240,7 +240,7 @@ So an auxiliary that is a monomial in the parameters alone has :math:`d(\log x)/
 It is constant, and it supplies a constant of integration rather than an integral.  When
 every auxiliary is of that kind -- the two empty cells above -- the whole recovery needs
 only :math:`r` constants, and the reduction can normalise the auxiliaries to 1 and forget
-them.  When an auxiliary is not a parameter, as with :math:`x_3`, is has to be integrated and the reduced
+them.  When an auxiliary is not a parameter, as with :math:`x_3`, it has to be integrated and the reduced
 system has to carry it.
 
 This is why the distinction is worth emphasizing: it decides whether a

@@ -3,8 +3,8 @@
 Systems with no scaling symmetry
 ==================================
 
-Not every system has a scaling symmetry.  This page describes what `desr` reports for
-the your system has none.
+Not every system has a scaling symmetry.  This page describes what `desr` reports when
+your system has none.
 
 
 When a system has none

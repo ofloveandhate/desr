@@ -212,18 +212,7 @@ reduced system can be printed with ``reduced`` or typeset with
 
 Typesetting it here, we can see the system:
 
-.. math::
-    :nowrap:
-
-    \begin{align}
-    \frac{d\tau}{d\tau} &= 1 \\
-    \frac{d\nu_{1}}{d\tau} &= \kappa_{10} + \kappa_{11} \nu_{1} \nu_{2} + \kappa_{11} \nu_{1} \nu_{3} - \kappa_{11} \nu_{1} + \kappa_{23} \nu_{1} \nu_{7} - \kappa_{23} \nu_{1} - \nu_{1} \nu_{7} \\
-    \frac{d\nu_{2}}{d\tau} &= - \kappa_{11} \nu_{1} \nu_{2} - \kappa_{11} \nu_{1} \nu_{3} + \kappa_{11} \nu_{1} - \kappa_{19} \nu_{3} \nu_{4} + \kappa_{19} \nu_{3} + \kappa_{20} \nu_{3} \nu_{4} - \kappa_{21} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} + \kappa_{23} \nu_{2} \nu_{7} - \kappa_{23} \nu_{2} - \nu_{2} \nu_{7} \\
-    \frac{d\nu_{3}}{d\tau} &= \kappa_{19} \nu_{3} \nu_{4} - \kappa_{19} \nu_{3} - \kappa_{20} \nu_{3} \nu_{4} + \kappa_{21} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} + \kappa_{23} \nu_{3} \nu_{7} - \kappa_{23} \nu_{3} - \nu_{3} \nu_{7} \\
-    \frac{d\nu_{4}}{d\tau} &= - \frac{\kappa_{1} \kappa_{13} \nu_{4}}{\kappa_{3} + \nu_{4}} - \frac{\kappa_{12} \nu_{2} \nu_{4}}{\kappa_{2} - \nu_{4} + 1} + \frac{\kappa_{12} \nu_{2}}{\kappa_{2} - \nu_{4} + 1} \\
-    \frac{d\nu_{5}}{d\tau} &= - \frac{\kappa_{1} \kappa_{17} \nu_{5}}{\kappa_{7} + \nu_{5}} - \frac{\kappa_{16} \nu_{2} \nu_{5}}{\kappa_{6} - \nu_{5} + 1} + \frac{\kappa_{16} \nu_{2}}{\kappa_{6} - \nu_{5} + 1} \\
-    \frac{d\nu_{6}}{d\tau} &= - \frac{\kappa_{1} \nu_{6}}{\kappa_{9} + \nu_{6}} - \frac{\kappa_{18} \nu_{2} \nu_{6}}{\kappa_{8} - \nu_{6} + 1} + \frac{\kappa_{18} \nu_{2}}{\kappa_{8} - \nu_{6} + 1} \\\frac{d\nu_{7}}{d\tau} &= - \frac{\kappa_{1} \kappa_{15} \nu_{7}}{\kappa_{5} + \nu_{7}} - \frac{\kappa_{14} \nu_{6} \nu_{7}}{\kappa_{4} - \nu_{7} + 1} + \frac{\kappa_{14} \nu_{6}}{\kappa_{4} - \nu_{7} + 1}
-    \end{align}
+.. math-from-doctest:: reduced.to_tex()
 
 
 Reduction using a different variable order

@@ -20,7 +20,7 @@ Consider the autonomous ordinary differential equation
     \frac{du}{dt} = 2 b^2 u + \frac{1}{a^2}.
 
 
-In desr, the way the user orders their symbols determines the form of the reduce
+In desr, the way the user orders their symbols determines the form of the reduced
 system.  With symbols in the order
 :math:`(t, u, a, b)` the scaling has two symmetries, and the normal Hermite multiplier
 gives these invariants:

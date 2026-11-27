@@ -57,7 +57,7 @@ We can see the system's properties
     [0, 0, -1, 1, 0, 0,  1],
     [0, 1,  1, 0, 0, 0, -1]])
 
-One reduces by first making an `ODETranslator`.  One can query the properties/results of the translator, like `scaling_matrix` and `invariants`.
+One reduces by first making an `ODETranslator`.  One can query the properties/results of the translator, like ``scaling_matrix`` and ``invariant_monomials()``.
 
     >>> translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u','v']})
     >>> translator.scaling_matrix

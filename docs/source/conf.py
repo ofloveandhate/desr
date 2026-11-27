@@ -19,6 +19,8 @@ import os
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('../..'))
+# The documentation's own extensions.
+sys.path.insert(0, os.path.abspath('_ext'))
 
 # -- General configuration ------------------------------------------------
 
@@ -38,6 +40,7 @@ extensions = [
     'matplotlib.sphinxext.plot_directive',
     'sphinx.ext.viewcode',
     'sphinxcontrib.bibtex',
+    'math_from_doctest',  # _ext/: typesets TeX a page's doctests compute
 ]
 
 

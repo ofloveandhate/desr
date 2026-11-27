@@ -114,6 +114,9 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   which is how a parameter-ordering bug survived until one of them tripped over it. In
   an `.rst` page, put a sentence between a `.. math::` block and a doctest block; an
   indented doctest directly after the math is taken as part of it and never runs.
+  To typeset what a page computes, do not copy a doctest's TeX output into a math block:
+  `.. math-from-doctest:: reduced.to_tex()` (`docs/source/_ext/`) runs the page's
+  examples above it and sets the string as an `align` block, so it cannot go stale.
 - The figures are library code, in `desr/figures/`, and need matplotlib:
   `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
   draws it as a chain of systems. Neither computes anything — every matrix, monomial,

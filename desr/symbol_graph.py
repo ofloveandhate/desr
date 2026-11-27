@@ -94,7 +94,7 @@ def _reduced_kinds(translator, system):
     system -- not the structure of their monomial, because the two differ and the role is
     what a reader of the figure is after.  Under the general and dependent-variable schemes
     the reduction keeps the system's own independent variable, so an invariant that is a
-    rescaled one -- the enzyme chain's :math:`k_{23} t`, :cite:`Hubert2013c`: 6.4's :math:`t` --
+    rescaled one -- the enzyme chain's :math:`k_{23} t`, :cite:`Hubert2013c` 6.4's :math:`t` --
     is a variable with an equation rather than the thing being integrated against.  Calling
     it independent would say the reduced system has two independent variables.
 

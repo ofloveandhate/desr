@@ -2735,13 +2735,13 @@ class ODETranslator(object):
         :math:`n-r+1` invariants and :math:`r` auxiliary variables.
 
         Two further steps run by default, each of which can be turned off.  Both are
-        departures from :cite:`Hubert2013c`:, who treat normalisation as all-or-nothing, so
+        departures from :cite:`Hubert2013c`, who treat normalisation as all-or-nothing, so
         turning both off reproduces their reduction exactly.
 
         **Normalising the parameter auxiliaries** (`normalise_parameters`).  An auxiliary
         that is a monomial in the original parameters alone is constant, so it can be set
         to 1 -- a choice of units, which :meth:`normalisations` records in the caller's own
-        symbols.  It appears in no equation, :cite:`Hubert2013c`: (16)-(17), so this cannot
+        symbols.  It appears in no equation, :cite:`Hubert2013c` (16)-(17), so this cannot
         change the dynamics; what it changes is that those symbols stop being reported as
         parameters of a system whose equations never mention them.
 
