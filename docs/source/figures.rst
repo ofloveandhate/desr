@@ -40,12 +40,20 @@ It is page-text wide and as tall as it needs to be.  Past about twenty symbols a
 page-wide figure of every matrix entry does not exist, and it raises rather than
 shrinking the type past legibility — the honest answer, if not a useful one.
 
-.. code-block:: python
-
-    figure = flowchart_figure(system, 'Michaelis-Menten')
-
 Pass ``width`` for a journal column, and ``font`` to set the base point size that
-everything else is sized against.
+everything else is sized against.  For the system above:
+
+.. plot::
+    :include-source:
+    :context: reset
+
+    from desr import ODESystem
+    from desr.figures import flowchart_figure
+
+    system = ODESystem.from_equations(
+        ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+         'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+    figure = flowchart_figure(system, 'Michaelis-Menten')
 
 
 The symbol map
@@ -62,7 +70,11 @@ Between them sits the unit table from :ref:`dimensions`, which spans both middle
 the first sets the constant auxiliaries to 1, and the second takes an invariant
 :math:`k t` as the clock in place of :math:`t`.
 
-.. code-block:: python
+.. plot::
+    :include-source:
+    :context: close-figs
+
+    from desr.figures import symbol_map_figure
 
     figure = symbol_map_figure(system, 'Michaelis-Menten')
 
@@ -88,3 +100,11 @@ nonzero exponent, signed and labelled.
 
 :meth:`~desr.ode_translation.ODETranslator.draw_symbol_graph` draws it by itself, which
 is what you want when the maps are the point and the matrices are not.
+
+.. plot::
+    :include-source:
+    :context: close-figs
+
+    from desr import ODETranslator
+
+    ODETranslator.from_ode_system(system).draw_symbol_graph()
