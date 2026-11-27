@@ -3024,25 +3024,33 @@ class ODESystem(object):
 
     def physical_dimensions_of(self, scaling_matrix=None):
         """
-        The physical dimension of every symbol, derived from what was declared.
+        The dimension of every symbol, in the names declared where they reach, and in
+        desr's own names where they do not.
+
+        Every symbol has a dimension whether or not anyone named it:
+        :meth:`dimensions_of` writes it in structural names such as ``[t]`` and
+        ``[e_0]``.  A declaration names some of those directions.  This writes each
+        symbol's dimension in a basis made of the declared symbols' dimensions and, to
+        fill the rest, as many of the structural generators as it takes.  Where the
+        declarations reach, only declared names appear; where they do not, a structural
+        name stays, and says exactly how far the declarations went.  Nothing is reported
+        as dimensionless that was not declared or derived so.
+
+        With nothing declared this is :meth:`dimensions_of`.  Declaring changes no
+        matrix: it renames.
 
         A few declarations determine many symbols, because the structural weights
         already fix the relations between them: Michaelis-Menten needs two of its seven.
-        A symbol the declarations do **not** determine comes back as :const:`None`,
-        which is the difference between *you did not say* and *you said it is
-        dimensionless*.  Declaring more can turn a :const:`None` into a dimension;
-        nothing can turn it into ``1`` except declaring it so.
-
-        Symbols differing only along a direction no declaration reaches come out with
-        the same physical dimension, though their structural dimensions differ.  The
-        enzyme chain's `e`, `f` and `x` have three structural dimensions; declaring all
-        three to be concentration identifies those directions.
+        Symbols differing only along a direction a declaration merges come out with the
+        same dimension, though their structural dimensions differ: the enzyme chain's
+        `e`, `f` and `x` have three structural dimensions, and declaring all three to be
+        concentration identifies those directions.
 
         Args:
             scaling_matrix (sympy.Matrix, optional): As for :meth:`dimensions_of`.
 
         Returns:
-            dict: ``{symbol: dimension or None}``, empty when nothing has been declared.
+            dict: ``{symbol: dimension}``, one entry per symbol.
 
         Raises:
             ValueError: if the declarations are inconsistent; see :meth:`_physical_map`.
@@ -3057,40 +3065,56 @@ class ODESystem(object):
         >>> sorted(system.physical_dimensions_of().values(), key=str)
         [1/(concentration*time), 1/time, 1/time, concentration, concentration, concentration, time]
 
-        The enzyme chain has four directions, and declaring `t` and `x` reaches two of
-        them.  `e` is left unsaid, so `e` and the rate constant beside it are unsaid too:
+        Declaring only time leaves the other direction in desr's name for it:
 
-        >>> from desr.chemical_reaction_network import ChemicalReactionNetwork
-        >>> enzyme = ChemicalReactionNetwork.from_diagram(
-        ...     'x + e -> y + e\\ny -> z\\nz + f -> x + f').to_ode_system()
-        >>> enzyme.set_dimensions({'t': 'time', 'x': 'concentration'})
-        >>> physical = enzyme.physical_dimensions_of()
-        >>> physical[sympy.Symbol('x')], physical[sympy.Symbol('y')]
-        (concentration, concentration)
-        >>> physical[sympy.Symbol('e')] is None, physical[sympy.Symbol('k_0_1')] is None
-        (True, True)
+        >>> partial = ODESystem.from_equations(
+        ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
+        >>> partial.set_dimension('t', 'time')
+        >>> partial.physical_dimensions_of()
+        {e_0: [e_0], k_1: 1/([e_0]*time), k_2: 1/time, k_m1: 1/time, t: time, c: [e_0], s: [e_0]}
         """
-        if not self._physical_dimensions:
-            return {}
         if scaling_matrix is None:
             scaling_matrix = self.maximal_scaling_matrix()
+        rows, columns = scaling_matrix.shape
+        symbols = list(self.symbols)
 
-        rows = scaling_matrix.shape[0]
-        solved = self._physical_map(scaling_matrix)
-        declared = self._declared_weights(scaling_matrix)
-        reach = declared.rank()
+        # The basis, as (weight vector, its dimension).  The declared symbols first --
+        # skipping any whose weight the earlier ones already span, which _physical_map has
+        # checked is consistent -- then desr's own generators, named ones before the
+        # fallback [dimension_i], until the basis spans every direction.
+        basis = []
 
+        def spans(weight):
+            matrix = sympy.Matrix([vector for vector, _ in basis] + [weight])
+            return matrix.rank() == len(basis) + 1
+
+        if self._physical_dimensions:
+            self._physical_map(scaling_matrix)
+            for symbol, dimension in self._physical_dimensions.items():
+                column = symbols.index(symbol)
+                weight = [scaling_matrix[row, column] for row in range(rows)]
+                if spans(weight):
+                    basis.append((weight, dimension))
+        generators = [(name, sign, row) for row, (name, sign)
+                      in enumerate(self._dimension_names(scaling_matrix))]
+        generators.sort(key=lambda each: str(each[0]).startswith('[dimension_'))
+        for name, sign, row in generators:
+            weight = [sign if index == row else 0 for index in range(rows)]
+            if len(basis) < rows and spans(weight):
+                basis.append((weight, name))
+        assert len(basis) == rows, 'the generators did not span the directions'
+
+        inverse = sympy.Matrix([vector for vector, _ in basis]).inv()
+        dimensions = [dimension for _, dimension in basis]
         physical = {}
-        for column, symbol in enumerate(self.symbols):
-            weight = [scaling_matrix[row, column] for row in range(rows)]
-            if declared.col_join(sympy.Matrix([weight])).rank() != reach:
-                physical[symbol] = None
-                continue
+        for column, symbol in enumerate(symbols):
+            weight = sympy.Matrix([[scaling_matrix[row, column] for row in range(rows)]])
+            coefficients = weight * inverse
             monomial = sympy.Integer(1)
-            for name, row in solved.items():
-                power = sum(row[index] * weight[index] for index in range(rows))
-                monomial *= name ** power
-            physical[symbol] = sympy.simplify(monomial)
+            for dimension, power in zip(dimensions, coefficients):
+                monomial *= dimension ** power
+            physical[symbol] = sympy.powsimp(sympy.simplify(monomial))
         return physical
 
     def scaling_symmetries(self, scaling_matrix=None, factor='lamda'):

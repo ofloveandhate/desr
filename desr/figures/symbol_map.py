@@ -199,13 +199,13 @@ def rescale_pairs(translator, system, reduced, normalised, final):
 
 def dimensions_shown(system, scaling_matrix):
     """
-    The dimensions to put on a figure: the physical ones where any were declared.
+    The dimensions to put on a figure: in the declared names where declarations reach,
+    in desr's own elsewhere.
 
-    The same rule :meth:`~desr.ode_translation.ODETranslator.unit_table` follows, so the
+    The same call :meth:`~desr.ode_translation.ODETranslator.unit_table` makes, so the
     two halves of the panel are never reading from different tables.
     """
-    return (system.physical_dimensions_of(scaling_matrix)
-            or system.dimensions_of(scaling_matrix))
+    return system.physical_dimensions_of(scaling_matrix)
 
 
 def draw_unit_table(ax, rows, font, heights, normalisations, title,
@@ -280,8 +280,7 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
                 fontsize=font, ha='right', va='center'))
             stated.append(ax.text(
                 0.0, y,
-                '$=\\;{}$'.format(display_tex(dimension_to_tex(dimension)))
-                if dimension is not None else '=  not declared',
+                '$=\\;{}$'.format(display_tex(dimension_to_tex(dimension))),
                 # The same size as the left side: `[t] = [t]` is one bracket twice.
                 fontsize=font, ha='left', va='center'))
         start = cursor
@@ -344,14 +343,12 @@ def draw_unit_table(ax, rows, font, heights, normalisations, title,
         if unit:
             # "unit of concentration", not "*the* unit of concentration": the model has
             # three of them, and the article says there is one.
-            dimension = (dimension_to_tex(row['dimension'])
-                         if row['dimension'] is not None else None)
+            dimension = dimension_to_tex(row['dimension'])
             # A unit's own row states its dimension, in the brackets and the form the
             # left half uses: `[x_0] = [t]`.  That is what connects the two halves --
             # the dimensions on the left are the ones these symbols are the units of.
             bracketed_unit = '\\left[{}\\right]'.format(expr_to_tex(symbol))
-            meaning = ('${} = {}$'.format(bracketed_unit, display_tex(dimension))
-                       if dimension else '${}$ not declared'.format(bracketed_unit))
+            meaning = '${} = {}$'.format(bracketed_unit, display_tex(dimension))
             if after == row['denotes']:
                 # The one kind of unit nobody can adopt: the scaling moves it, so it is
                 # a quadrature rather than a number to set, and nothing sends it to 1.

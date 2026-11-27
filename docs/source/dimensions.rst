@@ -92,17 +92,20 @@ Two declarations determined seven symbols.  Naming changes no matrix: the reduct
 the same reduction either way, and :func:`~desr.ode_system.ODESystem.set_dimension` is
 a label on structure that was already there.
 
-Declare too little and the symbols a declaration cannot reach are :const:`None`, not 1:
+Declare too little and the part no declaration reaches keeps `desr`'s own name:
 
     >>> partial = ODESystem.from_equations(
     ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
     >>> partial.set_dimension('t', 'time')
     >>> partial.physical_dimensions_of()
-    {e_0: None, k_1: None, k_2: 1/time, k_m1: 1/time, t: time, c: None, s: None}
+    {e_0: [e_0], k_1: 1/([e_0]*time), k_2: 1/time, k_m1: 1/time, t: time, c: [e_0], s: [e_0]}
 
-:const:`None` is "nobody has said", which is a different claim from "dimensionless".
-Reporting 1 here would have been a quiet lie about :math:`k_1`.
+Time is named, and the other dimension is still ``[e_0]``, the dimension of whatever
+:math:`e_0` is.  That is everything the declaration says and nothing more: :math:`k_1`
+is an inverse time per unit of :math:`e_0`, whatever that unit turns out to be.  With
+nothing declared at all, every dimension is `desr`'s own, as in
+:meth:`~desr.ode_system.ODESystem.dimensions_of`.
 
 
 Normalisation as a choice of units

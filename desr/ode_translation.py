@@ -1090,9 +1090,7 @@ class ODETranslator(object):
         y1 = e*k_0_1/k_2_3 = e / x1
         """
         system = self._system_or(None)
-        dimensions = (system.physical_dimensions_of(self.scaling_matrix)
-                      if system.physical_dimensions
-                      else system.dimensions_of())
+        dimensions = system.physical_dimensions_of(self.scaling_matrix)
 
         names = self.column_names()
         monomials = self.forward_monomials()
@@ -1110,14 +1108,8 @@ class ODETranslator(object):
             powers = monomial.as_powers_dict()
             carried = [(dimensions[s], powers[s]) for s in system.symbols
                        if powers.get(s, 0)]
-            if any(dimension is None for dimension, _ in carried):
-                # A symbol in this monomial has a dimension the declarations do not
-                # determine, so neither is this one determined.  A 1 here would read as
-                # "dimensionless", which is a claim nobody made.
-                dimension = None
-            else:
-                dimension = sympy.simplify(sympy.prod(
-                    [dimension ** power for dimension, power in carried]))
+            dimension = sympy.simplify(sympy.prod(
+                [dimension ** power for dimension, power in carried]))
             if index < self.r:
                 rows.append({'symbol': name, 'denotes': monomial,
                              'dimension': dimension, 'role': 'unit',
@@ -1156,8 +1148,9 @@ class ODETranslator(object):
         Returns:
             dict: ``units``, the number of auxiliaries, and ``dimensions``, how many
             independent physical dimensions those units measure.  ``dimensions`` is
-            :const:`None` until the declarations determine every symbol, since a count
-            drawn from a partial declaration would claim more than anyone said.
+            :const:`None` until the declarations reach every direction, since a count
+            drawn from a partial declaration would claim more than anyone said: two
+            directions nobody named might be the same dimension.
 
         The translator holds the system as it was when it was built, so declare the
         dimensions first.  Undeclared, there is nothing to count:
@@ -1187,9 +1180,10 @@ class ODETranslator(object):
         {'units': 4, 'dimensions': 2}
         """
         system = self._system_or(None)
-        physical = system.physical_dimensions_of(self.scaling_matrix)
-        if not physical or any(each is None for each in physical.values()):
+        declared = system.physical_dimensions
+        if not declared or system._declared_weights(self.scaling_matrix).rank() < self.r:
             return {'units': self.r, 'dimensions': None}
+        physical = system.physical_dimensions_of(self.scaling_matrix)
 
         names = sorted({base for each in physical.values()
                         for base in each.free_symbols}, key=str)
