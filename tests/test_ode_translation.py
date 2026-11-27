@@ -1261,51 +1261,101 @@ class TestExtendFromWrittenInvariants(TestCase):
     def test_a_list_of_expressions(self):
         system, translator = self.translator()
         h, p, d, r, t = sympy.symbols('h p d r t')
-        extended = translator.extend_from_invariants([r * t, h * p / d])
-        self.assertEqual(tuple(extended.invariant_monomials())[:2], (r * t, h * p / d))
+        extended = translator.copy()
+        extended.extend_from_invariants([r * t, h * p / d])
+        self.assertLessEqual({r * t, h * p / d}, set(extended.invariant_monomials()))
 
     def test_a_list_of_strings(self):
         system, translator = self.translator()
-        extended = translator.extend_from_invariants(['r*t', 'h*p/d'])
-        self.assertEqual(tuple(extended.invariant_monomials())[:2],
-                         (sympy.sympify('r*t'), sympy.sympify('h*p/d')))
+        extended = translator.copy()
+        extended.extend_from_invariants(['r*t', 'h*p/d'])
+        self.assertLessEqual({sympy.sympify('r*t'), sympy.sympify('h*p/d')}, set(extended.invariant_monomials()))
 
     def test_one_expression_need_not_be_wrapped(self):
         system, translator = self.translator()
-        extended = translator.extend_from_invariants(sympy.sympify('h*p/d'))
-        self.assertEqual(tuple(extended.invariant_monomials())[0],
-                         sympy.sympify('h*p/d'))
+        extended = translator.copy()
+        extended.extend_from_invariants(sympy.sympify('h*p/d'))
+        self.assertIn(sympy.sympify('h*p/d'), list(extended.invariant_monomials()))
 
     def test_one_string_need_not_be_wrapped(self):
         system, translator = self.translator()
-        extended = translator.extend_from_invariants('h*p/d')
-        self.assertEqual(tuple(extended.invariant_monomials())[0],
-                         sympy.sympify('h*p/d'))
+        extended = translator.copy()
+        extended.extend_from_invariants('h*p/d')
+        self.assertIn(sympy.sympify('h*p/d'), list(extended.invariant_monomials()))
 
     def test_the_exponent_matrix_still_works(self):
         system, translator = self.translator()
         matrix = sympy.Matrix([monomial_to_powers(sympy.sympify('h*p/d'),
                                                   list(system.symbols))]).T
-        extended = translator.extend_from_invariants(matrix)
-        self.assertEqual(tuple(extended.invariant_monomials())[0],
-                         sympy.sympify('h*p/d'))
+        extended = translator.copy()
+        extended.extend_from_invariants(matrix)
+        self.assertIn(sympy.sympify('h*p/d'), list(extended.invariant_monomials()))
+
+    def test_it_changes_the_translator_and_a_copy_keeps_the_original(self):
+        system, translator = self.translator()
+        before = translator.herm_mult
+        kept = translator.copy()
+        self.assertIsNone(translator.extend_from_invariants('h*p/d'))
+        self.assertNotEqual(before, translator.herm_mult)
+        self.assertEqual(before, kept.herm_mult)
+
+    def test_the_result_is_a_change_of_basis_of_the_same_invariants(self):
+        # V stays unimodular, its auxiliary block is untouched, and A V is still [H, 0]:
+        # so the new invariants generate exactly the old ones.
+        system, translator = self.translator()
+        before = translator.copy()
+        translator.extend_from_invariants(['r*t', 'h*p/d'])
+        self.assertEqual(1, abs(translator.herm_mult.det()))
+        self.assertEqual(before.herm_mult_i, translator.herm_mult_i)
+        self.assertEqual(before.scaling_matrix * before.herm_mult,
+                         translator.scaling_matrix * translator.herm_mult)
+        # Each old invariant is an integer combination of the new, and the other way.
+        change = before.inv_herm_mult_d * translator.herm_mult_n
+        self.assertEqual(1, abs(change.det()))
+
+    def test_the_columns_are_in_the_schemes_order(self):
+        system, translator = self.translator()
+        translator.extend_from_invariants(['h*p/d', 'r*t'])
+        dependents, clock = set(system.dependents), system.independent_variable
+
+        def kind(monomial):
+            if clock in monomial.free_symbols:
+                return 1
+            return 2 if monomial.free_symbols & dependents else 0
+
+        kinds = [kind(m) for m in translator.invariant_monomials()]
+        self.assertEqual(sorted(kinds), kinds)
+
+    def test_a_choice_no_basis_can_contain_is_refused_and_changes_nothing(self):
+        system, translator = self.translator()
+        before = translator.herm_mult
+        square = sympy.sympify('h**2*p**2/d**2')
+        with self.assertRaises(ValueError) as caught:
+            translator.extend_from_invariants(square)
+        self.assertIn('cannot be part of an integer basis', str(caught.exception))
+        self.assertEqual(before, translator.herm_mult)
+        # And a set where one is a product of the others.
+        with self.assertRaises(ValueError):
+            translator.extend_from_invariants(['r*t', 'h*p/d', 'h*p*r*t/d'])
 
     def test_the_two_forms_agree(self):
         system, translator = self.translator()
         matrix = sympy.Matrix([monomial_to_powers(sympy.sympify('h*p/d'),
                                                   list(system.symbols))]).T
-        self.assertEqual(
-            tuple(translator.extend_from_invariants(matrix).invariant_monomials()),
-            tuple(translator.extend_from_invariants('h*p/d').invariant_monomials()))
+        by_matrix, by_monomial = translator.copy(), translator.copy()
+        by_matrix.extend_from_invariants(matrix)
+        by_monomial.extend_from_invariants('h*p/d')
+        self.assertEqual(tuple(by_matrix.invariant_monomials()),
+                         tuple(by_monomial.invariant_monomials()))
 
     def test_a_written_invariant_survives_a_reorder(self):
         # The whole point.  The same thing written gives the same thing chosen.
         for order in (['K', 'd', 'h', 'k', 'r', 's'], ['s', 'r', 'k', 'h', 'd', 'K']):
             with self.subTest(order=''.join(order)):
                 system, translator = self.translator(order)
-                extended = translator.extend_from_invariants('h*p/d')
-                self.assertEqual(tuple(extended.invariant_monomials())[0],
-                                 sympy.sympify('h*p/d'))
+                extended = translator.copy()
+                extended.extend_from_invariants('h*p/d')
+                self.assertIn(sympy.sympify('h*p/d'), list(extended.invariant_monomials()))
 
     def test_the_exponent_matrix_does_not_survive_a_reorder(self):
         # Why the monomial form exists: built against one order, the identical matrix
@@ -1371,13 +1421,15 @@ class TestPassingAPrebuiltExpression(TestCase):
 
     def test_an_expression_built_with_sympify_expression_works(self):
         chosen = sympify_expression('E*k_1/k_2')
-        extended = self.translator.extend_from_invariants(chosen)
-        self.assertEqual(tuple(extended.invariant_monomials())[0], chosen)
+        extended = self.translator.copy()
+        extended.extend_from_invariants(chosen)
+        self.assertIn(chosen, list(extended.invariant_monomials()))
 
     def test_an_expression_built_from_symbols_works(self):
         E, k_1, k_2 = sympy.symbols('E k_1 k_2')
-        extended = self.translator.extend_from_invariants(E * k_1 / k_2)
-        self.assertEqual(tuple(extended.invariant_monomials())[0], E * k_1 / k_2)
+        extended = self.translator.copy()
+        extended.extend_from_invariants(E * k_1 / k_2)
+        self.assertIn(E * k_1 / k_2, list(extended.invariant_monomials()))
 
     def test_sympys_own_sympify_is_caught_and_the_cause_named(self):
         # `sympy.sympify('E*k_1/k_2')` has Euler's number where the enzyme should be, and
@@ -1687,22 +1739,23 @@ class TestFourVariableImposedInvariants(TestCase):
         self.translator = ODETranslator(self.system)
 
     def test_the_choice_is_honoured(self):
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
-        self.assertEqual(tuple(chosen.invariant_monomials())[:2],
-                         (sympify_expression('C*k_1/k_2'),
-                          sympify_expression('P*k_1/k_m1')))
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
+        self.assertLessEqual({sympify_expression('C*k_1/k_2'), sympify_expression('P*k_1/k_m1')}, set(chosen.invariant_monomials()))
 
     def test_none_of_the_six_is_a_parameter_yet(self):
         # Which is why a column operation is needed before the parameter scheme has
         # anything to reduce.
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
         variables = set(self.system.variables)
         for monomial in chosen.invariant_monomials():
             with self.subTest(monomial=monomial):
                 self.assertTrue(monomial.free_symbols & variables)
 
     def test_one_column_operation_exposes_a_parameter(self):
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
         chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
                                       chosen.column_of('P*k_1/k_2'), power=-1)
         self.assertIn(sympify_expression('k_2/k_m1'),
@@ -1711,7 +1764,8 @@ class TestFourVariableImposedInvariants(TestCase):
     def test_the_hand_rolled_extension_agrees_with_the_library(self):
         # The script shows the Smith normal form of W_d P for the paper.  It reaches the
         # same invariants, in a different column order -- asserted rather than claimed.
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
         exponents = sympy.Matrix(
             [monomial_to_powers(sympify_expression(m), list(self.system.symbols))
              for m in self.CHOICE]).T
@@ -1726,34 +1780,24 @@ class TestFourVariableImposedInvariants(TestCase):
         self.assertEqual(sorted(map(str, by_hand.invariant_monomials())),
                          sorted(map(str, chosen.invariant_monomials())))
 
-    def test_the_derived_permutation_is_the_one_the_doc_page_hardcodes(self):
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
+    def test_one_column_operation_and_the_order_give_the_parameter_scheme(self):
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
         chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
                                       chosen.column_of('P*k_1/k_2'), power=-1)
-        monomials = list(chosen.invariant_monomials())
-        variables = set(self.system.variables)
-        indep = self.system.independent_variable
-
-        def kind(monomial):
-            if indep in monomial.free_symbols:
-                return 1
-            return 2 if monomial.free_symbols & variables else 0
-
-        permutation = sorted(range(len(monomials)),
-                             key=lambda i: (kind(monomials[i]), i))
-        self.assertEqual(permutation, [1, 2, 0, 3, 4, 5])
+        self.assertNotEqual(ReductionScheme.PARAMETER, chosen.scheme())
+        chosen.order_invariant_columns()
+        self.assertEqual(ReductionScheme.PARAMETER, chosen.scheme())
 
     def test_the_result_is_the_doc_pages_one_parameter_system(self):
-        chosen = self.translator.extend_from_invariants(self.CHOICE)
+        chosen = self.translator.copy()
+        chosen.extend_from_invariants(self.CHOICE)
         chosen.multiplier_add_columns(chosen.column_of('P*k_1/k_m1'),
                                       chosen.column_of('P*k_1/k_2'), power=-1)
-        rearranged = ODETranslator(
-            self.system, scaling_matrix=chosen.scaling_matrix,
-            hermite_multiplier=sympy.Matrix.hstack(
-                chosen.herm_mult_i, chosen.herm_mult_n[:, [1, 2, 0, 3, 4, 5]]),
-            naming_scheme={'parameters': 'c', 'independent': 't',
-                           'dependents': ['C', 'E', 'P', 'S']})
-        reduced = rearranged.translate().subs({'c0': 'alpha'})
+        chosen.order_invariant_columns()
+        chosen.set_naming_scheme({'parameters': 'c', 'independent': 't',
+                                  'dependents': ['C', 'E', 'P', 'S']})
+        reduced = chosen.translate().subs({'c0': 'alpha'})
         C, E, P, S, alpha = sympy.symbols('C E P S alpha')
         derivatives = reduced.derivative_dict
         self.assertEqual(set(map(str, reduced.parameters)), {'alpha'})

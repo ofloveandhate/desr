@@ -118,6 +118,19 @@ each can be turned off.
     translator with no system.
   - The dict for `ODESystem` and `from_dict` may hold names and expressions
     as strings, read as `equations=` reads them.
+  - `extend_from_invariants` changes the translator it is called on, as the
+    `multiplier_*` operations and `isolate_clock` do, instead of returning a
+    new one.  `translator.copy()` keeps the original; `copy.copy` shared the
+    multiplier before, and is now the same as `copy()`.  The extension puts
+    the invariant columns in the order the schemes read them, and its
+    docstring says what is kept, what is chosen, what is completed and when
+    no completion exists.  A choice that cannot be part of an integer basis
+    is refused in the chosen monomials' own terms.
+  - `order_invariant_columns()` puts the invariant columns in that order:
+    parameter invariants, then those with the independent variable, then
+    those with a dependent.  After column operations it is what lets the
+    parameter scheme apply, where a page used to build the permutation by
+    hand.
   - `translate` no longer takes `naming_scheme`.  Set it at construction or
     with `set_naming_scheme`, so one reduction cannot be named two ways.
   - A reduced system carries what it needs to describe itself:
