@@ -51,7 +51,9 @@ bibtex_bibfiles = ['desr.bib']
 import matplotlib
 matplotlib.use('Agg')
 
-plot_formats = [('png', 110)]
+# 150 dpi, because the figures of desr.figures are set in 6.5 pt type to fit a page and
+# are unreadable at screen resolution.  A browser scales an image down to the column.
+plot_formats = [('png', 150)]
 plot_html_show_formats = False
 
 # Sphinx re-reads a page only when the page's own source changes, and the plot directive
