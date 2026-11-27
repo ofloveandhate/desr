@@ -168,7 +168,7 @@ Optionally, see the invariants and substitutions
 
 We have substitutions to make.  Note that many get normalised to :math:`1`.
 
-    >>> translator.translate_parameter_substitutions(system)
+    >>> translator.substitutions()
     {s_0: 1, e_0: kappa0, k_1: 1, k_2: kappa1, k_m1: kappa2, K_m: kappa3, c_0: kappa4, t: tau/kappa0, s: u, c: kappa0*v}
 
 Once we're done manipulating the multiplier, we finally translate.

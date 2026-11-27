@@ -147,13 +147,16 @@ class TestMoreTranslatorRefusals(TestCase):
         self.assertIn('is not in HNF', str(caught.exception))
         self.assertFalse(is_hnf_col(sympy.Matrix([[1, -1]])))
 
-    def test_the_parameter_substitutions_of_a_system_that_scheme_does_not_fit(self):
+    def test_the_parameter_scheme_on_a_system_it_does_not_fit(self):
+        # The parameter scheme refuses; the substitutions, which hold under every scheme,
+        # still answer.
         system = ODESystem.from_equations(HL_6_6)
         translator = ODETranslator.from_ode_system(system)
         self.assertNotEqual(ReductionScheme.PARAMETER, translator.scheme())
         with self.assertRaises(ValueError) as caught:
-            translator.translate_parameter_substitutions(system)
+            translator.translate_parameter(system)
         self.assertIn('not compatible for parameter translation', str(caught.exception))
+        self.assertEqual(set(system.symbols), set(translator.substitutions()))
 
     def test_reversing_with_the_wrong_number_of_solutions(self):
         system = ODESystem.from_equations(HL_6_6)

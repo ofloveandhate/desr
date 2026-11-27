@@ -886,9 +886,8 @@ class ODESystem(object):
         units is recorded as well.  That it keeps none of the auxiliaries afterwards is a
         separate fact, and the reason :attr:`auxiliary_names` is empty there; the symbols
         recorded here are the *original* ones the choice pins, which exist either way.
-        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` is
-        the fuller table for that scheme, giving an image for every original symbol rather
-        than only the pinned ones.
+        :meth:`~desr.ode_translation.ODETranslator.substitutions` is the fuller table,
+        giving an image for every original symbol rather than only the pinned ones.
 
         Returns:
             dict: ``{original symbol: 1}``.
@@ -3166,7 +3165,7 @@ class ODESystem(object):
         the leading ones are the natural candidates, but the Hermite structure decides which
         set actually can be, so a parameter that cannot participate is skipped over.  Put
         the ones you would rather see disappear at the front, then check
-        :meth:`~desr.ode_translation.ODETranslator.translate_parameter_substitutions` to see
+        :meth:`~desr.ode_translation.ODETranslator.substitutions` to see
         which went.
 
         Args:

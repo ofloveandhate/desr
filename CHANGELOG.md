@@ -152,6 +152,11 @@ each can be turned off.
     than for the symbol set.  The old `reduced_` name claimed the reduced
     system's symbols and returned the column names, which include the columns
     a reduction spends.
+  - `translate_parameter_substitutions` is gone.  `substitutions()` gives the
+    same dict, in the same order, wherever the parameter scheme applies, and
+    holds under every scheme, where the old method refused all but one.  It
+    takes no system: it reports on the one the translator was built from.
+    There is no alias.
   - `column_monomials` is `forward_monomials`, beside `reverse_monomials`.
   - `indep_var_invariant` is `indep_var_invariants`, and returns all of them.
   - `units_and_dimensions` is `num_units_and_dimensions`, because it counts.

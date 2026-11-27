@@ -421,7 +421,7 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
 
     def test_the_seven_parameters_at_the_front_are_the_ones_set_to_one(self):
         system, translator, _ = self.reduction()
-        substitutions = translator.translate_parameter_substitutions(system)
+        substitutions = translator.substitutions()
         set_to_one = {str(symbol) for symbol, image in substitutions.items() if image == 1}
         self.assertEqual(set(self.USED_AS_UNITS), set_to_one)
 
