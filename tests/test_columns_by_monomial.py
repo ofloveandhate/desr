@@ -28,7 +28,7 @@ class TestColumnsByMonomial(TestCase):
         self.symbols = {str(symbol): symbol for symbol in self.system.symbols}
 
     def translator(self):
-        return ODETranslator.from_ode_system(self.system)
+        return ODETranslator(self.system)
 
     def monomials(self, translator):
         return list(translator.forward_monomials())

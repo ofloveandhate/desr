@@ -83,7 +83,7 @@ def random_system(seed, max_dependents=3, max_parameters=4, max_terms=3, max_pow
     symbols = [t] + list(dependents) + list(parameters)
     derivatives = ([sympy.Integer(1)] + [rates[dependent] for dependent in dependents]
                    + [None] * len(parameters))
-    return ODESystem(symbols, derivatives, indep_var=t)
+    return ODESystem._from_variables(symbols, derivatives, indep_var=t)
 
 
 

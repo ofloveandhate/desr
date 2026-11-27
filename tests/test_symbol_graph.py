@@ -50,10 +50,10 @@ class TestTheGraphIsTheMultiplier(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_both_layers_have_one_vertex_per_symbol(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         n = self.translator.n
         self.assertEqual(graph.number_of_nodes(), 2 * n)
         for layer in (ORIGINAL, REDUCED):
@@ -63,7 +63,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
                 self.assertEqual(len(in_layer), n)
 
     def test_the_forward_edges_are_the_multiplier_entry_for_entry(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         originals = list(self.translator.symbols_domain)
         names = list(self.translator.column_names())
         multiplier = self.translator.herm_mult
@@ -81,7 +81,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
             expected)
 
     def test_the_reverse_edges_are_the_inverse_entry_for_entry(self):
-        graph = symbol_graph(self.translator, self.system, direction='reverse')
+        graph = symbol_graph(self.translator, direction='reverse')
         originals = list(self.translator.symbols_domain)
         names = list(self.translator.column_names())
         inverse = self.translator.inv_herm_mult
@@ -103,8 +103,8 @@ class TestTheGraphIsTheMultiplier(TestCase):
         # Two hops: the exponents multiply along a path and the parallel paths sum.  This
         # is the assertion that catches a transposed read of either matrix, where a
         # statement about which symbols divide cannot.
-        forward = symbol_graph(self.translator, self.system)
-        reverse = symbol_graph(self.translator, self.system, direction='reverse')
+        forward = symbol_graph(self.translator)
+        reverse = symbol_graph(self.translator, direction='reverse')
 
         for start in self.translator.symbols_domain:
             for finish in self.translator.symbols_domain:
@@ -117,7 +117,7 @@ class TestTheGraphIsTheMultiplier(TestCase):
                     self.assertEqual(total, 1 if start == finish else 0)
 
     def test_the_graph_is_bipartite_in_the_networkx_sense(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         undirected = graph.to_undirected()
         self.assertTrue(networkx.algorithms.bipartite.is_bipartite(undirected))
         left, right = networkx.algorithms.bipartite.sets(undirected)
@@ -126,16 +126,16 @@ class TestTheGraphIsTheMultiplier(TestCase):
     def test_a_column_operation_changes_the_graph(self):
         # Read from the multiplier as it stands, which is what makes the graph useful for
         # choosing a column operation rather than only for reporting one.
-        before = symbol_graph(self.translator, self.system)
+        before = symbol_graph(self.translator)
         self.translator.multiplier_add_columns(
             self.translator.column_of('k_2/(e_0*k_1)'),
             self.translator.column_of('k_m1/(e_0*k_1)'))
-        after = symbol_graph(self.translator, self.system)
+        after = symbol_graph(self.translator)
         self.assertNotEqual(_edges(before), _edges(after))
 
     def test_an_unknown_direction_is_refused_and_names_the_two(self):
         with self.assertRaises(ValueError) as caught:
-            symbol_graph(self.translator, self.system, direction='sideways')
+            symbol_graph(self.translator, direction='sideways')
         self.assertIn("'forward'", str(caught.exception))
         self.assertIn("'reverse'", str(caught.exception))
 
@@ -149,8 +149,7 @@ class TestTheTwoLayersDoNotMerge(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(
-            self.system,
+        self.translator = ODETranslator(self.system,
             naming_scheme={'parameters': 'kappa', 'independent': 't',
                            'dependents': ['s', 'c']})
 
@@ -160,7 +159,7 @@ class TestTheTwoLayersDoNotMerge(TestCase):
                                   sympy.Symbol('c')})
 
     def test_the_shared_symbols_stay_four_distinct_vertices(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         self.assertEqual(graph.number_of_nodes(), 2 * self.translator.n)
         for name in ('t', 's', 'c'):
             with self.subTest(symbol=name):
@@ -175,11 +174,10 @@ class TestWhatTheNodesCarry(TestCase):
 
     def setUp(self):
         self.system = michaelis_menten_with_initial_conditions()
-        self.translator = ODETranslator.from_ode_system(
-            self.system,
+        self.translator = ODETranslator(self.system,
             naming_scheme={'parameters': 'kappa', 'independent': 'tau',
                            'dependents': ['u', 'v']})
-        self.graph = symbol_graph(self.translator, self.system)
+        self.graph = symbol_graph(self.translator)
 
     def reduced(self, name):
         return self.graph.nodes[(REDUCED, sympy.Symbol(name))]
@@ -241,8 +239,8 @@ class TestWhatTheNodesCarry(TestCase):
         # 'independent' here and is a different question.
         system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
 
         y_0 = graph.nodes[(REDUCED, sympy.Symbol('y0'))]
         self.assertEqual(y_0['monomial'], sympy.sympify('k_2_3*t'))
@@ -253,7 +251,7 @@ class TestWhatTheNodesCarry(TestCase):
         # identifies it *with* the clock -- so the reduced system's own clock is what `y0`
         # denotes, the rescaled clock, exactly as the parameter scheme's `tau` is.  Which
         # is why it is called `tau` here too: `t` would be a name for `k_2_3*t`.
-        reduced = translator.translate(system)
+        reduced = translator.translate()
         self.assertEqual(reduced.independent_variable, sympy.Symbol('tau'))
         self.assertNotIn(system.independent_variable, reduced.symbols)
         self.assertNotIn(sympy.Symbol('y0'), reduced.symbols)
@@ -266,8 +264,8 @@ class TestWhatTheNodesCarry(TestCase):
         for label, system in (('enzyme', ChemicalReactionNetwork.from_diagram(
                                    'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()),
                               ('michaelis-menten', ODESystem.from_equations(MICHAELIS_MENTEN))):
-            translator = ODETranslator.from_ode_system(system)
-            graph = symbol_graph(translator, system)
+            translator = ODETranslator(system)
+            graph = symbol_graph(translator)
             for layer in (ORIGINAL, REDUCED):
                 with self.subTest(system=label, layer=layer):
                     clocks = [data for (side, _), data in graph.nodes(data=True)
@@ -288,7 +286,7 @@ class TestWhatTheNodesCarry(TestCase):
         self.assertEqual(self.reduced('kappa4')['value'], 0)
 
     def test_the_propagated_value_agrees_with_the_reduced_system(self):
-        reduced_system = self.translator.translate(self.system)
+        reduced_system = self.translator.translate()
         for symbol, value in reduced_system.parameter_values.items():
             with self.subTest(symbol=symbol):
                 self.assertEqual(self.graph.nodes[(REDUCED, symbol)]['value'], value)
@@ -311,7 +309,7 @@ class TestWhatTheNodesCarry(TestCase):
         self.assertEqual(flagged, [])
 
     def test_must_not_be_zero_is_the_reverse_answer_coming_back(self):
-        back = symbol_graph(self.translator, self.system, direction='reverse')
+        back = symbol_graph(self.translator, direction='reverse')
         named = {symbol for (layer, symbol), data in back.nodes(data=True)
                  if layer == REDUCED and data['must_not_be_zero']}
         self.assertEqual(
@@ -339,9 +337,9 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
 
     def test_the_parameter_scheme_normalises_them_going_out(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
-        graph = symbol_graph(translator, system)
+        graph = symbol_graph(translator)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
                        if data['auxiliary']]
@@ -357,8 +355,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # `substitutions()` -- the thing that actually rewrites the
         # system -- replaces with 1.
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
 
         marked = {data['symbol'] for (layer, _), data in graph.nodes(data=True)
                   if layer == ORIGINAL and data['normalised']}
@@ -372,8 +370,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # `s_0 |-> 1` is an action, not an equality: the reduction measures concentration
         # in units of s_0, which is why `u = s/s_0` has no s_0 left in it.
         system = michaelis_menten_with_initial_conditions()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
         s_0 = graph.nodes[(ORIGINAL, sympy.Symbol('s_0'))]
         self.assertTrue(s_0['normalised'])
         self.assertEqual(_node_label(s_0, latex=False), 's_0 = s(0) |-> 1')
@@ -384,8 +382,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # chain normalises three of its four and keeps `x3 = x`, which moves.
         system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
 
         normalised = sorted(str(data['symbol']) for _, data in graph.nodes(data=True)
                             if data['auxiliary'] and data['normalised'])
@@ -407,9 +405,9 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # `e_0` and `k_1` -- which are the caller's to choose and are under no such
         # constraint.  True in both directions, so neither carries it.
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         for direction in ('forward', 'reverse'):
-            graph = symbol_graph(translator, system, direction=direction)
+            graph = symbol_graph(translator, direction=direction)
             for _, data in graph.nodes(data=True):
                 if data['normalised']:
                     with self.subTest(direction=direction,
@@ -423,8 +421,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # Carrying `value = 1` into the reverse graph would make `s_0 = x1` read as
         # `s_0 = 1` for every system, which is false.
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system, direction='reverse')
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator, direction='reverse')
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
                        if data['auxiliary']]
@@ -437,23 +435,23 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
 
     def test_how_many_must_be_supplied_is_the_number_of_symmetries(self):
         system = michaelis_menten_with_initial_conditions()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system, direction='reverse')
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator, direction='reverse')
         supplied = [data for _, data in graph.nodes(data=True)
                     if data['must_be_supplied']]
         self.assertEqual(len(supplied), translator.r)
 
     def test_nothing_must_be_supplied_going_out(self):
         system = michaelis_menten_with_initial_conditions()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
         self.assertEqual([data for _, data in graph.nodes(data=True)
                           if data['must_be_supplied']], [])
 
     def test_the_reverse_label_does_not_claim_an_auxiliary_is_one(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system, direction='reverse')
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator, direction='reverse')
         x1 = graph.nodes[(REDUCED, sympy.Symbol('x1'))]
         self.assertEqual(
             _node_label(x1, with_monomial=False, latex=False,
@@ -467,9 +465,9 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.scheme(), ReductionScheme.GENERAL)
-        graph = symbol_graph(translator, system)
+        graph = symbol_graph(translator)
 
         auxiliaries = [data for _, data in graph.nodes(data=True)
                        if data['auxiliary']]
@@ -478,7 +476,7 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
             with self.subTest(symbol=str(data['symbol'])):
                 self.assertFalse(data['normalised'])
         # And they really are variables of the reduction, which is why.
-        reduced = translator.translate(system)
+        reduced = translator.translate()
         for data in auxiliaries:
             self.assertIn(data['symbol'], reduced.symbols)
 
@@ -487,8 +485,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # things: `x1 = s_0`, so normalising `x1` *is* measuring in units of `s_0`.  The
         # figure marks both, and the counts match because they are the same act.
         system = michaelis_menten_with_initial_conditions()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
 
         marked = {ORIGINAL: set(), REDUCED: set()}
         for (layer, symbol), data in graph.nodes(data=True):
@@ -511,8 +509,8 @@ class TestWhatBecomesOfTheAuxiliaries(TestCase):
         # What the auxiliary *is*, and nothing about what the reduction does to it: that
         # part is the hatch's to say, not an equation's.
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
         x0 = graph.nodes[(REDUCED, sympy.Symbol('x0'))]
         self.assertEqual(_node_label(x0, with_monomial=True, latex=False),
                          'x0 = 1/(e_0*k_1) |-> 1')
@@ -527,7 +525,7 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def move_the_clock_invariant(self):
         '''Multiply the clock invariant by a dependent one, which leaves the block form.'''
@@ -543,9 +541,9 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
     def test_the_graph_follows_the_multiplier_rather_than_what_was_translated(self):
         # Translate first, so anything that recorded a scheme would have recorded
         # `parameter`; then move a column and ask again.  The graph must have moved too.
-        self.translator.translate(self.system)
+        self.translator.translate()
         before = {str(symbol) for (layer, symbol) in symbol_graph(
-            self.translator, self.system).nodes if layer == REDUCED}
+            self.translator).nodes if layer == REDUCED}
         # `nu` is the parameter scheme's stem for a reduced dependent and `y` the general
         # scheme's.  `kappa` would not tell them apart: a dimensionless parameter is
         # `kappa` under every scheme.
@@ -554,7 +552,7 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
 
         self.move_the_clock_invariant()
         after = {str(symbol) for (layer, symbol) in symbol_graph(
-            self.translator, self.system).nodes if layer == REDUCED}
+            self.translator).nodes if layer == REDUCED}
         self.assertNotIn('nu0', after)
         self.assertTrue(any(name.startswith('y') for name in after))
         self.assertIn('kappa0', after)
@@ -565,12 +563,12 @@ class TestTheSchemeIsAFeatureOfTheMultiplier(TestCase):
         # monomial is built from the original parameters alone.  Moving the clock
         # invariant changes the scheme here, and leaves that answer alone, because it does
         # not change what the auxiliary columns are made of.
-        before = symbol_graph(self.translator, self.system)
+        before = symbol_graph(self.translator)
         self.assertTrue(all(data['normalised'] for _, data in before.nodes(data=True)
                             if data['auxiliary']))
 
         self.move_the_clock_invariant()
-        after = symbol_graph(self.translator, self.system)
+        after = symbol_graph(self.translator)
         auxiliaries = [data for _, data in after.nodes(data=True) if data['auxiliary']]
         self.assertTrue(auxiliaries)
         self.assertTrue(all(data['normalised'] for data in auxiliaries))
@@ -602,8 +600,8 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
         # The case that motivates all of this: three auxiliaries that sit still and one
         # that moves, in one reduction.
         system = self.enzyme()
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
         kinds = {str(data['symbol']): data['kind']
                  for _, data in graph.nodes(data=True) if data['auxiliary']}
         self.assertEqual(kinds, {'x0': 'parameter', 'x1': 'parameter',
@@ -620,12 +618,12 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
                               ('prey-predator', ODESystem.from_equations(
                                   ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
                                    'dp/dt = s*p*(1 - h*p / n)']))):
-            translator = ODETranslator.from_ode_system(system)
-            graph = symbol_graph(translator, system)
+            translator = ODETranslator(system)
+            graph = symbol_graph(translator)
             # The figure shows every column, including the ones a reduction normalises
             # away, so the reduction that keeps them all is the oracle that can speak
             # about every node.  A default reduction has nothing to say about `x0`.
-            reduced = translator.translate_general(system, normalise_parameters=False)
+            reduced = translator.translate_general(normalise_parameters=False)
             for _, data in graph.nodes(data=True):
                 if not data['auxiliary']:
                     continue
@@ -640,9 +638,9 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
         # The derivative being zero is the whole argument, so assert it directly rather
         # than only through the classification.
         system = self.enzyme()
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate_general(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        reduced = translator.translate_general()
+        graph = symbol_graph(translator)
         for _, data in graph.nodes(data=True):
             if data['auxiliary'] and data['kind'] == 'parameter':
                 with self.subTest(symbol=str(data['symbol'])):
@@ -658,9 +656,9 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
                                   ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
                                    'dp/dt = s*p*(1 - h*p / n)'])):
             system = ODESystem.from_equations(equations)
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
-            graph = symbol_graph(translator, system)
+            graph = symbol_graph(translator)
             for _, data in graph.nodes(data=True):
                 if data['auxiliary']:
                     with self.subTest(system=label, symbol=str(data['symbol'])):
@@ -671,13 +669,13 @@ class TestDrawing(TestCase):
 
     def setUp(self):
         self.system = michaelis_menten_with_initial_conditions()
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_the_source_layer_is_on_the_left_in_both_directions(self):
         # So the arrows always run left to right.
         for direction, source in (('forward', ORIGINAL), ('reverse', REDUCED)):
             with self.subTest(direction=direction):
-                graph = symbol_graph(self.translator, self.system, direction=direction)
+                graph = symbol_graph(self.translator, direction=direction)
                 positions = _positions(graph)
                 sides = {layer: {positions[node][0]
                                  for node, data in graph.nodes(data=True)
@@ -691,8 +689,8 @@ class TestDrawing(TestCase):
         # Draw forward beside reverse and the reduced column ends the first panel and
         # begins the second.  For a round trip to read as one path across the two, those
         # have to be at the same heights and in the same order.
-        forward = symbol_graph(self.translator, self.system)
-        reverse = symbol_graph(self.translator, self.system, direction='reverse')
+        forward = symbol_graph(self.translator)
+        reverse = symbol_graph(self.translator, direction='reverse')
         forward_positions, reverse_positions = _positions(forward), _positions(reverse)
         for node, data in forward.nodes(data=True):
             if data['layer'] == REDUCED:
@@ -702,21 +700,21 @@ class TestDrawing(TestCase):
 
     def test_a_column_operation_does_not_move_anything(self):
         # The other comparison the fixed layout exists for: before against after.
-        before = _positions(symbol_graph(self.translator, self.system))
+        before = _positions(symbol_graph(self.translator))
         self.translator.multiplier_add_columns(
             self.translator.column_of('c_0/s_0'), self.translator.column_of('e_0/s_0'))
-        after = _positions(symbol_graph(self.translator, self.system))
+        after = _positions(symbol_graph(self.translator))
         self.assertEqual(before, after)
 
     def test_the_layout_does_not_depend_on_anything_but_the_order(self):
-        twice = [_positions(symbol_graph(self.translator, self.system)) for _ in range(2)]
+        twice = [_positions(symbol_graph(self.translator)) for _ in range(2)]
         self.assertEqual(*twice)
 
     def test_the_two_layers_are_two_columns(self):
-        positions = _positions(symbol_graph(self.translator, self.system))
+        positions = _positions(symbol_graph(self.translator))
         columns = {layer: {positions[node][0]
                            for node, data in
-                           symbol_graph(self.translator, self.system).nodes(data=True)
+                           symbol_graph(self.translator).nodes(data=True)
                            if data['layer'] == layer}
                    for layer in (ORIGINAL, REDUCED)}
         self.assertEqual(len(columns[ORIGINAL]), 1)
@@ -726,19 +724,19 @@ class TestDrawing(TestCase):
     def test_a_label_chains_the_symbol_its_expression_and_its_value(self):
         # Every part of it is genuinely equal, so the chain is true as written and says
         # the whole zero-initial-condition story in one line.
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         kappa4 = graph.nodes[(REDUCED, sympy.Symbol('kappa4'))]
         self.assertEqual(_node_label(kappa4, with_monomial=True, latex=False),
                          'kappa4 = nu1(0) = c_0/s_0 = 0')
 
     def test_a_label_without_a_known_value_stops_at_the_expression(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         kappa0 = graph.nodes[(REDUCED, sympy.Symbol('kappa0'))]
         self.assertEqual(_node_label(kappa0, with_monomial=True, latex=False),
                          'kappa0 = e_0/s_0')
 
     def test_latex_labels_are_mathtext(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         label = _node_label(graph.nodes[(REDUCED, sympy.Symbol('kappa4'))],
                             with_monomial=True)
         self.assertTrue(label.startswith('$') and label.endswith('$'))
@@ -754,8 +752,8 @@ class TestDrawing(TestCase):
         system = ODESystem.from_equations(
             ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        translator = ODETranslator.from_ode_system(system)
-        graph = symbol_graph(translator, system)
+        translator = ODETranslator(system)
+        graph = symbol_graph(translator)
         label = _node_label(graph.nodes[(ORIGINAL, sympy.Symbol('k_m1'))])
         self.assertIn('k_{-1}', label)
         self.assertNotIn('k_{m1}', label)
@@ -764,13 +762,13 @@ class TestDrawing(TestCase):
     def test_drawing_returns_the_axes_it_drew_on(self):
         import matplotlib.pyplot
         _, ax = matplotlib.pyplot.subplots()
-        self.assertIs(draw_symbol_graph(symbol_graph(self.translator, self.system),
+        self.assertIs(draw_symbol_graph(symbol_graph(self.translator),
                                         ax=ax), ax)
         matplotlib.pyplot.close('all')
 
     def test_drawing_without_axes_makes_its_own(self):
         import matplotlib.pyplot
-        ax = draw_symbol_graph(symbol_graph(self.translator, self.system))
+        ax = draw_symbol_graph(symbol_graph(self.translator))
         self.assertIsNotNone(ax.get_figure())
         matplotlib.pyplot.close('all')
 
@@ -778,7 +776,7 @@ class TestDrawing(TestCase):
         import matplotlib.pyplot
         for direction in ('forward', 'reverse'):
             with self.subTest(direction=direction):
-                graph = symbol_graph(self.translator, self.system, direction=direction)
+                graph = symbol_graph(self.translator, direction=direction)
                 self.assertIsNotNone(draw_symbol_graph(graph))
         matplotlib.pyplot.close('all')
 
@@ -792,8 +790,7 @@ class TestTheGraphAsTheNarrativePageShowsIt(TestCase):
 
     def setUp(self):
         self.system = michaelis_menten_with_initial_conditions()
-        self.translator = ODETranslator.from_ode_system(
-            self.system,
+        self.translator = ODETranslator(self.system,
             naming_scheme={'parameters': 'kappa', 'independent': 'tau',
                            'dependents': ['u', 'v']})
         self.translator.multiplier_add_columns(
@@ -845,11 +842,11 @@ class TestTheTranslatorMethods(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_the_method_gives_the_same_graph_as_the_function(self):
         by_method = self.translator.symbol_graph()
-        by_function = symbol_graph(self.translator, self.system)
+        by_function = symbol_graph(self.translator)
         self.assertEqual(_edges(by_method), _edges(by_function))
         self.assertEqual(set(by_method.nodes), set(by_function.nodes))
 
@@ -873,18 +870,18 @@ class TestWhereTheDependentsStart(TestCase):
 
     def setUp(self):
         self.system = michaelis_menten_with_initial_conditions()
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_an_original_dependent_carries_the_symbol_it_was_given(self):
         for direction in ('forward', 'reverse'):
-            graph = symbol_graph(self.translator, self.system, direction=direction)
+            graph = symbol_graph(self.translator, direction=direction)
             for variable, given in self.system.initial_conditions.items():
                 with self.subTest(direction=direction, variable=variable):
                     self.assertEqual(
                         given, graph.nodes[(ORIGINAL, variable)]['initial_value'])
 
     def test_only_dependents_with_an_initial_condition_carry_one(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         carrying = {data['symbol'] for node, data in graph.nodes(data=True)
                     if data['layer'] == ORIGINAL and 'initial_value' in data}
         self.assertEqual(set(self.system.initial_conditions), carrying)
@@ -897,9 +894,9 @@ class TestWhereTheDependentsStart(TestCase):
                         lambda translator: translator.multiplier_add_columns(
                             translator.column_of('c/s_0'),
                             translator.column_of('s/s_0'))):
-            translator = ODETranslator.from_ode_system(self.system)
+            translator = ODETranslator(self.system)
             prepare(translator)
-            graph = symbol_graph(translator, self.system)
+            graph = symbol_graph(translator)
             self.assertNotIn('initial_conditions_refused', graph.graph)
             reduced = {data['symbol']: data for node, data in graph.nodes(data=True)
                        if data['layer'] == REDUCED}
@@ -922,8 +919,8 @@ class TestWhereTheDependentsStart(TestCase):
         self.translator.multiplier_add_columns(
             self.translator.column_of('c/s_0'), self.translator.column_of('k_1*s_0*t'))
         with self.assertRaises(ValueError) as caught:
-            self.translator.translate(self.system)
-        graph = symbol_graph(self.translator, self.system)
+            self.translator.translate()
+        graph = symbol_graph(self.translator)
         self.assertEqual(str(caught.exception), graph.graph['initial_conditions_refused'])
         self.assertEqual(2 * len(self.system.symbols), graph.number_of_nodes())
         self.assertFalse([node for node, data in graph.nodes(data=True)
@@ -931,14 +928,14 @@ class TestWhereTheDependentsStart(TestCase):
 
     def test_a_system_with_no_initial_conditions_carries_none(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        graph = symbol_graph(ODETranslator.from_ode_system(system), system)
+        graph = symbol_graph(ODETranslator(system))
         self.assertFalse([node for node, data in graph.nodes(data=True)
                           if 'initial_value' in data])
         self.assertNotIn('initial_conditions_refused', graph.graph)
 
     def test_the_parameter_that_is_an_initial_value_says_whose(self):
         for direction in ('forward', 'reverse'):
-            graph = symbol_graph(self.translator, self.system, direction=direction)
+            graph = symbol_graph(self.translator, direction=direction)
             for layer in (ORIGINAL, REDUCED):
                 starts = {data['symbol']: data['initial_value']
                           for node, data in graph.nodes(data=True)
@@ -959,7 +956,7 @@ class TestWhereTheDependentsStart(TestCase):
                     self.assertEqual(2 if layer == ORIGINAL else 1, len(named))
 
     def test_a_start_is_written_once_on_the_parameter_that_is_it(self):
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         s, s_0, c_0, k_m1 = sympy.symbols('s s_0 c_0 k_m1')
         # s_0 is also the unit here, which the arrow says.
         self.assertEqual('s_0 = s(0) |-> 1',
@@ -979,7 +976,7 @@ class TestWhereTheDependentsStart(TestCase):
 
     def test_a_long_chain_is_set_on_two_lines_with_the_equals_signs_aligned(self):
         from desr.symbol_graph import _node_label_lines
-        graph = symbol_graph(self.translator, self.system)
+        graph = symbol_graph(self.translator)
         c_0, s_0 = sympy.symbols('c_0 s_0')
         # The same parts as the one-line label, in the same order.
         head, lines = _node_label_lines(graph.nodes[(ORIGINAL, c_0)], latex=False)
@@ -1015,7 +1012,7 @@ class TestWhereTheDependentsStart(TestCase):
         # dz/dt = -k z with z(0) = z_0 reduces to y = z/z_0, which starts at 1.
         system = ODESystem.from_equations(['dz/dt = -k*z'])
         system.update_initial_conditions({'z': 'z_0'})
-        graph = symbol_graph(ODETranslator.from_ode_system(system), system)
+        graph = symbol_graph(ODETranslator(system))
         dependent = next(data for node, data in graph.nodes(data=True)
                          if data['layer'] == REDUCED and 'initial_value' in data)
         self.assertEqual(1, dependent['initial_value'])

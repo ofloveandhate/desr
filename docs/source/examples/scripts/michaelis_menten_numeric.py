@@ -36,8 +36,8 @@ system = ODESystem.from_tex(SYSTEM_TEX)
 system.update_initial_conditions({'s': 's_0'})
 system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
-reduced_system = translator.translate(system)
+translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
+reduced_system = translator.translate()
 numeric = reduced_system.numeric_translator()
 
 s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols

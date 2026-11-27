@@ -25,7 +25,7 @@ invariants.  Michaelis-Menten is such a system:
     >>> system = ODESystem.from_equations(
     ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-    >>> result_first = ODETranslator.from_ode_system(system).translate(system)
+    >>> result_first = ODETranslator(system).translate()
     >>> result_first
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 - kappa1*nu0 - nu0*nu1 + nu1
@@ -35,8 +35,8 @@ invariants.  Michaelis-Menten is such a system:
 Rebuilt as a plain system, it has no scaling symmetry.  Its exponent matrix has full
 row rank, so its scaling matrix has no rows (see :ref:`no-symmetry`):
 
-    >>> rebuilt_from_result = ODESystem(result_first.symbols, result_first.derivatives,
-    ...                   indep_var=result_first.independent_variable)
+    >>> rebuilt_from_result = ODESystem(result_first.derivative_dict,
+    ...                                 indep_var=result_first.independent_variable)
     >>> rebuilt_from_result.exponent_matrix().rank(), len(rebuilt_from_result.symbols)
     (5, 5)
     >>> rebuilt_from_result.maximal_scaling_matrix().shape
@@ -44,7 +44,7 @@ row rank, so its scaling matrix has no rows (see :ref:`no-symmetry`):
 
 Reducing it returns the same system, under the same names:
 
-    >>> result_second = ODETranslator.from_ode_system(rebuilt_from_result).translate()
+    >>> result_second = ODETranslator(rebuilt_from_result).translate()
     >>> result_second
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 - kappa1*nu0 - nu0*nu1 + nu1
@@ -66,7 +66,7 @@ reduction keeps one, :math:`x_3`:
 
     >>> enzyme = ChemicalReactionNetwork.from_diagram(
     ...     'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-    >>> reduction_first_enzyme = ODETranslator.from_ode_system(enzyme).translate()
+    >>> reduction_first_enzyme = ODETranslator(enzyme).translate()
     >>> reduction_first_enzyme
     dtau/dtau = 1
     dx3/dtau = -x3*y1 + x3*y2*y4
@@ -82,8 +82,8 @@ equation for :math:`x_3` has the form :math:`dx_3/d\tau = x_3\,H(y)`, which is u
 when :math:`x_3` is multiplied by a constant, and no other equation mentions
 :math:`x_3`:
 
-    >>> rebuilt_reduced_enzyme = ODESystem(reduction_first_enzyme.symbols, reduction_first_enzyme.derivatives,
-    ...                  indep_var=reduction_first_enzyme.independent_variable)
+    >>> rebuilt_reduced_enzyme = ODESystem(reduction_first_enzyme.derivative_dict,
+    ...                                    indep_var=reduction_first_enzyme.independent_variable)
     >>> rebuilt_reduced_enzyme.maximal_scaling_matrix()
     Matrix([[0, 1, 0, 0, 0, 0]])
     >>> rebuilt_reduced_enzyme.scaling_symmetries()
@@ -95,7 +95,7 @@ untouched by it.
 
 Reducing a second time sees that one symmetry, with :math:`x_3` as its auxiliary:
 
-    >>> second_result_enzyme = ODETranslator.from_ode_system(rebuilt_reduced_enzyme).translate(rebuilt_reduced_enzyme)
+    >>> second_result_enzyme = ODETranslator(rebuilt_reduced_enzyme).translate()
     >>> second_result_enzyme.named_symbols
     {tau: tau, x0: x3, y1: y1, y2: y2, y3: y3, y4: y4}
     >>> second_result_enzyme
@@ -112,9 +112,9 @@ given a new name, as an auxiliary always is: the second_result_enzyme reduction 
 
 A third reduction changes absolutely nothing.  The one auxiliary is named :math:`x_0` already:
 
-    >>> again = ODESystem(second_result_enzyme.symbols, second_result_enzyme.derivatives,
+    >>> again = ODESystem(second_result_enzyme.derivative_dict,
     ...                   indep_var=second_result_enzyme.independent_variable)
-    >>> ODETranslator.from_ode_system(again).translate(again).named_symbols
+    >>> ODETranslator(again).translate().named_symbols
     {tau: tau, x0: x0, y1: y1, y2: y2, y3: y3, y4: y4}
 
 Silviana admits, her decision to make the subscripts correspond to the partition of symbols regardless of the keeping of auxiliaries or normalization, makes the third reduction the one that literally changes nothing.  C'est la vie.  I think it's a very sensible system as-implemented.

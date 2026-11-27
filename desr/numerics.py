@@ -132,7 +132,7 @@ class NumericTranslator(object):
     >>> from desr.numerics import NumericTranslator
     >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
     >>> system = ODESystem.from_equations(equations)
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> numeric = NumericTranslator(translator.translate())
     >>> numeric.scheme
     ReductionScheme.PARAMETER
@@ -611,7 +611,7 @@ class NumericTranslator(object):
         >>> from desr.numerics import NumericTranslator
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
-        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator = ODETranslator(system)
         >>> autonomous = translator.translate_general(
         ...     normalise_parameters=False).numeric_translator()
         >>> autonomous.scheme
@@ -627,7 +627,7 @@ class NumericTranslator(object):
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
         >>> system.reorder_variables(['t', 'z1', 'z2'])
-        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator = ODETranslator(system)
         >>> moving = translator.translate_general(
         ...     include_aux_vars=False).numeric_translator()
         >>> moving.carries_auxiliaries
@@ -702,11 +702,7 @@ class NumericTranslator(object):
         from .ode_translation import ODETranslator
 
         multiplier = sympy.Matrix.hstack(self._herm_mult_i, self._herm_mult_n)
-        translator = ODETranslator(
-            scaling_matrix=self.system.maximal_scaling_matrix(),
-            symbols_domain=tuple(self.system.symbols),
-            hermite_multiplier=multiplier,
-            system=self.system)
+        translator = ODETranslator(self.system, hermite_multiplier=multiplier)
         if translator.r != self.r:
             raise ValueError(
                 'This reduction has {} scaling symmetries and the system has {}, so the '

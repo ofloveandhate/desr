@@ -112,7 +112,7 @@ class TestASystemWithNoScalingSymmetry(TestCase):
         for label, build in WITHOUT_SYMMETRY.items():
             with self.subTest(system=label):
                 system = build()
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 self.assertEqual(0, translator.num_scaling_symmetries)
                 self.assertEqual([], system.scaling_symmetries())
                 self.assertEqual([], list(translator.auxiliary_monomials()))
@@ -123,7 +123,7 @@ class TestASystemWithNoScalingSymmetry(TestCase):
         for label, build in WITHOUT_SYMMETRY.items():
             with self.subTest(system=label):
                 system = build()
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 self.assertEqual(set(system.symbols),
                                  set(translator.invariant_monomials()))
                 for symbol in system.symbols:
@@ -140,7 +140,7 @@ class TestASystemWithNoScalingSymmetry(TestCase):
         for label, build in WITHOUT_SYMMETRY.items():
             with self.subTest(system=label):
                 system = build()
-                reduced = ODETranslator.from_ode_system(system).translate(system)
+                reduced = ODETranslator(system).translate()
                 # The equations are true, there are as many symbols as before, and each
                 # reduced symbol denotes one original symbol: a relabelling.
                 self.assertEqual([], false_equations(system, reduced))
@@ -159,8 +159,7 @@ class TestASystemWithNoScalingSymmetry(TestCase):
         for label, build in WITHOUT_SYMMETRY.items():
             with self.subTest(system=label):
                 system = build()
-                reduced = ODETranslator.from_ode_system(system).translate_general(
-                    system, normalise_parameters=False, rescale_clock=False)
+                reduced = ODETranslator(system).translate_general(normalise_parameters=False, rescale_clock=False)
                 self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
                 self.assertEqual([], false_equations(system, reduced))
                 self.assertEqual(len(system.symbols) + 1, len(reduced.symbols))
@@ -168,8 +167,8 @@ class TestASystemWithNoScalingSymmetry(TestCase):
 
     def test_the_reports_all_answer(self):
         system = WITHOUT_SYMMETRY['two variables']()
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate(system)
+        translator = ODETranslator(system)
+        reduced = translator.translate()
         self.assertEqual(len(system.symbols), len(translator.unit_table()))
         self.assertEqual({'value'}, {row['role'] for row in translator.unit_table()})
         self.assertEqual(0, translator.num_units_and_dimensions()['units'])
@@ -195,9 +194,9 @@ class TestReductionIsIdempotent(TestCase):
         for label in ('Michaelis-Menten', 'predator-prey'):
             with self.subTest(system=label):
                 system = WITH_SYMMETRY[label]()
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 self.assertEqual(ReductionScheme.PARAMETER, translator.scheme())
-                once = forget(translator.translate(system))
+                once = forget(translator.translate())
                 self.assertEqual(0, once.maximal_scaling_matrix().rows)
 
     def test_reducing_it_again_returns_it_unchanged(self):
@@ -205,8 +204,8 @@ class TestReductionIsIdempotent(TestCase):
         for label in ('Michaelis-Menten', 'predator-prey'):
             with self.subTest(system=label):
                 system = WITH_SYMMETRY[label]()
-                once = forget(ODETranslator.from_ode_system(system).translate(system))
-                twice = ODETranslator.from_ode_system(once).translate(once)
+                once = forget(ODETranslator(system).translate())
+                twice = ODETranslator(once).translate()
                 self.assertEqual([], false_equations(once, twice))
                 self.assertEqual({symbol: symbol for symbol in once.symbols},
                                  dict(twice.named_symbols))
@@ -214,9 +213,9 @@ class TestReductionIsIdempotent(TestCase):
 
     def test_and_a_third_time(self):
         system = WITH_SYMMETRY['Michaelis-Menten']()
-        once = forget(ODETranslator.from_ode_system(system).translate(system))
-        twice = forget(ODETranslator.from_ode_system(once).translate(once))
-        thrice = forget(ODETranslator.from_ode_system(twice).translate(twice))
+        once = forget(ODETranslator(system).translate())
+        twice = forget(ODETranslator(once).translate())
+        thrice = forget(ODETranslator(twice).translate())
         self.assertEqual(once, twice)
         self.assertEqual(twice, thrice)
 
@@ -228,7 +227,7 @@ class TestReductionIsIdempotent(TestCase):
                       'decay'):
             with self.subTest(system=label):
                 system = WITH_SYMMETRY[label]()
-                reduced = ODETranslator.from_ode_system(system).translate(system)
+                reduced = ODETranslator(system).translate()
                 once = forget(reduced)
                 A = once.maximal_scaling_matrix()
                 moved = {once.symbols[column] for column in range(A.cols)
@@ -245,9 +244,8 @@ class TestReductionIsIdempotent(TestCase):
                       'decay'):
             with self.subTest(system=label):
                 system = WITH_SYMMETRY[label]()
-                once = forget(ODETranslator.from_ode_system(system).translate(system))
-                twice = ODETranslator.from_ode_system(
-                    once, naming_scheme=fresh).translate(once)
+                once = forget(ODETranslator(system).translate())
+                twice = ODETranslator(once, naming_scheme=fresh).translate()
                 self.assertEqual([], false_equations(once, twice))
                 self.assertEqual(len(once.symbols), len(twice.symbols))
                 # Each symbol of the second reduction denotes one symbol of the first.
@@ -287,33 +285,30 @@ class TestAScalingMatrixMustHaveFullRowRank(TestCase):
         for label, matrix in self.deficient().items():
             with self.subTest(matrix=label):
                 with self.assertRaises(ValueError) as caught:
-                    ODETranslator(matrix, symbols_domain=self.system.symbols)
+                    ODETranslator(self.system, scaling_matrix=matrix)
                 message = str(caught.exception)
                 self.assertIn('full row rank', message)
                 self.assertIn('{} row'.format(matrix.rows), message)
                 self.assertIn('rank {}'.format(matrix.rank()), message)
 
     def test_a_matrix_of_full_row_rank_is_accepted(self):
-        translator = ODETranslator(self.real, symbols_domain=self.system.symbols)
+        translator = ODETranslator(self.system, scaling_matrix=self.real)
         self.assertEqual(self.real.rows, translator.num_scaling_symmetries)
 
     def test_a_single_real_row_is_accepted(self):
         # A sub-group of the maximal scaling is still a scaling symmetry, and reducing
         # by it alone is a true reduction that leaves the other symmetry in place.
-        translator = ODETranslator(self.real.row(0), symbols_domain=self.system.symbols)
-        reduced = translator.translate_general(
-            self.system, normalise_parameters=False, rescale_clock=False)
+        translator = ODETranslator(self.system, scaling_matrix=self.real.row(0))
+        reduced = translator.translate_general(normalise_parameters=False, rescale_clock=False)
         self.assertEqual(1, translator.num_scaling_symmetries)
         self.assertEqual([], false_equations(self.system, reduced))
 
     def test_a_matrix_with_no_rows_is_accepted(self):
         # Its rank is its row count.  It is the trivial scaling, and reducing by it is
         # the identity whatever symmetries the system has.
-        translator = ODETranslator(sympy.zeros(0, self.n),
-                                   symbols_domain=self.system.symbols)
+        translator = ODETranslator(self.system, scaling_matrix=sympy.zeros(0, self.n))
         self.assertEqual(0, translator.num_scaling_symmetries)
-        reduced = translator.translate_general(
-            self.system, normalise_parameters=False, rescale_clock=False)
+        reduced = translator.translate_general(normalise_parameters=False, rescale_clock=False)
         self.assertEqual([], false_equations(self.system, reduced))
         self.assertEqual(len(self.system.symbols) + 1, len(reduced.symbols))
 
@@ -331,15 +326,15 @@ class TestASharedNameThatMeansTheSameThing(TestCase):
         system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+kappa0) )', 'dp/dt = s*p*(1 - h*p / n)'])
         with self.assertRaises(ValueError) as caught:
-            ODETranslator.from_ode_system(system).translate(system)
+            ODETranslator(system).translate()
         self.assertIn('kappa0', str(caught.exception))
         self.assertIn('two different quantities', str(caught.exception))
 
     def test_a_name_that_denotes_itself_is_not(self):
         # A system with no symmetry, already written in the names a reduction generates.
         nu0, tau = sympy.symbols('nu0 tau')
-        system = ODESystem([tau, nu0], [sympy.Integer(1), nu0 + 1 + tau], indep_var=tau)
+        system = ODESystem({nu0: nu0 + 1 + tau}, indep_var=tau)
         self.assertEqual(0, system.maximal_scaling_matrix().rows)
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         self.assertEqual({symbol: symbol for symbol in system.symbols},
                          dict(reduced.named_symbols))

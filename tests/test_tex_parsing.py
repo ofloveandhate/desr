@@ -320,8 +320,8 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
     def test_it_reduces(self):
         from desr import ODETranslator
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
-        translator = ODETranslator.from_ode_system(system)
-        self.assertTrue(translator.translate(system).symbols)
+        translator = ODETranslator(system)
+        self.assertTrue(translator.translate().symbols)
 
     def test_which_species_drives_which_as_in_their_figure_2(self):
         # Equations 4 to 7.  MPF drives the forward rate of Cdc25P, Wee1P and IEP, and
@@ -364,8 +364,8 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
         system.reorder_variables(
             self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES)
-        translator = ODETranslator.from_ode_system(system)
-        return system, translator, translator.translate(system)
+        translator = ODETranslator(system)
+        return system, translator, translator.translate()
 
     def test_the_order_names_every_variable_once(self):
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
@@ -469,8 +469,8 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
         from oracles import false_equations
         _, translator, _ = self.reduction()
         default = ODESystem.from_tex(self.TEX, sub_defns=True)
-        other = ODETranslator.from_ode_system(default)
-        reduced = other.translate(default)
+        other = ODETranslator(default)
+        reduced = other.translate()
         self.assertEqual(7, other.num_scaling_symmetries)
         self.assertEqual(23, len(reduced.parameters))
         self.assertEqual([], false_equations(default, reduced))

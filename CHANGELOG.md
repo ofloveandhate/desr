@@ -86,14 +86,38 @@ each can be turned off.
     one.  It changes the translator, as the `multiplier_*` operations do,
     and is something a caller asks for.
 
-### A translator remembers its system
+### Building a system and a translator
 
-  - `ODETranslator.from_ode_system` keeps the system, and the methods that
-    report on a reduction no longer take one: `scheme`, `invariant_names`,
+  - `ODESystem` is built from forms that say which derivative belongs to
+    which symbol: `ODESystem({x: rate, ...})`,
+    `ODESystem(equations=['dx/dt = ...'])` or `ODESystem(tex=...)`.  A bare
+    string is refused, since equations and LaTeX read some text differently,
+    and so are the parallel lists of variables and derivatives the
+    constructor used to take.  `from_dict`, `from_equations` and `from_tex`
+    stay.
+  - A translator is the reduction of one system.  `ODETranslator(system)`
+    builds it, and keeps a copy of the system; `from_ode_system` is gone,
+    without an alias.  `ODETranslator(system, scaling_matrix=A)` reduces by
+    a scaling of one's own, and a matrix without the independent variable's
+    column is taken to have a zero there.  A translator can no longer be
+    built from a bare matrix.
+  - No method takes a system.  `translate`, `translate_parameter`,
+    `translate_dep_var`, `translate_general`, `isolate_clock` and
+    `expected_variable_count` lost their `system` argument, as the methods
+    that report on a reduction had already: `scheme`, `invariant_names`,
     `auxiliary_names`, `column_names`, `column_of`, `named_symbols`,
     `symbol_kinds`, `variable_map`, `parameter_invariants` and
-    `dependent_invariants` lost their `system` argument.  A translator built
-    from a bare matrix says so rather than guessing.
+    `dependent_invariants`.  The options of `translate`, `translate_general`
+    and `translate_dep_var` are keyword-only, so a system passed where one
+    used to go is refused rather than read as a flag.
+  - `symbol_graph(translator, direction=...)` reads the translator's own
+    system, and takes no other.
+  - `extend_from_invariants` no longer takes `variables`, which read the
+    invariants in a different order from the scaling matrix's when the two
+    differed.  `is_invariant_expr` no longer takes `variable_order`.  Both existed for a
+    translator with no system.
+  - The dict for `ODESystem` and `from_dict` may hold names and expressions
+    as strings, read as `equations=` reads them.
   - `translate` no longer takes `naming_scheme`.  Set it at construction or
     with `set_naming_scheme`, so one reduction cannot be named two ways.
   - A reduced system carries what it needs to describe itself:
@@ -168,7 +192,7 @@ each can be turned off.
 ### The short ways
 
   - `system.reduce_scaling_symmetries()` is
-    `ODETranslator.from_ode_system(system).translate(system)`, and
+    `ODETranslator(system).translate()`, and
     `system.translator()` is the translator.  Each is exactly the lines it
     stands for.
   - `ConflictingParameterValues` and `TexParseError` are exported from the

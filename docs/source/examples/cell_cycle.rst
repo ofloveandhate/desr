@@ -95,7 +95,7 @@ a fixed order, which is the order their reduced counterparts are numbered in.
 Scaling symmetries
 --------------------------
 
-    >>> translator = ODETranslator.from_ode_system(system, new_indices_start_at=1)
+    >>> translator = ODETranslator(system, new_indices_start_at=1)
     >>> translator.num_scaling_symmetries
     7
 
@@ -151,7 +151,7 @@ the table sets the phosphatase.  Changing the variable order produces different 
 Reduction
 ---------------
 
-    >>> reduced = translator.translate(system)
+    >>> reduced = translator.translate()
     >>> translator.scheme()
     ReductionScheme.PARAMETER
     >>> len(reduced.parameters), len(reduced.dependents)
@@ -233,10 +233,10 @@ The number of symmetries, and so the number of parameters removed, does not depe
 the order.  The choice of units does.  Left in desr's default variable order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
 
     >>> default = ODESystem.from_tex(tex, sub_defns=True)
-    >>> other = ODETranslator.from_ode_system(default, new_indices_start_at=1)
+    >>> other = ODETranslator(default, new_indices_start_at=1)
     >>> other.num_scaling_symmetries
     7
-    >>> otherwise = other.translate(default)
+    >>> otherwise = other.translate()
     >>> len(otherwise.parameters)
     23
 

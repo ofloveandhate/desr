@@ -69,19 +69,19 @@ class TestTheInitialValueIsTheMonomialAtTheStart(TestCase):
 
     def test_every_stated_initial_value_is_the_one_the_definition_gives(self):
         for label, system in self.systems():
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for options in self.OPTIONS:
                 with self.subTest(system=label, **options):
-                    reduced = translator.translate_general(system, **options)
+                    reduced = translator.translate_general(**options)
                     self.assertEqual([], wrong_initial_values(system, reduced))
 
     def test_every_dependent_with_an_initial_condition_reaches_the_reduced_system(self):
         # Each initial value given appears in what some reduced initial condition was
         # worked out from: none is dropped on the way.
         for label, system in self.systems():
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             with self.subTest(system=label):
-                reduced = translator.translate_general(system)
+                reduced = translator.translate_general()
                 denotes = reduced.named_symbols
                 reached = set()
                 for symbol in reduced.initial_conditions:
@@ -90,7 +90,7 @@ class TestTheInitialValueIsTheMonomialAtTheStart(TestCase):
 
     def test_the_oracle_can_fail(self):
         system = michaelis_menten({'s': 's_0', 'c': 'c_0'})
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         symbol = next(iter(reduced.initial_conditions))
         reduced.update_initial_conditions({symbol: 2 * reduced.initial_conditions[symbol]})
         self.assertEqual(1, len(wrong_initial_values(system, reduced)))
@@ -99,8 +99,7 @@ class TestTheInitialValueIsTheMonomialAtTheStart(TestCase):
         # With the clock not rescaled, e_0 k_1 t stays as an invariant with an equation.
         # It is t times parameters, so at t = 0 it is 0.
         system = michaelis_menten({'s': 's_0'})
-        reduced = ODETranslator.from_ode_system(system).translate_general(
-            system, rescale_clock=False)
+        reduced = ODETranslator(system).translate_general(rescale_clock=False)
         t = system.independent_variable
         clocks = [symbol for symbol in reduced.dependents
                   if reduced.named_symbols[symbol].has(t)]
@@ -111,7 +110,7 @@ class TestTheInitialValueIsTheMonomialAtTheStart(TestCase):
         # c(0) = 0 is the value of c_0.  The reduced initial condition is a reduced
         # parameter, and that parameter's value is 0.
         system = michaelis_menten({'s': 's_0', 'c': 0})
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         c = sympy.Symbol('c')
         symbol = next(s for s in reduced.dependents if reduced.named_symbols[s].has(c))
         stated = reduced.initial_conditions[symbol]
@@ -119,7 +118,7 @@ class TestTheInitialValueIsTheMonomialAtTheStart(TestCase):
 
     def test_no_initial_conditions_gives_none(self):
         system = ODESystem.from_equations(['dz/dt = -k*z'])
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         self.assertEqual({}, reduced.initial_conditions)
 
 
@@ -134,9 +133,9 @@ class TestItAgreesWithTheParameterScheme(TestCase):
                                    {'s': 's_0'}):
             with self.subTest(initial_conditions=initial_conditions):
                 system = michaelis_menten(initial_conditions)
-                translator = ODETranslator.from_ode_system(system)
-                general = translator.translate_general(system)
-                parameter = translator.translate_parameter(system)
+                translator = ODETranslator(system)
+                general = translator.translate_general()
+                parameter = translator.translate_parameter()
 
                 def in_original_symbols(reduced):
                     denotes = reduced.named_symbols
@@ -153,7 +152,7 @@ class TestSeveralDependentsInOneInvariant(TestCase):
     def mixed(self, initial_conditions):
         # Multiply the invariant c/e_0 by the invariant s/e_0.
         system = michaelis_menten(initial_conditions)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, s, e_0 = sympy.symbols('c s e_0')
         translator.multiplier_add_columns(c / e_0, s / e_0, power=1)
         self.assertIn(c * s / e_0 ** 2, list(translator.invariant_monomials()))
@@ -161,14 +160,14 @@ class TestSeveralDependentsInOneInvariant(TestCase):
 
     def test_with_all_of_them_given_it_has_a_value(self):
         system, translator = self.mixed({'s': 's_0', 'c': 'c_0'})
-        reduced = translator.translate_general(system)
+        reduced = translator.translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
 
     def test_with_only_some_given_it_is_refused(self):
         system, translator = self.mixed({'s': 's_0'})
         with self.assertRaises(ValueError) as caught:
-            translator.translate_general(system)
+            translator.translate_general()
         message = str(caught.exception)
         self.assertIn('s, which has an initial condition', message)
         self.assertIn('c, which does not', message)
@@ -176,19 +175,19 @@ class TestSeveralDependentsInOneInvariant(TestCase):
     def test_a_zero_in_a_denominator_is_refused(self):
         # s/c is not defined where c is 0.
         system = michaelis_menten({'s': 's_0', 'c': 0})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, s, e_0 = sympy.symbols('c s e_0')
         translator.multiplier_add_columns(s / e_0, c / e_0, power=-1)
         with self.assertRaises(ValueError) as caught:
-            translator.translate_general(system)
+            translator.translate_general()
         self.assertIn('divides by c, whose initial value is 0', str(caught.exception))
 
     def test_a_zero_in_a_numerator_is_a_zero(self):
         system = michaelis_menten({'s': 's_0', 'c': 0})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, s, e_0 = sympy.symbols('c s e_0')
         translator.multiplier_add_columns(c / e_0, s / e_0, power=1)
-        reduced = translator.translate_general(system)
+        reduced = translator.translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
 
 
@@ -198,14 +197,14 @@ class TestWhatDoesNotCarryOver(TestCase):
         # Multiply c/e_0 by the invariant e_0 k_1 t.  The product is 0 at t = 0 whatever
         # c(0) is.
         system = michaelis_menten({'s': 's_0', 'c': 'c_0'})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, e_0, k_1, t = sympy.symbols('c e_0 k_1 t')
         translator.multiplier_add_columns(c / e_0, e_0 * k_1 * t, power=1)
         self.assertIn(c * k_1 * t, list(translator.invariant_monomials()))
         for options in ({}, {'rescale_clock': False}):
             with self.subTest(**options):
                 with self.assertRaises(ValueError) as caught:
-                    translator.translate_general(system, **options)
+                    translator.translate_general(**options)
                 message = str(caught.exception)
                 self.assertIn('initial condition for c', message)
                 self.assertIn('involves t as well', message)
@@ -213,11 +212,11 @@ class TestWhatDoesNotCarryOver(TestCase):
 
     def test_isolating_the_clock_is_the_fix_the_message_names(self):
         system = michaelis_menten({'s': 's_0', 'c': 'c_0'})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, e_0, k_1, t = sympy.symbols('c e_0 k_1 t')
         translator.multiplier_add_columns(c / e_0, e_0 * k_1 * t, power=1)
-        translator.isolate_clock(system)
-        reduced = translator.translate_general(system)
+        translator.isolate_clock()
+        reduced = translator.translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
 
@@ -227,19 +226,19 @@ class TestWhatDoesNotCarryOver(TestCase):
         system.update_initial_conditions({'x': 'x_0'})
         system.reorder_variables(['t', 'x', 'x_0'])
         with self.assertRaises(ValueError) as caught:
-            ODETranslator.from_ode_system(system).translate_general(system)
+            ODETranslator(system).translate_general()
         self.assertIn('put x_0 ahead of t', str(caught.exception))
         system.reorder_variables(['x_0', 't', 'x'])
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(1, len(reduced.initial_conditions))
 
     def test_the_same_invariant_is_no_obstacle_without_that_initial_condition(self):
         system = michaelis_menten({'s': 's_0'})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         c, e_0, k_1, t = sympy.symbols('c e_0 k_1 t')
         translator.multiplier_add_columns(c / e_0, e_0 * k_1 * t, power=1)
-        reduced = translator.translate_general(system)
+        reduced = translator.translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(1, len(reduced.initial_conditions))
 
@@ -250,21 +249,21 @@ class TestWhatDoesNotCarryOver(TestCase):
         # added.
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])
-        bare = ODETranslator.from_ode_system(system)
+        bare = ODETranslator(system)
         self.assertTrue(any(monomial.free_symbols & set(system.dependents)
                             for monomial in bare.auxiliary_monomials()))
         system.update_initial_conditions({'z1': 'a', 'z2': 'b'})
         system.reorder_variables(['t', 'z1', 'z2', 'a', 'b'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertTrue(any(monomial.free_symbols & set(system.dependents)
                             for monomial in translator.auxiliary_monomials()))
         with self.assertRaises(ValueError) as caught:
-            translator.translate_general(system)
+            translator.translate_general()
         self.assertIn('uses z1 as a unit', str(caught.exception))
         self.assertIn('Put a ahead of it', str(caught.exception))
         # The fix the message names.
         system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
 
@@ -289,8 +288,7 @@ class TestTheDependentVariableScheme(TestCase):
             for options in ({}, {'normalise_parameters': False}):
                 with self.subTest(initial_conditions=initial_conditions, **options):
                     system = self.system(initial_conditions)
-                    reduced = ODETranslator.from_ode_system(system).translate_dep_var(
-                        system, **options)
+                    reduced = ODETranslator(system).translate_dep_var(**options)
                     self.assertEqual([], wrong_initial_values(system, reduced))
                     reached = set()
                     for symbol in reduced.initial_conditions:
@@ -299,16 +297,16 @@ class TestTheDependentVariableScheme(TestCase):
 
     def test_it_states_what_the_general_scheme_states(self):
         system = self.system({'z1': 'a', 'z2': 'b'})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
 
         def in_original_symbols(reduced):
             denotes = reduced.named_symbols
             return {denotes[symbol]: sympy.sympify(value).subs(denotes)
                     for symbol, value in reduced.initial_conditions.items()}
 
-        dep_var = translator.translate_dep_var(system)
+        dep_var = translator.translate_dep_var()
         self.assertEqual(2, len(dep_var.initial_conditions))
-        self.assertEqual(in_original_symbols(translator.translate_general(system)),
+        self.assertEqual(in_original_symbols(translator.translate_general()),
                          in_original_symbols(dep_var))
 
     def test_an_initial_value_takes_the_dependents_place_as_the_unit(self):
@@ -319,19 +317,19 @@ class TestTheDependentVariableScheme(TestCase):
         from desr import ReductionScheme
         bare = ODESystem.from_equations(self.EQUATIONS)
         self.assertEqual(ReductionScheme.DEP_VAR,
-                         ODETranslator.from_ode_system(bare).scheme())
+                         ODETranslator(bare).scheme())
         system = self.system({'z1': 'a', 'z2': 'b'})
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(ReductionScheme.PARAMETER, translator.scheme())
-        reduced = translator.translate(system)
+        reduced = translator.translate()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
 
     def test_a_dependent_used_as_a_unit_is_refused_and_the_fix_works(self):
         system = self.system({'z1': 'a', 'z2': 'b'}, order=['t', 'z1', 'z2', 'a', 'b'])
         with self.assertRaises(ValueError) as caught:
-            ODETranslator.from_ode_system(system).translate_dep_var(system)
+            ODETranslator(system).translate_dep_var()
         self.assertIn('uses z1 as a unit', str(caught.exception))
         system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
-        reduced = ODETranslator.from_ode_system(system).translate_dep_var(system)
+        reduced = ODETranslator(system).translate_dep_var()
         self.assertEqual([], wrong_initial_values(system, reduced))

@@ -131,9 +131,9 @@ class TestTheExampleReactionNetworks(TestCase):
     def test_every_one_of_them_reduces(self):
         for label, system in self.systems():
             with self.subTest(network=label):
-                translator = ODETranslator.from_ode_system(system)
-                reduced = translator.translate(system)
-                self.assertEqual(translator.expected_variable_count(system),
+                translator = ODETranslator(system)
+                reduced = translator.translate()
+                self.assertEqual(translator.expected_variable_count(),
                                  len(reduced.symbols))
                 self.assertLess(len(reduced.symbols), len(system.symbols))
 
@@ -141,7 +141,7 @@ class TestTheExampleReactionNetworks(TestCase):
         # What makes an invariant an invariant.  Asked of the system rather than of the
         # matrix the invariants came from, so the two have to agree.
         for label, system in self.systems():
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for invariant in translator.invariant_monomials():
                 with self.subTest(network=label, invariant=str(invariant)):
                     self.assertEqual(1, system.dimension_of(invariant))
@@ -166,7 +166,7 @@ class TestTheExampleReactionNetworks(TestCase):
         # be inverse on these systems.
         for label, system in self.systems():
             with self.subTest(network=label):
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 forward = dict(zip(translator.column_names(),
                                    translator.forward_monomials()))
                 recovered = [
@@ -194,8 +194,8 @@ class TestTheExampleReactionNetworks(TestCase):
         self.assertEqual(set(NETWORKS), set(self.TABULATED))
         for label, system in self.systems():
             with self.subTest(network=label):
-                translator = ODETranslator.from_ode_system(system)
-                reduced = translator.translate(system)
+                translator = ODETranslator(system)
+                reduced = translator.translate()
                 self.assertEqual(self.TABULATED[label],
                                  (len(system.dependents), len(system.parameters),
                                   len(reduced.parameters)))

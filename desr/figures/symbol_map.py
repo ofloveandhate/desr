@@ -677,15 +677,15 @@ def _draw_symbol_map(system, title, size, font, steps, notes):
     :rtype: matplotlib.figure.Figure
     """
     notes = dict(notes or {})
-    translator = ODETranslator.from_ode_system(system)
-    reduced = translator.translate_general(system, normalise_parameters=False,
+    translator = ODETranslator(system)
+    reduced = translator.translate_general(normalise_parameters=False,
                                            rescale_clock=False)
     # The step between: units chosen, the clock not yet rescaled.  Drawn so that the
     # two steps can be told apart.
-    normalised = translator.translate_general(system, rescale_clock=False)
-    final = translator.translate_general(system)
-    forward = symbol_graph(translator, system)
-    reverse = symbol_graph(translator, system, direction='reverse')
+    normalised = translator.translate_general(rescale_clock=False)
+    final = translator.translate_general()
+    forward = symbol_graph(translator)
+    reverse = symbol_graph(translator, direction='reverse')
 
     # One row per symbol, in the graphs and in the table alike, so the band they share
     # is what the height is made of.  Everything else is a fixed number of inches, and

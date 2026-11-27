@@ -56,7 +56,7 @@ There are six species and six rate constants:
 Scaling symmetries
 *********************
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.num_scaling_symmetries
     2
     >>> system.dimensions_of()
@@ -79,7 +79,7 @@ bound substrate, and concentration in units of :math:`k_2/k_1`.
 The reduced system
 *********************
 
-    >>> reduced = translator.translate(system)
+    >>> reduced = translator.translate()
     >>> reduced
     dtau/dtau = 1
     dnu0/dtau = kappa2*nu4 - nu0*nu2 + nu4

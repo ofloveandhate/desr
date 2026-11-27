@@ -137,7 +137,7 @@ Here it is with **nothing declared**, which is all `desr` needs:
     ...         print('{:<7} {:<14} {:<5} {!s:<5} {!s:<5} {}'.format(
     ...             str(row['symbol']), str(row['denotes']), row['role'],
     ...             row['of'], row['measured_in'], row['dimension']))
-    >>> print_table(ODETranslator.from_ode_system(bare))
+    >>> print_table(ODETranslator(bare))
     x0      1/(e_0*k_1)    unit  None  None  [t]
     x1      e_0            unit  None  None  [e_0]
     kappa0  k_2/(e_0*k_1)  value k_2   1/x0  1
@@ -156,7 +156,7 @@ time and concentration are the two dimensions in this system.  Amazing.
 
 Now the **same table with two declarations**:
 
-    >>> print_table(ODETranslator.from_ode_system(sys_w_declared_dimensions))
+    >>> print_table(ODETranslator(sys_w_declared_dimensions))
     x0      1/(e_0*k_1)    unit  None  None  time
     x1      e_0            unit  None  None  concentration
     kappa0  k_2/(e_0*k_1)  value k_2   1/x0  1
@@ -171,9 +171,9 @@ same, because declaring a dimension changes no matrix.
 
 The counts differ, though, and that is the one thing a declaration buys:
 
-    >>> ODETranslator.from_ode_system(bare).num_units_and_dimensions()
+    >>> ODETranslator(bare).num_units_and_dimensions()
     {'units': 2, 'dimensions': None}
-    >>> ODETranslator.from_ode_system(sys_w_declared_dimensions).num_units_and_dimensions()
+    >>> ODETranslator(sys_w_declared_dimensions).num_units_and_dimensions()
     {'units': 2, 'dimensions': 2}
 
 The reduction coins two units either way.  How many *dimensions* those units measure is
@@ -183,7 +183,7 @@ had earned.
 
 A reduction records the units it chose, in the caller's own symbols:
 
-    >>> ODETranslator.from_ode_system(sys_w_declared_dimensions).normalisations()
+    >>> ODETranslator(sys_w_declared_dimensions).normalisations()
     {e_0: 1, k_1: 1}
 
 Read that as "measure concentration in units of :math:`e_0`, and time in units of
@@ -197,7 +197,7 @@ record of normalisations, since there normalising is a step that can be declined
 
     >>> enzyme = ChemicalReactionNetwork.from_diagram(
     ...     'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-    >>> ODETranslator.from_ode_system(enzyme).translate(enzyme).normalisations
+    >>> ODETranslator(enzyme).translate().normalisations
     {k_0_1: 1, k_2_3: 1, k_4_5: 1}
 
 .. note::

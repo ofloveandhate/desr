@@ -25,7 +25,7 @@ class TestTheBlocksOfTheInverseMultiplier(TestCase):
         for equations in (MICHAELIS_MENTEN, HL_6_4, HL_6_6):
             with self.subTest(equations=equations[0]):
                 system = ODESystem.from_equations(equations)
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 r, n = translator.r, translator.n
                 self.assertGreater(r, 0)
                 W_u, W_d = translator.inv_herm_mult_u, translator.inv_herm_mult_d
@@ -39,7 +39,7 @@ class TestTheBlocksOfTheInverseMultiplier(TestCase):
     def test_the_dependent_variable_inverse_is_the_inverse_each_time_it_is_asked(self):
         # The second call is answered from a cache.
         system = ODESystem.from_equations(HL_6_4)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         index = system.independent_variable_index
         for _ in range(2):
             self.assertEqual(sympy.eye(2), translator.dep_var_inv_herm_mult(index)
@@ -92,7 +92,7 @@ class TestRewriteRulesAndTheMovingFrame(TestCase):
     def translators(self):
         for equations in (MICHAELIS_MENTEN, HL_6_4, HL_6_6):
             system = ODESystem.from_equations(equations)
-            yield system, ODETranslator.from_ode_system(system)
+            yield system, ODETranslator(system)
 
     def test_the_rewrite_is_a_projection_onto_the_invariants(self):
         # P = V_n W_d satisfies P P = P, because W_d V_n = I; and A P = 0, because the

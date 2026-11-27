@@ -203,63 +203,135 @@ class ODESystem(object):
     classification tells them apart -- see
     :meth:`~desr.ode_translation.ODETranslator.symbol_kinds`.
 
+    Build one from a form that says which derivative belongs to which symbol:
+
+    >>> x, y, k = sympy.symbols('x y k')
+    >>> ODESystem({x: -k*x + y, y: x})
+    dt/dt = 1
+    dx/dt = -k*x + y
+    dy/dt = x
+    parameters: k
+    >>> ODESystem(equations=['dx/dt = -k*x + y', 'dy/dt = x']) == ODESystem({x: -k*x + y, y: x})
+    True
+
     Args:
-        variables (tuple of sympy.Symbol): Ordered tuple of symbols.  The argument keeps its
-            old name for now; it is the `symbols` of the constructed system.
-        derivatives (tuple of sympy.Expression): Ordered tuple of derivatives, :const:`None` for a parameter.
-        indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
-        initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
-        same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
-        parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
-            discarding the zero equations they were given.
-        scheme (desr.ode_translation.ReductionScheme, optional): For a reduced system, which reduction produced
-            it.  **Stored, not inferred**: a reduced system handed on by itself cannot work
-            out where it came from, and inferring is only right when
-            :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing.
-        num_scaling_symmetries (int, optional): For a reduced system, the :math:`r` scaling
-            symmetries that were reduced away.
-        auxiliary_names (iter of sympy.Symbol, optional): For a reduced system, which of
-            its symbols are auxiliaries -- normalised directions, free to be set to
-            anything.  Also stored rather than inferred: auxiliary-ness is a fact about
-            which block of the Hermite multiplier a symbol came from, and nothing in the
-            reduced system's own equations records it.
-        physical_dimensions (dict, optional): Declared physical dimensions, as
-            :meth:`set_dimension` records them.
-        original_system (ODESystem, optional): For a reduced system, the system it was
-            reduced from.  `named_symbols`' monomials are written in *that* system's
-            symbols, so without it the record names symbols belonging to nobody, and two
-            different originals using the same letters are indistinguishable.  It is also
-            what tells a reduction this library produced from one assembled by hand.
-        forward_monomials (iter of sympy.Expr, optional): For a reduced system, what every
-            column of the Hermite multiplier stands for, as a monomial in the original
-            symbols, in column order -- the `r` auxiliaries and then the invariants.
-            This is `named_symbols` completed: that one is keyed by the symbols the
-            reduction kept, so a column it normalised away or identified with the clock
-            has no entry there, and the change of variables is one column short of
-            square.  With this it is square, and a reduced system is enough on its own
-            to carry numbers across the reduction in either direction.
-        symbol_kinds (dict, optional): For a reduced system, what kind of thing each of
-            its symbols is.  Recorded for the same reason as `named_symbols`, and keyed
-            alike so the two join.
-        named_symbols (dict, optional): For a reduced system, what each of its symbols
-            stands for: a map to the Laurent monomial in the *original* system's symbols
-            that it denotes.  Stored rather than asked of a translator afterwards, because
-            a translator is a machine whose multiplier and naming scheme can be changed
-            after it has produced a system -- and then its answers describe a different
-            reduction than the one in hand.  Together with `normalisations` this is the
-            whole change of variables: the exponent vectors of these monomials are the
-            multiplier columns that produced them, so a reduced system carrying both can
-            be read, and reversed, without reference to the machine that made it.
-        normalisations (dict, optional): For a reduced system, the original symbols that
-            the reduction set to 1, and the 1 it set them to.  Stored because it is a
-            statement about the *original* system's symbols, which the reduced system no
-            longer mentions: nothing in a reduced system records which of the original
-            parameters were normalised to obtain it.  See
-            :meth:`~desr.ode_translation.ODETranslator.normalisations`.
+        derivative_dict (dict, optional): ``{symbol: its derivative}``, as
+            :meth:`from_dict` takes it.  Symbols and expressions may be given as strings.
+        equations (str or list of str, optional): Equations of the form ``dx/dt = ...``,
+            as :meth:`from_equations` takes them.
+        tex (str, optional): LaTeX, as :meth:`from_tex` takes it.
+        **options: Passed to whichever of those methods builds the system, such as
+            ``indep_var``, ``initial_conditions`` and ``parameters``.
+
+    Exactly one of the three forms is given.  A string is not taken without its keyword,
+    since equations and LaTeX read some text differently, and parallel lists of symbols
+    and derivatives are not taken at all: they do not say which derivative is whose.
+
     '''
 
-    def __init__(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None,
-                 forward_monomials=None, physical_dimensions=None):
+    def __init__(self, derivative_dict=None, *refused, equations=None, tex=None, **options):
+        given = [form for form, value in (('a dict of derivatives', derivative_dict),
+                                          ('equations=', equations), ('tex=', tex))
+                 if value is not None]
+        if (isinstance(derivative_dict, (list, tuple)) and not refused
+                and derivative_dict and all(isinstance(each, str) for each in derivative_dict)):
+            raise TypeError(
+                'A list of strings is read as equations when it is named so: '
+                'ODESystem(equations=[...]).')
+        if refused or isinstance(derivative_dict, (list, tuple)):
+            raise TypeError(
+                'An ODESystem is not built from parallel lists of variables and '
+                'derivatives, which do not say which derivative belongs to which '
+                'variable.  Pass a dict, ODESystem({x: rate_of_x, ...}), or the '
+                'equations themselves, ODESystem(equations=[\'dx/dt = ...\']) or '
+                'ODESystem(tex=r\'\\frac{dx}{dt} = ...\').')
+        if isinstance(derivative_dict, str):
+            raise TypeError(
+                'A string can be equations or LaTeX, and the two read some text '
+                'differently, so say which: ODESystem(equations=...) or '
+                'ODESystem(tex=...).')
+        if len(given) != 1:
+            raise TypeError(
+                'An ODESystem is built from exactly one of a dict of derivatives, '
+                'equations= or tex=; {}.'.format(
+                    'none was given' if not given else ' and '.join(given) + ' were given'))
+        if tex is not None:
+            built = ODESystem.from_tex(tex, **options)
+        elif equations is not None:
+            built = ODESystem.from_equations(equations, **options)
+        else:
+            built = ODESystem.from_dict(derivative_dict, **options)
+        self.__dict__.update(built.__dict__)
+
+    @classmethod
+    def _from_variables(cls, variables, derivatives, **options):
+        '''
+        A system from parallel tuples of its symbols and their derivatives.
+
+        For the library's own use, which builds systems -- reduced ones above all -- from
+        exactly these tuples, with the record a reduction carries.  The public
+        constructor takes only forms that say which derivative belongs to which symbol.
+
+        Args:
+            variables (tuple of sympy.Symbol): Ordered tuple of symbols.  The argument keeps its
+                old name for now; it is the `symbols` of the constructed system.
+            derivatives (tuple of sympy.Expression): Ordered tuple of derivatives, :const:`None` for a parameter.
+            indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
+            initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
+            same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
+            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+                discarding the zero equations they were given.
+            scheme (desr.ode_translation.ReductionScheme, optional): For a reduced system, which reduction produced
+                it.  **Stored, not inferred**: a reduced system handed on by itself cannot work
+                out where it came from, and inferring is only right when
+                :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing.
+            num_scaling_symmetries (int, optional): For a reduced system, the :math:`r` scaling
+                symmetries that were reduced away.
+            auxiliary_names (iter of sympy.Symbol, optional): For a reduced system, which of
+                its symbols are auxiliaries -- normalised directions, free to be set to
+                anything.  Also stored rather than inferred: auxiliary-ness is a fact about
+                which block of the Hermite multiplier a symbol came from, and nothing in the
+                reduced system's own equations records it.
+            physical_dimensions (dict, optional): Declared physical dimensions, as
+                :meth:`set_dimension` records them.
+            original_system (ODESystem, optional): For a reduced system, the system it was
+                reduced from.  `named_symbols`' monomials are written in *that* system's
+                symbols, so without it the record names symbols belonging to nobody, and two
+                different originals using the same letters are indistinguishable.  It is also
+                what tells a reduction this library produced from one assembled by hand.
+            forward_monomials (iter of sympy.Expr, optional): For a reduced system, what every
+                column of the Hermite multiplier stands for, as a monomial in the original
+                symbols, in column order -- the `r` auxiliaries and then the invariants.
+                This is `named_symbols` completed: that one is keyed by the symbols the
+                reduction kept, so a column it normalised away or identified with the clock
+                has no entry there, and the change of variables is one column short of
+                square.  With this it is square, and a reduced system is enough on its own
+                to carry numbers across the reduction in either direction.
+            symbol_kinds (dict, optional): For a reduced system, what kind of thing each of
+                its symbols is.  Recorded for the same reason as `named_symbols`, and keyed
+                alike so the two join.
+            named_symbols (dict, optional): For a reduced system, what each of its symbols
+                stands for: a map to the Laurent monomial in the *original* system's symbols
+                that it denotes.  Stored rather than asked of a translator afterwards, because
+                a translator is a machine whose multiplier and naming scheme can be changed
+                after it has produced a system -- and then its answers describe a different
+                reduction than the one in hand.  Together with `normalisations` this is the
+                whole change of variables: the exponent vectors of these monomials are the
+                multiplier columns that produced them, so a reduced system carrying both can
+                be read, and reversed, without reference to the machine that made it.
+            normalisations (dict, optional): For a reduced system, the original symbols that
+                the reduction set to 1, and the 1 it set them to.  Stored because it is a
+                statement about the *original* system's symbols, which the reduced system no
+                longer mentions: nothing in a reduced system records which of the original
+                parameters were normalised to obtain it.  See
+                :meth:`~desr.ode_translation.ODETranslator.normalisations`.
+        '''
+        system = cls.__new__(cls)
+        system._setup(variables, derivatives, **options)
+        return system
+
+    def _setup(self, variables, derivatives, indep_var=None, initial_conditions=None, same_units=None, constraints=None, is_reduced=False, parameters=None, scheme=None, num_scaling_symmetries=None, auxiliary_names=None, parameter_values=None, normalisations=None, named_symbols=None, symbol_kinds=None, original_system=None,
+               forward_monomials=None, physical_dimensions=None):
         self._variables = tuple(variables)
         self._derivatives = tuple(derivatives)
 
@@ -352,7 +424,7 @@ class ODESystem(object):
         Returns:
             ODESystem: A copy of the system.
         '''
-        system = ODESystem(self._variables, self._derivatives, indep_var=self._indep_var,
+        system = ODESystem._from_variables(self._variables, self._derivatives, indep_var=self._indep_var,
                            is_reduced=self.is_reduced, same_units=self._requires_same_unit,
                            scheme=self._scheme,
                            num_scaling_symmetries=self._num_scaling_symmetries,
@@ -695,12 +767,12 @@ class ODESystem(object):
 
     def translator(self, **options):
         '''
-        A translator for this system: ``ODETranslator.from_ode_system(self, **options)``,
+        A translator for this system: ``ODETranslator(self, **options)``,
         and nothing else.
 
         Args:
-            **options: As :meth:`~desr.ode_translation.ODETranslator.from_ode_system`
-                takes them, such as ``naming_scheme``.
+            **options: As :class:`~desr.ode_translation.ODETranslator` takes them, such
+                as ``naming_scheme`` or ``scaling_matrix``.
 
         Returns:
             desr.ode_translation.ODETranslator
@@ -710,12 +782,12 @@ class ODESystem(object):
         Matrix([[r*t, n/K]])
         '''
         from .ode_translation import ODETranslator
-        return ODETranslator.from_ode_system(self, **options)
+        return ODETranslator(self, **options)
 
     def reduce_scaling_symmetries(self, **options):
         '''
         This system with its scaling symmetries removed:
-        ``self.translator().translate(self, **options)``, and nothing else.
+        ``self.translator().translate(**options)``, and nothing else.
 
         The short way, for when the defaults are what is wanted.  For anything that is
         set on the translator -- a naming scheme, a choice of invariants,
@@ -739,7 +811,7 @@ class ODESystem(object):
         >>> reduced.named_symbols
         {tau: r*t, nu0: n/K}
         '''
-        return self.translator().translate(self, **options)
+        return self.translator().translate(**options)
 
     def numeric_translator(self):
         '''
@@ -1796,7 +1868,7 @@ class ODESystem(object):
         # so the stored provenance travels with it.  Auxiliaries are filtered to those that
         # survived: a substitution may rename one, or remove it by making it vanish from
         # every expression.
-        subs_system = ODESystem(new_vars, new_derivs,
+        subs_system = ODESystem._from_variables(new_vars, new_derivs,
                                 initial_conditions=initial_conditions,
                                 parameter_values=self._substituted_parameter_values(
                                     to_sub, new_vars),
@@ -1961,6 +2033,14 @@ class ODESystem(object):
         dz/dx = c_1*z**2*(1 - y)
         parameters: c_0, c_1
         '''
+        # Names and expressions may be strings, read with the library's own convention, as
+        # `from_equations` reads them.
+        if isinstance(indep_var, str):
+            indep_var = to_symbol(indep_var)
+        deriv_dict = {(to_symbol(symbol) if isinstance(symbol, str) else symbol):
+                      (sympify_expression(rate) if isinstance(rate, str) else sympy.sympify(rate))
+                      for symbol, rate in deriv_dict.items()}
+
         # Make a tuple of all variables.  A symbol that appears only in an initial
         # condition is added by `update_initial_conditions`, which the constructor calls
         # and which reads every way an initial condition may be written.
@@ -1972,7 +2052,7 @@ class ODESystem(object):
         deriv_dict = dict(deriv_dict)
         deriv_dict[indep_var] = sympy.sympify(1)
 
-        system = cls(variables,
+        system = cls._from_variables(variables,
                      tuple([deriv_dict.get(var) for var in variables]),
                      indep_var=indep_var,
                      initial_conditions=initial_conditions,
@@ -2759,7 +2839,7 @@ class ODESystem(object):
         That last is an invariant, and every invariant comes back the same way:
 
         >>> from desr.ode_translation import ODETranslator
-        >>> translator = ODETranslator.from_ode_system(system)
+        >>> translator = ODETranslator(system)
         >>> {system.dimension_of(invariant)
         ...  for invariant in translator.invariant_monomials()}
         {1}

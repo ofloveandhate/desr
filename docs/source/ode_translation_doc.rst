@@ -9,9 +9,6 @@ Creating ODE Translations
 .. autoclass:: desr.ode_translation.ODETranslator
     :noindex:
 
-.. automethod:: desr.ode_translation.ODETranslator.from_ode_system
-    :noindex:
-
 Reduction Methods
 -----------------
 

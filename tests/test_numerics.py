@@ -30,8 +30,7 @@ class TestNumericTranslator(TestCase):
         # the order decides which are normalised to 1: the leading ones are, so s_0 and e_0
         # go first and k_2, k_m1 survive as the reduced constants.
         self.system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
-        self.translator = ODETranslator.from_ode_system(
-            self.system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
+        self.translator = ODETranslator(self.system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
         self.numeric = NumericTranslator(self.translator.translate())
 
         # Fetched by name rather than unpacked positionally, so that a change of variable
@@ -248,7 +247,7 @@ class TestNumericTranslator(TestCase):
         # update_initial_conditions appends z0 at the end, which leaves the system out of
         # canonical order now that the parameters come first, so put it back.
         system.reorder_variables(['a', 'b', 'z0', 't', 'z'])
-        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate())
+        numeric = NumericTranslator(ODETranslator(system).translate())
         a, b, z0, t, z = system.symbols
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
         with self.assertRaises(NotImplementedError) as caught:
@@ -262,7 +261,7 @@ class TestNumericTranslator(TestCase):
         equations = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
         system = ODESystem.from_equations(equations)
         system.reorder_variables(['t', 'z1', 'z2'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         numeric = NumericTranslator(translator.translate())
         self.assertTrue(numeric.carries_auxiliaries)
         t, z1, z2 = system.symbols
@@ -285,7 +284,7 @@ class TestTheNumericTranslatorNeedsOnlyTheReduction(TestCase):
 
     def reduction(self):
         system = ODESystem.from_equations(self.EQUATIONS)
-        return ODETranslator.from_ode_system(system).translate()
+        return ODETranslator(system).translate()
 
     def test_the_reduced_system_makes_one(self):
         reduced = self.reduction()
@@ -309,7 +308,7 @@ class TestTheNumericTranslatorNeedsOnlyTheReduction(TestCase):
         rebuilt here is the reduction that was performed, not a fresh guess at it.
         '''
         system = ODESystem.from_equations(self.EQUATIONS)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         numeric = translator.translate().numeric_translator()
         self.assertEqual(translator.herm_mult_i, numeric._herm_mult_i)
         self.assertEqual(translator.herm_mult_n, numeric._herm_mult_n)
@@ -322,7 +321,7 @@ class TestTheNumericTranslatorNeedsOnlyTheReduction(TestCase):
         There is no longer anywhere to hand the moved-on translator in.
         '''
         system = ODESystem.from_equations(self.EQUATIONS)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         reduced = translator.translate()
         before = reduced.numeric_translator()._herm_mult_n
 
@@ -352,7 +351,7 @@ class TestTheNumericTranslatorNeedsOnlyTheReduction(TestCase):
         '''
         enzyme = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-        reduced = ODETranslator.from_ode_system(enzyme).translate()
+        reduced = ODETranslator(enzyme).translate()
         numeric = reduced.numeric_translator()
 
         values = {sympy.Symbol(name): value for name, value in

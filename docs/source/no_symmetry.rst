@@ -49,7 +49,7 @@ symbol has dimension 1:
 
 With nothing scaled, every symbol is invariant and there are no auxiliaries:
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.num_scaling_symmetries
     0
     >>> translator.invariant_monomials()
@@ -60,7 +60,7 @@ With nothing scaled, every symbol is invariant and there are no auxiliaries:
 
 Reducing by no symmetries returns the system:
 
-    >>> reduced = translator.translate(system)
+    >>> reduced = translator.translate()
     >>> reduced
     dt/dt = 1
     dz/dt = t + z + 1
@@ -76,12 +76,11 @@ is a monomial in the parameters, and with no auxiliaries that holds.
 To have generated names throughout, set ``rename_unchanged_symbols`` in the naming
 scheme.  The equations are the same ones in different letters:
 
-    >>> renaming = ODETranslator.from_ode_system(
-    ...     system, naming_scheme={'rename_unchanged_symbols': True})
-    >>> renaming.translate(system)
+    >>> renaming = ODETranslator(system, naming_scheme={'rename_unchanged_symbols': True})
+    >>> renaming.translate()
     dtau/dtau = 1
     dnu0/dtau = nu0 + tau + 1
-    >>> renaming.translate(system).named_symbols
+    >>> renaming.translate().named_symbols
     {tau: t, nu0: z}
 
 :attr:`~desr.ode_translation.ODETranslator.num_scaling_symmetries` is the thing to check
@@ -105,10 +104,10 @@ a scaling matrix of full row rank throughout, from their section 2.1, so that th
 of rows is the number of independent scalings.  A translator built from a matrix that is
 not of full row rank is refused:
 
-    >>> ODETranslator(sympy.Matrix([[0, 0]]), symbols_domain=system.symbols)
+    >>> ODETranslator(system, scaling_matrix=sympy.Matrix([[0, 0]]))
     Traceback (most recent call last):
         ...
-    ValueError: The scaling matrix has 1 row but rank 0, and it must have full row rank: each row is taken as one scaling symmetry, and 1 of these adds no scaling the others do not already give.  It defines no scaling at all.  The scaling matrix of a system with no scaling symmetry has no rows: sympy.zeros(0, 2).  A translator built with from_ode_system computes a matrix of full row rank.
+    ValueError: The scaling matrix has 1 row but rank 0, and it must have full row rank: each row is taken as one scaling symmetry, and 1 of these adds no scaling the others do not already give.  It defines no scaling at all.  The scaling matrix of a system with no scaling symmetry has no rows: sympy.zeros(0, 2).  A translator built without a scaling matrix computes one of full row rank.
 
 A matrix computed by :meth:`~desr.ode_system.ODESystem.maximal_scaling_matrix` always
 has full row rank, by part (i) of the proposition, so this only concerns a matrix

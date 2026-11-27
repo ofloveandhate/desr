@@ -54,9 +54,13 @@ same way, for networkx and matplotlib. `tests/test_namespace.py` pins both halve
 ### Core modules
 
 **`desr/ode_system.py` — `ODESystem`**
-Represents a system of ODEs as parallel tuples of `variables` and `derivatives`. The independent variable (default `t`) is always included with derivative `1`. Key entry points:
-- `ODESystem.from_tex(tex_str)` — parse LaTeX ODE system
-- `ODESystem.from_dict(deriv_dict)` — construct from `{symbol: derivative_expr}` dict
+Stores a system of ODEs as parallel tuples of `symbols` and `derivatives`. The independent variable (default `t`) is always included with derivative `1`. The constructor takes only forms that say which derivative belongs to which symbol:
+- `ODESystem({x: rate, ...})` — a dict; `ODESystem.from_dict` is the same
+- `ODESystem(equations=['dx/dt = ...'])` — plain equations; `ODESystem.from_equations`
+- `ODESystem(tex=r'\frac{dx}{dt} = ...')` — LaTeX; `ODESystem.from_tex`
+- A bare string is refused (equations and LaTeX read some text differently), and so are
+  parallel lists. The library builds systems from parallel tuples internally, through
+  the private `ODESystem._from_variables`; nothing public does.
 - `exponent_matrix()` — build the exponent (power) matrix used by the scaling algorithm
 - `maximal_scaling_matrix()` — compute the scaling matrix `A` from the system
 - `reorder_variables(order)` — variable order affects which parameters get normalised out
@@ -64,10 +68,15 @@ Represents a system of ODEs as parallel tuples of `variables` and `derivatives`.
 
 **`desr/ode_translation.py` — `ODETranslator`**
 The reduction engine. Holds a `scaling_matrix` (rows = scaling dimensions, columns = variables) and its column Hermite normal form multiplier `V`. Key methods:
-- `ODETranslator.from_ode_system(system)` — auto-construct from a system
-- `translate(system)` — produce the reduced `ODESystem`
-- `invariants()` — the scaling-invariant monomials (the new variables)
-- `auxiliaries()` — the auxiliary variables that get normalised to 1
+- `ODETranslator(system)` — built from the system it reduces, which it copies;
+  `ODETranslator(system, scaling_matrix=A)` for a scaling of one's own (a matrix
+  without the independent variable's column is taken to have a zero there)
+- `translate()` — produce the reduced `ODESystem`. **No public method takes a system**:
+  a translator is the reduction of one system and reports on that one. The internal
+  `ODETranslator._from_matrix` builds a translator with no system, for the deflated
+  scaling of the dependent-variable scheme only.
+- `invariant_monomials()` — the scaling-invariant monomials (the new variables)
+- `auxiliary_monomials()` — the auxiliaries, normalised to 1 where they are constant
 - `multiplier_add_columns(i, j, alpha)` — manually adjust which invariants are chosen
 - `substitutions()` — each original symbol in terms of the reduced ones, under every scheme
 
