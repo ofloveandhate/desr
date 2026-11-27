@@ -3,10 +3,10 @@
 The three reduction schemes
 =============================
 
-`desr` implements three reductions from Hubert & Labahn, and
-:meth:`~desr.ode_translation.ODETranslator.translate` picks between them.  They are not
-three algorithms for the same job: each applies to a different shape of system, and
-they disagree about what the reduced system's clock *is*.  That last point is the one
+`desr` implements three reductions from Hubert & Labahn :cite:`Hubert2013c`:, and
+:meth:`~desr.ode_translation.ODETranslator.translate` automatically picks between them.
+Each applies to a different shape of system, and
+they at disagree about what the reduced system's clock is.  That last point is the one
 worth reading carefully, because the same letter can mean two different quantities.
 
 ===================== ================ ============================================
@@ -27,8 +27,8 @@ that is, without running it.
 The parameter scheme
 ----------------------
 
-The best case, and the one that deserves the word *nondimensionalisation*.  Every
-auxiliary is constant, so every one can be normalised, and what is left has fewer
+The "parameter scheme" is used when every auxiliary is constant,
+so every one can be normalised.  The resulting system has fewer
 parameters and no auxiliaries at all:
 
     >>> mm = ODESystem.from_equations(
@@ -57,7 +57,7 @@ renamed it.
 The dependent-variable scheme
 -------------------------------
 
-This one applies when the scaling does not move the independent variable — when
+This scheme applies when the scaling does not move the independent variable — when
 :math:`A`'s column for it is zero.  The clock is then invariant exactly as it stands,
 so the reduction keeps it rather than coining a symbol for it.  Hubert & Labahn 6.4:
 
@@ -73,8 +73,9 @@ so the reduction keeps it rather than coining a symbol for it.  Hubert & Labahn 
     dx0/dt = x0*(-y0 - 1)
     dy0/dt = y0*(1 + 1/t)
 
-The zero column is the whole criterion, and the consequence is worth stating plainly:
-**this reduced system's** :math:`t` **is the original** :math:`t`.  Not a rescaled time
+The zero column corresponding to the independent variable is the criterion
+for this scheme to apply.
+**This reduced system's** :math:`t` **is the original** :math:`t`.  Not a rescaled time
 that happens to be spelled the same — the same quantity, whatever else the reduction
 normalises:
 
@@ -83,8 +84,7 @@ normalises:
 
 So a solution of the reduced system is already on the original clock, and a time series
 needs no conversion.  That is the thing the dependent-variable scheme is *for*, and it
-is easy to miss, because Hubert & Labahn do not set it beside the general scheme and
-say so.
+is easy to miss.
 
 
 The general scheme
@@ -92,7 +92,7 @@ The general scheme
 
 Always applicable, and the fallback.  It carries the auxiliaries as variables of their
 own — they are the quadratures you integrate afterwards to get back — and keeps the
-system's own independent variable to integrate against.
+original system's own independent variable to integrate against.
 
 Hubert & Labahn 6.6 is a general reduction that keeps :math:`t`:
 
@@ -108,15 +108,14 @@ Hubert & Labahn 6.6 is a general reduction that keeps :math:`t`:
     dy1/dt = y1*(y1 + 1)/t
 
 Note the scheme is ``GENERAL``, not ``DEP_VAR``: the scaling *does* move :math:`t`
-here, since :math:`A`'s column for it is :math:`3`, not zero.  The clock survives as
-itself for a different reason, given below.
+here, since :math:`A`'s column for it is :math:`3`, not zero.
 
 
 The clock, and when it is still ``t``
 ---------------------------------------
 
 The general scheme runs two further steps by default, and both can be turned off.
-Turning both off reproduces Hubert & Labahn exactly.
+Turning both off reproduces :cite:`Hubert2013c`: exactly.
 
 **Normalising** sets every constant auxiliary to 1, which is the choice of units
 described in :ref:`dimensions`.
@@ -167,10 +166,15 @@ systems like 6.6, whose invariants containing :math:`t` all involve a dependent
 variable as well — and for every reduction run with ``rescale_clock=False``.
 Under the parameter scheme it never holds.
 
-An invariant such as :math:`k t^2` or :math:`k/t` is not taken as the clock.  It is
-invariant, but it is not time in other units.
+An invariant such as :math:`k t^2` or :math:`k/t` is not taken as the clock.  It may well be
+invariant, but it is not readily interpreted as "time in other units".
 
-So if you are moving numbers between a reduced system and the original, the question to
+So if you are moving numbers between a reduced system and the original, a question to
 ask is not which scheme ran but what the clock denotes.
-:attr:`~desr.ode_system.ODESystem.named_symbols` answers it for every symbol including
-that one, and :mod:`desr.numerics` asks it rather than trusting the spelling.
+:attr:`~desr.ode_system.ODESystem.named_symbols` answers it for every symbol.
+
+Silviana notes, that while implementing between version 1 and 3 of desr, she spent a TON
+of time thinking about these things, and only late in the process was able to
+help these steps be clearly delineated in the code.  With this clarity she was able
+to provide additional functionality beyond what HL specify, and was was originally
+implemented in desr.

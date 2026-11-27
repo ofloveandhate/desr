@@ -222,7 +222,7 @@ class TestReductionIsIdempotent(TestCase):
 
     def test_what_is_left_when_an_auxiliary_is_carried(self):
         # The only scalings remaining move a carried auxiliary, or the clock of a system
-        # written as t dz/dt = z F with F free of t: the remaining rows of A are unit
+        # written as t dz/dt = z * F with F free of t (eq 20): the remaining rows of A are unit
         # vectors on those symbols.
         for label in ('Hubert & Labahn 6.4', 'Hubert & Labahn 6.6', 'enzyme chain',
                       'decay'):

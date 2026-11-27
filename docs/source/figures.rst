@@ -1,10 +1,12 @@
 .. _figures:
 
-Drawing a reduction
-=====================
+Visual representations of symmetry reduction
+==================================================
 
-`desr` draws two figures of a reduction, and both are library calls rather than
-scripts to adapt.  Give either one a system and it draws that system:
+`desr` can draw two different figures of a symmetry reduction, and if I've done my
+job correctly (crosses fingers), then both figures can be library calls rather than
+scripts to adapt.  Give either plotting function a system, and it draws
+a representation of the scaling symmetry reduction of that system:
 
 .. code-block:: python
 

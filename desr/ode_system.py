@@ -178,10 +178,9 @@ class ODESystem(object):
     '''
     A system of differential equations.
 
-    **The vocabulary**, since it is the thing that most often trips people up -- and did trip
-    up this library, which inherited the muddle from Hubert & Labahn:
+    **The vocabulary**, since it is a thing that trips people up:
 
-    - :attr:`~desr.ode_system.ODESystem.symbols` is the collective: every name the system
+    - :attr:`~desr.ode_system.ODESystem.symbols` is the abstract: every name the system
       declares.  It is what :math:`n` counts.
     - :attr:`~desr.ode_system.ODESystem.parameters` are the :math:`p` symbols with no
       equation of their own.
@@ -190,10 +189,7 @@ class ODESystem(object):
       :attr:`~desr.ode_system.ODESystem.dependents`.
 
     So :math:`\\textrm{symbols} = \\textrm{parameters} + \\textrm{variables}` and
-    :math:`n = p + 1 + q`.  Hubert & Labahn have no word for the collective, which is how
-    "variable" came to do that job in their paper and lose its own meaning along the way:
-    at the top of their section 7 they separate "state variables" from "constant
-    parameters", and a page later call :math:`\\alpha = k_3/(k_1 a)` a variable.
+    :math:`n = p + 1 + q`.
 
     :attr:`~desr.ode_system.ODESystem.derivatives` is an ordered tuple the same length as
     `symbols`, holding each derivative with respect to the independent variable.  The
@@ -309,7 +305,7 @@ class ODESystem(object):
             if type(constraints) is not list:
                 raise TypeError(f'constraints must be a list of sympy equalities')
 
-            for c in constraints: 
+            for c in constraints:
                 if not isinstance(c,sympy.core.relational.Equality):
                     raise TypeError(f'{c} is not a sympy equality.  Constraints must be sympy equalities.')
             self._constraints = constraints
@@ -375,7 +371,7 @@ class ODESystem(object):
         # the original was never valid.
         system.update_parameter_values(self.parameter_values)
 
-        
+
         return system
 
     @property
@@ -409,7 +405,7 @@ class ODESystem(object):
             expressions_to_variables
 
         to_sub = {self._indep_var:new_indep}
-        
+
         self._derivatives = tuple(d.subs(to_sub) if d else d for d in self._derivatives)
         self._constraints = [c.subs(to_sub) for c in self.constraints]
         self._initial_conditions = {k:v.subs(to_sub) for k,v in self._initial_conditions.items()}
@@ -481,13 +477,6 @@ class ODESystem(object):
 
             \\textrm{symbols} = \\textrm{parameters} + \\textrm{variables},
             \\qquad n = p + 1 + q.
-
-        Hubert & Labahn have no term for the collective, which is why "variable" drifted
-        into the job in their paper and in earlier versions of this library: at the top of
-        their section 7 they distinguish "state variables" from "constant parameters", and a
-        page later call :math:`\\alpha = k_3/(k_1 a)` -- an expression in the parameters
-        alone -- a variable.  Naming the collective is what keeps "variable" meaning
-        something.
 
         Returns:
             tuple: Ordered tuple of every symbol in the system.
@@ -1010,7 +999,7 @@ class ODESystem(object):
 
         '''
         return self._constraints[:]
-    
+
     @property
     def dimension_requirements(self):
         '''
@@ -1021,7 +1010,7 @@ class ODESystem(object):
 
     def simplify_derivatives(self):
         '''
-        use sympy to collect the derivatives, in an effort to make them 
+        use sympy to collect the derivatives, in an effort to make them
         simpler to print to screen / into tex for a paper, etc
 
         Returns:
@@ -1059,7 +1048,7 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'x': 'x_0'})
         >>> system.initial_conditions
         {x: x_0}
-    
+
         >>> system
         dt/dt = 1
         dx/dt = c_0*x*y
@@ -1446,10 +1435,10 @@ class ODESystem(object):
         Add requirements to the system that some variables have the same units as some corresponding expressions
 
         Args:
-            requirements (dict of sympy.Symbol:sympy.Expression): 
+            requirements (dict of sympy.Symbol:sympy.Expression):
 
         Keys: var (sympy.Symbol): a variable to require to have the same unit as the expression expr
-        Values: expr (sympy.Expression): an expression that must have the same net unit as the variable var 
+        Values: expr (sympy.Expression): an expression that must have the same net unit as the variable var
 
         This has the effect of adding columns to the Power Matrix / Exponent Matrix.
         """
@@ -1677,12 +1666,12 @@ class ODESystem(object):
                   for lhs, rhs in _as_substitution_pairs(to_sub, args)}
 
         variable_renamings = []
-        
+
         for lhs,rhs in to_sub.items():
             lhs_vars = set(expressions_to_variables([lhs]))
             rhs_vars = set(expressions_to_variables([rhs]))
 
-            
+
             lhs_dependent_vars = lhs_vars.intersection(set(self.dependents))
 
             # make sure we can actually do the substitution
@@ -1691,13 +1680,13 @@ class ODESystem(object):
 
                 # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
                 if (rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]) and not self.is_reduced:
-                    # this is not a parameter substitution, nor is it a simple variable renaming.  
+                    # this is not a parameter substitution, nor is it a simple variable renaming.
                     raise ValueError(f'unable to make substitution {lhs} -> {rhs}.')
 
-                # ok, we made it here so this substitution is a simple renaming.  
+                # ok, we made it here so this substitution is a simple renaming.
                 # we will need to not only do the substitution in the rhs of the derivative, but also in the lhs.
                 if (rhs==list(rhs_vars)[0] and lhs == list(lhs_vars)[0]):
-                    variable_renamings.append(  (lhs, rhs) ) 
+                    variable_renamings.append(  (lhs, rhs) )
 
 
         # copy so can do work on the derivatives, variables, initial conditions
@@ -1718,7 +1707,7 @@ class ODESystem(object):
 
         # Now need to substitute in the variable order and initial conditions
 
-        
+
         # An initial condition's *value* is an expression in the system's symbols, so a
         # substitution applies to it like any other -- whether or not any dependent
         # variable is being renamed.  This used to sit inside the loop below, so renaming
@@ -1740,7 +1729,7 @@ class ODESystem(object):
 
 
         # silviana says: why would we ever not want to do this?  if you make a sub, shouldn't it affect the entire system?!
-        if subs_constraints: 
+        if subs_constraints:
             constraints = [eqn.subs(to_sub) for eqn in constraints]
 
             # filter out the trivial constraints after doing the substitution
@@ -1762,7 +1751,7 @@ class ODESystem(object):
         # next, we add the new variables from the substitution
         known_vars = set(expressions_to_variables(variables + new_derivs + constraints + list(initial_conditions.values())))
         missing_vars = sorted(list(set(known_vars) - set(variables)),key=str)
-        
+
         if not new_symbols_are_parameters:
             raise NotImplementedError(f"don't want new symbols from substitution to be parameters, but don't know what else to do.  the new symbols: {missing_vars}")
 
@@ -1798,7 +1787,7 @@ class ODESystem(object):
 
             if v not in extant_vars:
                 var_loc = new_vars.index(v)
-                
+
                 # omit using list slicing.  must omit from both the variable ordering and from the derivatives (which are stored impilictly in the order of the variables)
                 new_vars = new_vars[:var_loc] + new_vars[var_loc+1:]
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
@@ -2334,7 +2323,7 @@ class ODESystem(object):
 
         # finally, the things that are required to have the same unit
         exprs.extend([expr/var for var,expr in self._requires_same_unit.items()])
-        
+
         return exprs
 
     def _variable_sanity_check(self):
@@ -2345,9 +2334,9 @@ class ODESystem(object):
         exprs = self._expressions()
 
         expr_vars = expressions_to_variables(exprs)
-        
+
         unlisted_vars = expr_vars - set(self.symbols)
-        
+
 
         if unlisted_vars:
             raise RuntimeError(f"there are variables in the expressions that are not in the list of variables: {unlisted_vars}")
@@ -2847,7 +2836,7 @@ class ODESystem(object):
         >>> matrix == system.maximal_scaling_matrix()
         True
 
-        Hubert & Labahn 6.6 is where it does not.  The only symbol at weight
+        Hubert & Labahn 6.6 is an illustrative example.  The only symbol at weight
         :math:`\\pm 1` is :math:`z_1`, at :math:`-1`, so its row is negated:
 
         >>> hl = ODESystem.from_equations(
@@ -3375,8 +3364,9 @@ class ODESystem(object):
         and smearing the independent variable across several -- not a parameter reduction
         at all.
 
-        desr used to order these as (independent, dependent, parameters), alongside the
-        mirrored normal form.
+        Historical note: desr *used to* order these as (independent, dependent, parameters), alongside the
+        mirrored normal form.  But switching to match HL significantly improved
+        the library's ability to match their paper, and often produces better nondimensionalizations.
 
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']

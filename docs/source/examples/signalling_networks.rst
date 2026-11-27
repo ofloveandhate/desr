@@ -1,15 +1,15 @@
 .. _signalling_networks:
 
-Six signalling networks
+Signalling networks
 =========================
 
-Mass-action models of phosphorylation cycles and cascades.  They are larger than the
-other examples, with up to eleven species and twelve rate constants, and they all
+This example discusses mass-action models of phosphorylation cycles and cascades.  They are larger than most of the
+other examples in this documentation, with up to eleven species and twelve rate constants, and they all
 reduce in the same way.  This page works the smallest in full and tabulates the rest.
 
 Five of the six are motifs studied by Feliu and Wiuf :cite:`FeliuWiuf2011`, whose
 Figure 1 draws them.  The references to that paper are to version 2 of the preprint,
-which is where the equations cited here are written out.
+which is where the equations are cited here.
 
 One-site modification
 -----------------------
@@ -53,8 +53,8 @@ There are six species and six rate constants:
     >>> system.parameters
     (k1, k2, k3, k4, km1, km3)
 
-Its scaling symmetries
-------------------------
+Scaling symmetries
+*********************
 
     >>> translator = ODETranslator.from_ode_system(system)
     >>> translator.num_scaling_symmetries
@@ -77,7 +77,7 @@ Time is measured in units of :math:`1/k_2`, the time the kinase takes to convert
 bound substrate, and concentration in units of :math:`k_2/k_1`.
 
 The reduced system
---------------------
+*********************
 
     >>> reduced = translator.translate(system)
     >>> reduced
@@ -176,4 +176,4 @@ All six have the same two symmetries, and all six reductions choose the same two
 units: time in :math:`1/k_2` and concentration in :math:`k_2/k_1`.  In each, the
 reduction removes two rate constants, whatever the size of the network.
 
-The reduction applies the parameter scheme to each of them; see :ref:`three-schemes`.
+The reduction algorithm applies the "parameter scheme" to each of them; see :ref:`three-schemes` for more information about them.

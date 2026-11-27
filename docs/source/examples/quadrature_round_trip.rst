@@ -13,7 +13,7 @@ What are auxiliaries?
 ------------------------------------
 
 The general reduction produces two blocks of equations: invariants :math:`y`, which are
-what the reduction is for, and the auxiliaries :math:`x` (we're using notation compatible with :cite:`Hubert2013c`).  
+what the reduction is for, and the auxiliaries :math:`x` (we're using notation compatible with :cite:`Hubert2013c`).
 
 Dropping the :math:`x` block is only legitimate if
 the :math:`y` block does not depend on it.
@@ -28,9 +28,9 @@ Fortunately, :math:`x` does not.  Every auxiliary variable satisfies an equation
 
 where :math:`H_j` involves the invariants and the independent variable but never the
 auxiliaries themselves.  The auxiliaries are therefore a *quadrature* along side the
-invariant.  A reduced system can be written without them.  
+invariant.  A reduced system can be written without them.
 So, solving the :math:`y` equations without the :math:`x` loses nothing that
-cannot be recomputed. 
+cannot be recomputed.
 
 
 Example
@@ -236,7 +236,7 @@ kinds of statement, and :meth:`~desr.numerics.NumericTranslator.reverse` says so
         ...
     ValueError: z1 is a function of time, but a series is being translated, and the series already says how z1 varies.  A single value for it mixes point translation with series translation.  To use a value of it at one point, compute the auxiliaries there with auxiliaries_from() and pass them as auxiliaries=.
 
-So reverse translation of a system like this is done in two steps.  
+So reverse translation of a system like this is done in two steps.
 
 First, at the one point where :math:`z_1 = 0.5` is known -- the start, whose reduced values are the
 scalars in ``initial_conditions`` -- determine the auxiliary:
@@ -253,9 +253,8 @@ invariants wherever it likes.)
     >>> recovered = numeric_translation.reverse(reduced_values, auxiliaries=at_start,
     ...                             invariants_at=solution.sol)
 
-Hubert-Labahn reverse-translates the exact solution, and desr's symbolic
-:meth:`~desr.ode_translation.ODETranslator.reverse_translate_general` does the same
-computation: it rebuilds :math:`z_1` and :math:`z_2` from :math:`x`, :math:`y_1` and
+Desr's symbolic
+:meth:`~desr.ode_translation.ODETranslator.reverse_translate_general` rebuilds :math:`z_1` and :math:`z_2` from :math:`x`, :math:`y_1` and
 :math:`y_2`, then rescales time by a constant that the arbitrary :math:`c_i` leave free --
 here :math:`c_3^3 / c_1^2`.  With the constants fixed by our starting point that factor is
 exactly :math:`1`.
@@ -283,10 +282,10 @@ Plotting the numerical results:
 
 .. plot:: examples/scripts/quadrature_recovery.py
 
-The left depicts the numerical solution of the nondimensionalised system, sans auxiliary variables.  
+The left depicts the numerical solution of the nondimensionalised system, sans auxiliary variables.
 The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what
 :meth:`~desr.numerics.NumericTranslator.recover_auxiliaries` produces by integrating their
-equations along the invariants.  The circles are this example's exact values.  
+equations along the invariants.  The circles are this example's exact values.
 
 The right-hand panel is each original variable, obtained from reverse translation.
 
@@ -295,4 +294,4 @@ When is this necessary?
 ----------------------------------
 
 The quadrature above is needed only when the general reduction scheme was needed and auxiliaries were omitted when computing the reduced system.  Auxiliaries only appear when the
-scaling acts on the dependent variables.  
+scaling acts on the dependent variables.

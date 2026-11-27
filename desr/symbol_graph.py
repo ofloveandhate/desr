@@ -94,7 +94,7 @@ def _reduced_kinds(translator, system):
     system -- not the structure of their monomial, because the two differ and the role is
     what a reader of the figure is after.  Under the general and dependent-variable schemes
     the reduction keeps the system's own independent variable, so an invariant that is a
-    rescaled one -- the enzyme chain's :math:`k_{23} t`, Hubert & Labahn 6.4's :math:`t` --
+    rescaled one -- the enzyme chain's :math:`k_{23} t`, :cite:`Hubert2013c`: 6.4's :math:`t` --
     is a variable with an equation rather than the thing being integrated against.  Calling
     it independent would say the reduced system has two independent variables.
 
@@ -895,8 +895,7 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
                 handles.append(handle)
                 labels.append('auxiliary, {}'.format(text))
 
-            # Named by what each one costs to recover, which is Hubert & Labahn's own
-            # division and holds under every scheme: a monomial in the parameters alone is
+            # Named by what each one costs to recover: a monomial in the parameters alone is
             # constant and supplies a constant of integration, while one that moves has to
             # be integrated.  Only the cases present are named.
             #

@@ -1,21 +1,27 @@
 .. _dimensional_consistency:
 
-A change of variables and the units it implies
-================================================
+A change of variables never changes # scaling symmetries
+=========================================================
 
-The scaling symmetries of a system are read off its equations: two parameters that are
-added together must scale together, and that is how the reduction learns they have the
-same unit.  Rewriting the equations can remove such a sum, and the information goes
-with it.  This page follows one small system through that.
+The scaling symmetries of a system are determined by its equations: two parameters that are
+added/subtracted together or are equal to each other must scale together.
+This is how the reduction algorithm "learns" they have the
+same unit.  Rewriting equations by using a change of variables
+can remove such a sum, and so the information goes
+with it.  This might lead a user to think that
+a rewritten system has a different number of scaling symmetries.
+But it doesn't.  This page follows one small system through this logic.
 
-The system as written
+A very simple system
 -----------------------
+
+Consider this ODE system, which has no physical meaning:
 
 .. math::
 
     \frac{dx}{dt} = (a + b)\,x + b
 
-The parameter :math:`b` appears twice.  Added to :math:`a`, it is a rate, with the unit
+The parameter :math:`b` appears twice.  Added to :math:`a`, it is a rate parameter, with the unit
 of :math:`1/t`.  Standing alone, it has the unit of :math:`x/t`.  Both can hold only if
 :math:`x` has no unit of its own, and that is what the reduction finds:
 
@@ -26,8 +32,8 @@ of :math:`1/t`.  Standing alone, it has the unit of :math:`x/t`.  Both can hold 
     >>> system.dimensions_of()
     {a: 1/[t], b: 1/[t], t: [t], x: 1}
 
-There is one scaling symmetry, a change of the unit of time.  Removing it leaves one
-parameter:
+There is one scaling symmetry, a change of the unit of time.  Removing the symmetry by
+translating using desr leaves one parameter:
 
     >>> translator.invariant_monomials()
     Matrix([[b/a, a*t, x]])
@@ -36,8 +42,8 @@ parameter:
     dx/dtau = kappa0*x + kappa0 + x
     parameters: kappa0
 
-The same equation with a new name for the sum
-------------------------------------------------
+A change of variables *seems* to give another symmetry
+-----------------------------------------------------------
 
 Write :math:`c = a + b`, and put :math:`c` in the equation in place of the sum:
 
@@ -54,11 +60,15 @@ Given to the reduction in that form:
     >>> substituted.dimensions_of()
     {b: [x]/[t], c: 1/[t], t: [t], x: [x]}
 
-Now there are two symmetries, and :math:`x` has a unit of its own.  Nothing in this
-equation adds :math:`b` to a rate, so nothing says :math:`b` is one; it is free to
+Now there are two symmetries!?!? :math:`x` has a unit of its own!?  How can this be?
+
+But no, there's not another. We lost a relation
+------------------------------------------------
+
+Well, nothing in `substituted` adds :math:`b` to a rate, so nothing says :math:`b` is a rate.  So :math:`b` is free to
 carry the unit :math:`x/t` alone, and :math:`x` is free to be rescaled.
 
-The reduction removes both parameters:
+Further, the reduction removes both parameters:
 
     >>> translator.invariant_monomials()
     Matrix([[c*t, c*x/b]])
@@ -79,7 +89,7 @@ measured in the same unit, the second symmetry rescales :math:`b` and leaves
 Two ways to keep the information
 ----------------------------------
 
-**Say that the two have the same unit.**
+**Option 1: Require symbols have the same unit.**
 :meth:`~desr.ode_system.ODESystem.require_same_unit` records that :math:`c` and
 :math:`b` scale together, as the sum did:
 
@@ -97,13 +107,14 @@ Two ways to keep the information
 
 One symmetry again, :math:`x` without a unit again, and one parameter left.
 
-**Keep the original equation and state the relation.**
+**Option 2: Keep the original equation and state the relation.**
 :meth:`~desr.ode_system.ODESystem.add_constraint` attaches :math:`c = a + b` to the
-system without substituting it.  The sum is still in the equation, so the units are
-still implied, and the constraint is carried through the reduction:
+system without substituting it.   (This only works right now if all the symbols
+are parameters.) The sum is still expressed in the system, so the units are
+still related, and the constraint is carried through the reduction:
 
     >>> related = ODESystem.from_tex(r'\frac{dx}{dt} &= (a + b) x + b')
-    >>> related.add_constraint('c', 'a+b')
+    >>> related.add_constraint('c = a+b')
     >>> translator = ODETranslator.from_ode_system(related)
     >>> translator.num_scaling_symmetries
     1
@@ -126,7 +137,7 @@ The four side by side
      - parameters left
    * - :math:`(a + b)\,x + b`
      - 1
-     - none
+     - nondimensional
      - 1
    * - :math:`c\,x + b`
      - 2
@@ -134,11 +145,11 @@ The four side by side
      - 0
    * - :math:`c\,x + b`, with :math:`c` and :math:`b` in the same unit
      - 1
-     - none
+     - nondimensional
      - 1
    * - :math:`(a + b)\,x + b`, with the constraint :math:`c = a + b`
      - 1
-     - none
+     - nondimensional
      - 2, related by the constraint
 
 A change of variables that is consistent with the units leaves the number of scaling

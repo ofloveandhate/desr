@@ -582,7 +582,7 @@ class TestAnAuxiliaryIsAParameterOrADependent(TestCase):
     the symbol evolves, and the two get confused because `symbol_kinds` reports
     `'auxiliary'` in the slot where the other answer would go.
 
-    The mathematics, which Hubert & Labahn leave implicit: the auxiliary system is a
+    The auxiliary system is a
     quadrature whose integrand is the logarithmic derivatives of the original symbols
     combined by a column of V_i, and a parameter contributes zero to it.  So an auxiliary
     that is a monomial in the parameters alone is constant -- a constant of integration

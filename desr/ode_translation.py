@@ -13,7 +13,7 @@ from desr.tex_tools import matrix_to_tex
 
 class ReductionScheme(str, enum.Enum):
     '''
-    Which of the three reductions of Hubert & Labahn a system was put through.
+    Which of the three reductions a system was put through.
 
     The scheme decides how many variables the reduced system has, whether it carries
     auxiliary variables, and therefore what has to be known to translate values back.  It
@@ -2794,13 +2794,13 @@ class ODETranslator(object):
         :math:`n-r+1` invariants and :math:`r` auxiliary variables.
 
         Two further steps run by default, each of which can be turned off.  Both are
-        departures from Hubert & Labahn, who treat normalisation as all-or-nothing, so
+        departures from :cite:`Hubert2013c`:, who treat normalisation as all-or-nothing, so
         turning both off reproduces their reduction exactly.
 
         **Normalising the parameter auxiliaries** (`normalise_parameters`).  An auxiliary
         that is a monomial in the original parameters alone is constant, so it can be set
         to 1 -- a choice of units, which :meth:`normalisations` records in the caller's own
-        symbols.  It appears in no equation, by Hubert & Labahn (16)-(17), so this cannot
+        symbols.  It appears in no equation, :cite:`Hubert2013c`: (16)-(17), so this cannot
         change the dynamics; what it changes is that those symbols stop being reported as
         parameters of a system whose equations never mention them.
 
@@ -4895,7 +4895,7 @@ class ODETranslator(object):
         >>> translator.indep_var_invariants()
         (d*k*t/(K*h), k*t/h)
 
-        Hubert & Labahn 6.6 has no separable clock:
+        Hubert & Labahn 6.6 has no separate clock:
 
         >>> hl66 = ODESystem.from_equations(['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...                                  'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
