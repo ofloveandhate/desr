@@ -9,6 +9,9 @@ Creating ODE Translations
 .. autoclass:: desr.ode_translation.ODETranslator
     :noindex:
 
+.. automethod:: desr.ode_translation.ODETranslator.copy
+    :noindex:
+
 Reduction Methods
 -----------------
 
@@ -42,10 +45,16 @@ Reverse translation is the process of taking solutions of the reduced system and
     :noindex:
 
 
-Extending from a set of Invariants
-----------------------------------
+Choosing the invariants
+-------------------------
+
+These change the translator they are called on; take a
+:meth:`~desr.ode_translation.ODETranslator.copy` first to keep the original.
 
 .. automethod:: desr.ode_translation.ODETranslator.extend_from_invariants
+    :noindex:
+
+.. automethod:: desr.ode_translation.ODETranslator.order_invariant_columns
     :noindex:
 
 

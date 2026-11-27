@@ -253,14 +253,17 @@ class TestODESystemScaling(TestCase):
 
         # Choose a new invariant, by writing it down.  This used to need the exponent
         # matrix, which meant knowing where each variable sat in the order.
-        max_scal2 = max_scal.extend_from_invariants([r*t, h*p/d])
+        max_scal2 = max_scal.copy()
+        max_scal2.extend_from_invariants([r*t, h*p/d])
+        # Both are among the invariants, which are in the schemes' order: parameter
+        # invariants, then those with t, then those with a dependent.
         self.assertTupleEqual(tuple(max_scal2.invariant_monomials()),
-                              (r*t, h*p/d, h*s/k, k*t/h, n/K, h*p/K))
+                              (h*s/k, r*t, k*t/h, h*p/d, n/K, h*p/K))
 
         # This should work even if we move the time about
-        max_scal3 = max_scal.extend_from_invariants(h*p/d)
-        self.assertTupleEqual(tuple(max_scal3.invariant_monomials()),
-                              (h*p/d, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
+        max_scal3 = max_scal.copy()
+        max_scal3.extend_from_invariants(h*p/d)
+        self.assertIn(h*p/d, list(max_scal3.invariant_monomials()))
 
 
         reduced_system = max_scal.translate()

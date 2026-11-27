@@ -112,9 +112,15 @@ monomials says what is meant and survives a reordering.
     ...                                                      [1, 0, -1, 0, 0, 0, 1, 0]]).T)
     Matrix([[C*k_1/k_2, P*k_1/k_m1]])
 
-Finding a maximal scaling matrix that can be used to rewrite the system in terms of these invariants is also simple.
+:meth:`~desr.ode_translation.ODETranslator.extend_from_invariants` makes them part of
+the translator's invariants, completing them to a full set.  It changes the translator it
+is called on, so take a copy to keep the first one.  The copy has the first one's names
+too, and those are four names for the parameter scheme's four dependents; this
+reduction will have more, so the copy takes the default names:
 
-    >>> max_scal2 = max_scal1.extend_from_invariants(invariant_choice=invariant_choice)
+    >>> max_scal2 = max_scal1.copy()
+    >>> max_scal2.set_naming_scheme({})
+    >>> max_scal2.extend_from_invariants(invariant_choice)
     >>> max_scal2
     A=
     Matrix([
@@ -122,21 +128,21 @@ Finding a maximal scaling matrix that can be used to rewrite the system in terms
     [-1,  0,  0, 0, 1, 1, 1, 1]])
     V=
     Matrix([
-    [ 0, -1,  1,  1, 0,  1,  1,  1],
-    [-1,  1, -1,  0, 1, -1, -1, -1],
-    [ 0,  0,  0, -1, 0,  0,  0,  0],
-    [ 0,  0,  0,  0, 1,  0,  0,  0],
-    [ 0,  0,  1,  0, 0,  0,  0,  0],
-    [ 0,  0,  0,  0, 0,  1,  0,  0],
-    [ 0,  0,  0,  1, 0,  0,  1,  0],
-    [ 0,  0,  0,  0, 0,  0,  0,  1]])
+    [ 0, -1, 0,  1,  1,  1,  1,  1],
+    [-1,  1, 1, -1,  0, -1, -1, -1],
+    [ 0,  0, 0,  0, -1,  0,  0,  0],
+    [ 0,  0, 1,  0,  0,  0,  0,  0],
+    [ 0,  0, 0,  1,  0,  0,  0,  0],
+    [ 0,  0, 0,  0,  0,  1,  0,  0],
+    [ 0,  0, 0,  0,  1,  0,  1,  0],
+    [ 0,  0, 0,  0,  0,  0,  0,  1]])
     W=
     Matrix([
     [-1, -1, -1, 1, 0, 0, 0, 0],
     [-1,  0,  0, 0, 1, 1, 1, 1],
+    [ 0,  0,  0, 1, 0, 0, 0, 0],
     [ 0,  0,  0, 0, 1, 0, 0, 0],
     [ 0,  0, -1, 0, 0, 0, 0, 0],
-    [ 0,  0,  0, 1, 0, 0, 0, 0],
     [ 0,  0,  0, 0, 0, 1, 0, 0],
     [ 0,  0,  1, 0, 0, 0, 1, 0],
     [ 0,  0,  0, 0, 0, 0, 0, 1]])
@@ -150,14 +156,14 @@ Now, this transformation doesn't satisfy the conditions of the parameter reducti
 which applies only when the clock is left alone, does not fit either.
 
     >>> max_scal2.invariant_monomials()
-    Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
+    Matrix([[k_2*t, C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
     >>> max_scal2.translate()
     dtau/dtau = 1
-    dy0/dtau = -y0 - y0*y4/y1 + y3*y5
-    dy1/dtau = y0*y1/y4
-    dy3/dtau = y0 + y0*y4/y1 - y3*y5
-    dy4/dtau = y0
-    dy5/dtau = y0*y4/y1 - y3*y5
+    dy1/dtau = -y1 - y1*y4/y2 + y3*y5
+    dy2/dtau = y1*y2/y4
+    dy3/dtau = y1 + y1*y4/y2 - y3*y5
+    dy4/dtau = y1
+    dy5/dtau = y1*y4/y2 - y3*y5
 
 The reduced system is autonomous and has no parameters at all.  Two things got it there,
 and both can be turned off.
@@ -170,8 +176,8 @@ recorded in the caller's own symbols:
     >>> max_scal2.translate().normalisations
     {k_1: 1, k_2: 1}
 
-With :math:`k_2` pinned to 1, the invariant :code:`y2 = k_2*t` **is** :math:`t`, which the
-reduced system already carries, and its equation :code:`dy2/dt = y2/t` reads
+With :math:`k_2` pinned to 1, the invariant :code:`y0 = k_2*t` **is** :math:`t`, which the
+reduced system already carries, and its equation :code:`dy0/dt = y0/t` reads
 :math:`\frac{dt}{dt} = 1` -- which the system already has.  So the two are one quantity
 under two names, one of them is kept, and every :math:`1/t` cancels.  That is what makes
 the result autonomous.
@@ -182,10 +188,12 @@ that unit; :attr:`~desr.ode_system.ODESystem.named_symbols` says which quantity 
 reduced symbol stands for, and the clock is in there with the rest.
 
     >>> max_scal2.translate().named_symbols
-    {tau: k_2*t, y0: C*k_1/k_2, y1: P*k_1/k_m1, y3: E*k_1/k_2, y4: P*k_1/k_2, y5: S*k_1/k_2}
+    {tau: k_2*t, y1: C*k_1/k_2, y2: P*k_1/k_m1, y3: E*k_1/k_2, y4: P*k_1/k_2, y5: S*k_1/k_2}
 
-The remaining variables :code:`(y0, y1, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
+The remaining variables :code:`(y1, y2, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
+They come after :math:`k_2 t` because the columns are in the order the schemes read: the
+invariant with the clock before those with a dependent variable.
 
 To reproduce :cite:`Hubert2013c`: exactly, ask for neither step.  The auxiliaries are then
 carried, and reported as *parameters* because each is a monomial in the original parameters
@@ -195,68 +203,41 @@ alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
     >>> max_scal2.translate(normalise_parameters=False,
     ...                     rescale_clock=False)
     dt/dt = 1
-    dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
-    dy1/dt = y0*y1*y2/(t*y4)
-    dy2/dt = y2/t
-    dy3/dt = y3*(y0*y2/y3 + y0*y2*y4/(y1*y3) - y2*y5)/t
-    dy4/dt = y0*y2/t
-    dy5/dt = y5*(y0*y2*y4/(y1*y5) - y2*y3)/t
+    dy0/dt = y0/t
+    dy1/dt = y1*(-y0 - y0*y4/y2 + y0*y3*y5/y1)/t
+    dy2/dt = y0*y1*y2/(t*y4)
+    dy3/dt = y3*(y0*y1/y3 + y0*y1*y4/(y2*y3) - y0*y5)/t
+    dy4/dt = y0*y1/t
+    dy5/dt = y5*(y0*y1*y4/(y2*y5) - y0*y3)/t
     parameters: x0, x1
 
-However, we can rearrange these invariants into an order that *does* satisfy the parameter reduction scheme.
-While this isn't implemented yet, we can do it by hand for the moment.
+The parameter scheme can be reached from here.  It needs a parameter invariant, and none
+of the six above is a monomial in the parameters alone.  One column operation makes one:
+dividing :math:`\frac{k_1}{k_{-1}} P` by :math:`\frac{k_1}{k_2} P` cancels the :math:`P`
+and leaves :math:`k_2 / k_{-1}`.  The operation is told which columns are meant by the
+invariants they hold, written in the system's own symbols:
 
-None of the six invariants above is a monomial in the parameters alone, so the parameter
-scheme has nothing to reduce yet.  One column operation makes one: dividing
-:math:`\frac{k_1}{k_{-1}} P` by :math:`\frac{k_1}{k_2} P` cancels the :math:`P` and leaves
-:math:`k_2 / k_{-1}`.  The operation is told which columns are meant by the invariants
-they hold, written in the system's own symbols:
-
+    >>> max_scal3 = max_scal2.copy()
     >>> k_1, k_2, k_m1, t, C, E, P, S = original_system.symbols
-    >>> max_scal2.multiplier_add_columns(P*k_1/k_m1, P*k_1/k_2, power=-1)
-    >>> max_scal2.invariant_monomials()
-    Matrix([[C*k_1/k_2, k_2/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
+    >>> max_scal3.multiplier_add_columns(P*k_1/k_m1, P*k_1/k_2, power=-1)
+    >>> max_scal3.invariant_monomials()
+    Matrix([[k_2*t, C*k_1/k_2, k_2/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
 
-:meth:`~desr.ode_translation.ODETranslator.column_of` gives the position of a column
-from its invariant, for when the position itself is wanted.
+The parameter scheme also wants the invariant columns in its order: the parameter
+invariants first, then the one with the independent variable, then the dependent ones.
+:meth:`~desr.ode_translation.ODETranslator.order_invariant_columns` puts them there, by
+what each invariant is:
 
-We then reorder the last :math:`n-r` columns into the layout the scheme wants: the
-parameter invariant first, then the independent variable, then the dependent invariants.
-Which column is which is decided from what each one is.  A permutation written as a
-literal would be read against the variable order, and would mean something different if
-that order changed.
-
-    >>> variables, indep = set(original_system.variables), original_system.independent_variable
-    >>> def column_kind(monomial):
-    ...     if indep in monomial.free_symbols:
-    ...         return 1                                   # the independent variable
-    ...     return 2 if monomial.free_symbols & variables else 0   # dependent, else parameter
-    >>> monomials = list(max_scal2.invariant_monomials())
-    >>> permutation = sorted(range(len(monomials)), key=lambda i: (column_kind(monomials[i]), i))
-    >>> permutation
-    [1, 2, 0, 3, 4, 5]
-
-    >>> max_scal3 = max_scal2.herm_mult_n[:, permutation]
-    >>> print(f'Permuted Vn:\n{repr(max_scal3)}')
-    Permuted Vn:
-    Matrix([
-    [ 0, 0,  1,  1,  1,  1],
-    [ 1, 1, -1, -1, -1, -1],
-    [-1, 0,  0,  0,  0,  0],
-    [ 0, 1,  0,  0,  0,  0],
-    [ 0, 0,  1,  0,  0,  0],
-    [ 0, 0,  0,  1,  0,  0],
-    [ 0, 0,  0,  0,  1,  0],
-    [ 0, 0,  0,  0,  0,  1]])
-    >>> max_scal3 = sympy.Matrix.hstack(max_scal2.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslator(original_system, scaling_matrix=max_scal2.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
-
-:math:`V_i` is unchanged, since only the invariant block was touched.  The new translator
-is built from the same system, so the invariants read in its symbols:
-
+    >>> max_scal3.order_invariant_columns()
     >>> max_scal3.invariant_monomials()
     Matrix([[k_2/k_m1, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
+    >>> max_scal3.scheme()
+    ReductionScheme.PARAMETER
 
+Named for the paper, and reduced:
+
+    >>> max_scal3.set_naming_scheme({'parameters': 'c', 'independent': 't',
+    ...                              'dependents': ['C', 'E', 'P', 'S']})
     >>> print(max_scal3.translate().subs({'c0':'alpha'}))
     dt/dt = 1
     dC/dt = -C - C/alpha + E*S

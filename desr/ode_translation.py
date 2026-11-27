@@ -1,4 +1,5 @@
 
+import copy
 import enum
 
 import sympy
@@ -2079,7 +2080,7 @@ class ODETranslator(object):
 
         It is a change to the multiplier, so everything the translator reports
         afterwards -- its invariants, its names, a reduction, a figure -- is in the new
-        basis.  To keep the original as well, build a second translator.
+        basis.  To keep the original as well, take a :meth:`copy` first.
 
         Hubert & Labahn's example 6.6.  They list the invariants :math:`t z_1^3` and
         :math:`z_1^2 z_2 / t`; the product of the two has no :math:`t`:
@@ -5064,66 +5065,122 @@ class ODETranslator(object):
     ## Choosing invariants
     def extend_from_invariants(self, invariant_choice):
         '''
-        Find a Hermite multiplier that rewrites the system in terms of the invariants you
-        asked for, extending them to a full set.
+        Make the invariants you name part of this translator's invariants, completing them
+        to a full set.  Changes this translator, as the ``multiplier_*`` operations do;
+        take a :meth:`copy` first to keep the original.
 
         Say which invariants you want by **writing them down**.  The exponent matrix is
         still accepted, but it is the wrong thing to type: its rows are positions in the
-        variable order, so `reorder_parameters` silently changes what the same matrix
+        variable order, so reordering the variables silently changes what the same matrix
         means, and nothing in the matrix says which invariant it was meant to be.
 
-        Parameters
-        ----------
-        invariant_choice : iterable, str, sympy.Expr, sympy.Matrix
-            The invariants to keep.  Each is a monomial in the original symbols, written as
-            an expression or a string -- `'r*t'`, `h*p/d` -- and one on its own need not be
-            wrapped in a list.  Alternatively the :math:`n \\times k` matrix of exponents,
-            one invariant per column, in the variable order.
+        **What it does.**  Let :math:`P` be the :math:`n \\times k` matrix of exponents of
+        the chosen monomials, one column each.
 
-        Returns
-        -------
-        ODETranslator
-            An ODETranslator representing the rewrite rules in terms of the given invariants.
+        1. Each must be invariant: :math:`A P = 0`.  One that is not is refused, by name.
+        2. Written in the current invariants, they are :math:`W_d P`, an
+           :math:`(n - r) \\times k` integer matrix: column :math:`j` says which product of
+           powers of the current invariants the :math:`j`-th chosen one is.
+        3. :math:`W_d P` is completed to a unimodular :math:`(n - r) \\times (n - r)`
+           matrix :math:`U` whose first :math:`k` columns are :math:`W_d P`, and the
+           invariant block of the multiplier becomes :math:`V_n U`.  The auxiliary block
+           :math:`V_i` is not touched, so the auxiliaries are the same, :math:`A V` is
+           still :math:`[H, 0]`, and :math:`V` is still unimodular.
+        4. The invariant columns are put in the order the reduction schemes read them, by
+           :meth:`order_invariant_columns`.
 
+        So every chosen monomial is one of the invariants afterwards, and
+        :meth:`column_of` finds it.  The other :math:`n - r - k` are a completion, and
+        **which completion is not a choice anybody made**: it is the one an elimination on
+        :math:`W_d P` produces, the last columns of the inverse of the normal row Hermite
+        multiplier of :math:`W_d P`.  Any other completion differs from it by products of
+        powers of the chosen invariants and of each other.  To choose those too, name them,
+        or move them afterwards with :meth:`multiplier_add_columns`.
 
-        >>> ode_translator = ODETranslator(ODESystem(equations=[
+        **When there is none.**  :math:`U` exists exactly when the chosen invariants can
+        be part of an integer basis of the invariants: when no monomial that is not a
+        product of integer powers of them has a power that is.  The square of an
+        invariant cannot be part of a basis, since the invariant itself is not a product
+        of integer powers of its square; nor can a set in which one is a product of powers
+        of the others.  Either is refused.
+
+        Args:
+            invariant_choice (iterable, str, sympy.Expr or sympy.Matrix): The invariants
+                to keep.  Each is a monomial in the original symbols, written as an
+                expression or a string -- ``'r*t'``, ``h*p/d`` -- and one on its own need
+                not be wrapped in a list.  Alternatively the :math:`n \\times k` matrix of
+                exponents, one invariant per column, in the variable order.
+
+        >>> translator = ODETranslator(ODESystem(equations=[
         ...     'ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
         ...     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']))
-        >>> ode_translator.invariant_monomials()
+        >>> translator.invariant_monomials()
         Matrix([[k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0]])
 
         Two new invariants we think are more interesting -- the quotient of the first two
         above, and of the last two -- said by writing them:
 
-        >>> new_translator = ode_translator.extend_from_invariants(['k_m1/k_2', 'c/s'])
-        >>> new_translator.invariant_monomials()
-        Matrix([[k_m1/k_2, c/s, k_m1/(e_0*k_1), e_0*k_1*t, s/e_0]])
+        >>> extended = translator.copy()
+        >>> extended.extend_from_invariants(['k_m1/k_2', 'c/s'])
+        >>> extended.invariant_monomials()
+        Matrix([[k_m1/k_2, k_m1/(e_0*k_1), e_0*k_1*t, c/s, s/e_0]])
+
+        The columns are in the schemes' order -- parameter invariants, the clock, the
+        dependents.  The order is necessary for the parameter scheme and not sufficient:
+        it also needs every dependent invariant to be one dependent variable times
+        parameters, and :math:`c/s` is two dependents, so the general scheme applies:
+
+        >>> extended.scheme()
+        ReductionScheme.GENERAL
+
+        Choosing only the parameter invariant leaves the dependent invariants alone, and
+        with the columns in order the parameter scheme still applies:
+
+        >>> ratio = translator.copy()
+        >>> ratio.extend_from_invariants('k_m1/k_2')
+        >>> ratio.invariant_monomials()
+        Matrix([[k_m1/k_2, k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0]])
+        >>> ratio.scheme()
+        ReductionScheme.PARAMETER
+
+        The copy kept the original as it was:
+
+        >>> translator.invariant_monomials()
+        Matrix([[k_2/(e_0*k_1), k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, s/e_0]])
 
         The exponent matrix says the same thing, and is what the monomials are turned into.
         It has one column per invariant and one row per symbol, in the order e_0, k_1, k_2,
         k_m1, t, c, s:
 
-        >>> new_inv = sympy.Matrix([[0, 0, -1, 1, 0, 0, 0],
-        ...                         [0, 0, 0, 0, 0, 1, -1]]).T
-        >>> ode_translator.extend_from_invariants(new_inv).invariant_monomials()
-        Matrix([[k_m1/k_2, c/s, k_m1/(e_0*k_1), e_0*k_1*t, s/e_0]])
+        >>> by_matrix = translator.copy()
+        >>> by_matrix.extend_from_invariants(sympy.Matrix([[0, 0, -1, 1, 0, 0, 0],
+        ...                                                [0, 0, 0, 0, 0, 1, -1]]).T)
+        >>> by_matrix.invariant_monomials() == extended.invariant_monomials()
+        True
 
         Something that is not invariant is refused, and named:
 
-        >>> ode_translator.extend_from_invariants('c*s')
+        >>> translator.extend_from_invariants('c*s')
         Traceback (most recent call last):
             ...
         ValueError: c*s is not an invariant of the scaling action, so the system cannot be rewritten in terms of it.
+
+        And so is a choice no basis can contain:
+
+        >>> translator.extend_from_invariants('c**2/e_0**2')
+        Traceback (most recent call last):
+            ...
+        ValueError: c**2/e_0**2 cannot be part of an integer basis of the invariants: some invariant that is not a product of integer powers of it has a power that is, as an invariant does with its square.  Choose invariants from which every invariant can be built with integer powers.
+
+        A refused extension changes nothing.
         '''
         variables = self._own_system().symbols
         invariant_choice = self._as_exponent_matrix(invariant_choice, variables)
+        monomials = list(scale_action(variables, invariant_choice))
 
         ## Step 1: Check we have invariants
         choice_actions = self.scaling_matrix * invariant_choice
         if not choice_actions.is_zero_matrix:
-            # Named as monomials whichever way they arrived, because a column index is not
-            # something a caller can act on.
-            monomials = list(scale_action(variables, invariant_choice))
             offenders = [monomials[column] for column in range(invariant_choice.shape[1])
                          if not choice_actions[:, column].is_zero_matrix]
             named = ', '.join(map(str, offenders))
@@ -5135,17 +5192,80 @@ class ODETranslator(object):
                     'an invariant' if len(offenders) == 1 else 'invariants',
                     'it' if len(offenders) == 1 else 'them'))
 
-        ## Step 2: Try and extend the choices by a basis of invariants
-        ## Step 2a: Extend (W_d . invariant_choice) to a unimodular matrix
-        column_operations = extend_rectangular_matrix(self.inv_herm_mult_d * invariant_choice)
+        ## Step 2: complete W_d P to a unimodular matrix, in the chosen monomials' words
+        try:
+            column_operations = extend_rectangular_matrix(self.inv_herm_mult_d * invariant_choice)
+        except ValueError:
+            raise ValueError(
+                '{} cannot be part of an integer basis of the invariants: some invariant '
+                'that is not a product of integer powers of {} has a power that is, as an '
+                'invariant does with its square.  Choose invariants from which every '
+                'invariant can be built with integer powers.'.format(
+                    ', '.join(map(str, monomials)),
+                    'it' if len(monomials) == 1 else 'them'))
 
-        # Step 2b: Apply these column operations to the current Hermite multiplier
-        hermite_multiplier = self.herm_mult.copy()
-        hermite_multiplier[:, self.r:] = self.herm_mult_n * column_operations
-        max_scal = ODETranslator(self._own_system(), scaling_matrix=self.scaling_matrix,
-                                 hermite_multiplier=hermite_multiplier)
+        ## Step 3: the invariant block becomes V_n U; V_i stays
+        self._herm_mult[:, self.r:] = self.herm_mult_n * column_operations
+        self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
 
-        return max_scal
+        ## Step 4: in the order the schemes read
+        self.order_invariant_columns()
+
+    def order_invariant_columns(self):
+        '''
+        Put the invariant columns in the order the reduction schemes read them: those in
+        the parameters alone, then those with the independent variable, then those with a
+        dependent variable and not the independent one.  Within each kind the columns keep
+        their order.  Changes this translator, as the ``multiplier_*`` operations do.
+
+        It is a permutation of the invariant columns, so the invariants, the auxiliaries and
+        :math:`A V` are unchanged; what changes is which column each invariant is in.  The
+        parameter scheme applies only when the parameter invariants come first, then the
+        clock, then the dependents, so this is what lets it apply after operations that
+        move the columns -- :meth:`extend_from_invariants` calls it, and
+        :meth:`multiplier_add_columns` and the other column operations leave the order to
+        the caller.
+
+        >>> translator = ODETranslator(ODESystem(equations=[
+        ...     'ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
+        ...     'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']))
+        >>> translator.multiplier_swap_columns(2, 6)
+        >>> translator.invariant_monomials()
+        Matrix([[s/e_0, k_m1/(e_0*k_1), e_0*k_1*t, c/e_0, k_2/(e_0*k_1)]])
+        >>> translator.order_invariant_columns()
+        >>> translator.invariant_monomials()
+        Matrix([[k_m1/(e_0*k_1), k_2/(e_0*k_1), e_0*k_1*t, s/e_0, c/e_0]])
+        '''
+        system = self._own_system()
+        dependents = set(system.dependents)
+        clock = system.independent_variable
+
+        def kind(monomial):
+            if clock in monomial.free_symbols:
+                return 1
+            return 2 if monomial.free_symbols & dependents else 0
+
+        monomials = list(scale_action(system.symbols, self.herm_mult_n))
+        order = sorted(range(len(monomials)), key=lambda column: (kind(monomials[column]), column))
+        if order == list(range(len(monomials))):
+            return
+        self._herm_mult[:, self.r:] = self.herm_mult_n[:, order]
+        self._inv_herm_mult = None
+        self._dep_var_inv_herm_mult_cache = {}
+
+    def copy(self):
+        '''
+        An independent copy of this translator: the same system, scaling, multiplier and
+        naming, none of them shared.  The ``multiplier_*`` operations,
+        :meth:`isolate_clock` and :meth:`extend_from_invariants` change the translator they
+        are called on, so this is how to keep the original.
+
+        :rtype: ODETranslator
+        '''
+        return copy.deepcopy(self)
+
+    __copy__ = copy
 
     def _as_exponent_matrix(self, invariant_choice, variables):
         '''
