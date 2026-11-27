@@ -53,7 +53,7 @@ The reduction splits the columns of the Hermite multiplier in two.  The invarian
 monomials the scaling leaves fixed; the auxiliaries are the directions it moves along, and
 there are :math:`r` of them, one per scaling symmetry.
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.auxiliary_monomials()
     Matrix([[1/(e_0*k_1), e_0]])
     >>> translator.invariant_monomials()
@@ -69,7 +69,7 @@ itself rather than as part of some combination.
 
     >>> already = ODESystem.from_equations(['dn/dt = r*n*(1 - n/K)',
     ...                                     'dp/dt = p*(q - 1)'])
-    >>> untouched = ODETranslator.from_ode_system(already)
+    >>> untouched = ODETranslator(already)
     >>> [symbol for index, symbol in enumerate(already.symbols)
     ...  if untouched.scaling_matrix[:, index].is_zero_matrix]
     [q, r, t]
@@ -113,7 +113,7 @@ can be set to 1 once and discarded:
 
     >>> translator.substitutions()
     {e_0: 1, k_1: 1, k_2: kappa0, k_m1: kappa1, t: tau, c: nu0, s: nu1}
-    >>> translator.translate(system)
+    >>> translator.translate()
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 - kappa1*nu0 - nu0*nu1 + nu1
     dnu1/dtau = kappa1*nu0 + nu0*nu1 - nu1
@@ -142,7 +142,7 @@ from its reaction network:
 Its four auxiliaries do not agree with each other.  Three are monomials in rate constants;
 the fourth is a chemical species:
 
-    >>> transl = ODETranslator.from_ode_system(enzyme)
+    >>> transl = ODETranslator(enzyme)
     >>> transl.scheme()
     ReductionScheme.GENERAL
     >>> transl.auxiliary_monomials()
@@ -170,7 +170,7 @@ So the table has an occupant where Michaelis-Menten had a hole:
 and a reduction told to keep every auxiliary sorts them the same way, three into the
 parameters and one into the dependents:
 
-    >>> reduced = transl.translate_general(enzyme, normalise_parameters=False)
+    >>> reduced = transl.translate_general(normalise_parameters=False)
     >>> reduced.auxiliary_names
     (x0, x1, x2, x3)
     >>> reduced.parameters
@@ -202,7 +202,7 @@ constant, so a reduction can set each to 1 and be done with it; :math:`x_3` is i
 dependent row, moves, and cannot be.  That is what a reduction does by default, so the one
 above had to be asked not to:
 
-    >>> reduced = transl.translate(enzyme)
+    >>> reduced = transl.translate()
     >>> reduced.auxiliary_names
     (x3,)
     >>> reduced.normalisations

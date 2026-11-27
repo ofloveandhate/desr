@@ -108,7 +108,7 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
         # of concentration.  Their rows state their dimensions; every other row names
         # the unit it is measured in, and nothing in the column is a sentence.
         system = self.with_initial()
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         figure = symbol_map_figure(system)
         written = [text.get_text() for ax in figure.axes for text in ax.texts]
         matplotlib.pyplot.close(figure)
@@ -214,7 +214,7 @@ class TestTheFiguresDrawUnfamiliarSystems(TestCase):
         # paired with the wrong symbol.
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(ReductionScheme.DEP_VAR, translator.scheme())
         self.assertEqual(6.5, round(flowchart_figure(system).get_size_inches()[0], 2))
         self.assertIsNotNone(symbol_map_figure(system))

@@ -129,10 +129,10 @@ class TestTheReducedSystemIsTheDynamicsOfItsMonomials(SeriesCase):
     }
 
     def reductions(self, system):
-        translator = ODETranslator.from_ode_system(system)
-        yield 'translate()', translator.translate(system)
+        translator = ODETranslator(system)
+        yield 'translate()', translator.translate()
         yield ("Hubert & Labahn's form",
-               translator.translate_general(system, normalise_parameters=False,
+               translator.translate_general(normalise_parameters=False,
                                             rescale_clock=False))
 
     @staticmethod
@@ -175,7 +175,7 @@ class TestTheReducedSystemIsTheDynamicsOfItsMonomials(SeriesCase):
             'enzyme chain, general, three normalised and the clock identified']
         system = build()
         original = trajectory(system, parameters, start, span)
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
 
         swapped = dict(reduced.named_symbols)
         first, second = S('y3'), S('y4')
@@ -217,9 +217,9 @@ class TestASeriesThroughAReductionThatCarriesAnAuxiliary(SeriesCase):
     def setUp(self):
         self.system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
         self.original = trajectory(self.system, self.PARAMETERS, self.START, (0.0, 3.0))
-        self.reduced = self.translator.translate(self.system)
+        self.reduced = self.translator.translate()
         self.numeric = NumericTranslator(self.reduced)
         self.forward = self.numeric.forward(self.original)
 
@@ -288,8 +288,7 @@ class TestWhatASeriesIsToldWhenNoConstantCanHelp(SeriesCase):
         original = trajectory(
             system, parameters,
             TestASeriesThroughAReductionThatCarriesAnAuxiliary.START, (0.0, 1.0))
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
         with self.assertRaises(InsufficientKnownValues) as caught:
             numeric.reverse(numeric.forward(original), known_values=parameters)
         message = str(caught.exception)
@@ -302,8 +301,7 @@ class TestWhatASeriesIsToldWhenNoConstantCanHelp(SeriesCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         original = trajectory(system, {}, {S('z1'): 0.9, S('z2'): 0.6}, (1.0, 2.0))
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
         with self.assertRaises(InsufficientKnownValues) as caught:
             numeric.reverse(numeric.forward(original))
         message = str(caught.exception)
@@ -330,8 +328,7 @@ class TestASeriesThatStartsAtZero(SeriesCase):
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
         case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
         original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False,
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False,
                                       rescale_clock=False))
 
         # The rate really does divide by the clock, and the series really does start there.
@@ -356,8 +353,7 @@ class TestASeriesThatStartsAtZero(SeriesCase):
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
         case = TestASeriesThroughAReductionThatCarriesAnAuxiliary
         original = trajectory(system, case.PARAMETERS, case.START, (0.0, 3.0))
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
 
         clock = numeric.reduced.independent_variable
         self.assertEqual(S('k_2_3') * system.independent_variable,
@@ -378,8 +374,7 @@ class TestASeriesThatStartsAtZero(SeriesCase):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
         through_zero = {S('t'): np.linspace(0.0, 1.0, 5),
                         S('y0'): np.ones(5), S('y1'): np.ones(5)}
         with time_limit(60):
@@ -394,7 +389,7 @@ class TestASeriesThatStartsAtZero(SeriesCase):
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
         original = trajectory(system, {}, {S('z1'): 0.9, S('z2'): 0.6}, (1.0, 2.0))
-        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate(system))
+        numeric = NumericTranslator(ODETranslator(system).translate())
         with time_limit(60):
             recovered = numeric.reverse(numeric.forward(original))
         self.assert_recovers(original, recovered, rtol=1e-12)
@@ -407,7 +402,7 @@ class TestASeriesUnderTheDependentVariableScheme(SeriesCase):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)'])
         original = trajectory(system, {}, {S('z1'): 0.3, S('z2'): 0.5}, (1.0, 1.6))
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         numeric = NumericTranslator(reduced)
         forward = numeric.forward(original)
 
@@ -436,7 +431,7 @@ class TestAReducedSolutionWhoseClockIsNotTheOriginalTime(SeriesCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(self.HL_6_6)
-        self.reduced = ODETranslator.from_ode_system(self.system).translate(self.system)
+        self.reduced = ODETranslator(self.system).translate()
         self.numeric = NumericTranslator(self.reduced)
         self.clock = self.reduced.independent_variable
         self.t = self.system.independent_variable

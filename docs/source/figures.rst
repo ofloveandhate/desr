@@ -91,7 +91,7 @@ Both figures are built on :mod:`desr.symbol_graph`, which is the exponent graph 
 own: a bipartite graph from the original symbols to the reduced ones, with an edge per
 nonzero exponent, signed and labelled.
 
-    >>> translator = ODETranslator.from_ode_system(ODESystem.from_equations(
+    >>> translator = ODETranslator(ODESystem.from_equations(
     ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']))
     >>> graph = translator.symbol_graph()
@@ -107,4 +107,4 @@ is what you want when the maps are the point and the matrices are not.
 
     from desr import ODETranslator
 
-    ODETranslator.from_ode_system(system).draw_symbol_graph()
+    ODETranslator(system).draw_symbol_graph()

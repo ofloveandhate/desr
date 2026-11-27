@@ -29,7 +29,7 @@ negatives when printint to LaTeX using :func:`desr.tex_tools`.
     >>> original_system = ODESystem.from_tex(system_tex)
     >>> original_system.symbols
     (k_1, k_2, k_m1, t, C, E, P, S)
-    >>> max_scal1 = ODETranslator.from_ode_system(original_system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
+    >>> max_scal1 = ODETranslator(original_system, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print('Variable order: ', max_scal1.symbols_domain)
     Variable order:  (k_1, k_2, k_m1, t, C, E, P, S)
     >>> print(f'Scaling Matrix:\n{max_scal1.scaling_matrix.__repr__()}')
@@ -47,7 +47,7 @@ Finding the reduced system is also easy.
 Since the Hermite multiplier and inverse are compatible with the simplest parameter reduction scheme,
 :meth:`~desr.ode_translation.ODETranslator.translate` will automatically perform this reduction.
 
-    >>> print(f'Reduced system:\n{max_scal1.translate(original_system)}')
+    >>> print(f'Reduced system:\n{max_scal1.translate()}')
     Reduced system:
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S
@@ -71,13 +71,13 @@ Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator
     >>> original_system_reorder.reorder_variables(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
     >>> original_system_reorder.symbols
     (k_1, k_m1, k_2, t, C, E, P, S)
-    >>> max_scal1_reorder = ODETranslator.from_ode_system(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
+    >>> max_scal1_reorder = ODETranslator(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
     >>> print('Invariants:', ', '.join(map(str, max_scal1_reorder.invariant_monomials())))
     Invariants: k_2/k_m1, k_m1*t, C*k_1/k_m1, E*k_1/k_m1, P*k_1/k_m1, S*k_1/k_m1
 
 Now we can reduce to find another, equivalent system.
 
-    >>> reduced_system = max_scal1_reorder.translate(original_system_reorder)
+    >>> reduced_system = max_scal1_reorder.translate()
     >>> reduced_system
     dt/dt = 1
     dC/dt = -C*c0 - C + E*S
@@ -151,7 +151,7 @@ which applies only when the clock is left alone, does not fit either.
 
     >>> max_scal2.invariant_monomials()
     Matrix([[C*k_1/k_2, P*k_1/k_m1, k_2*t, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
-    >>> max_scal2.translate(original_system)
+    >>> max_scal2.translate()
     dtau/dtau = 1
     dy0/dtau = -y0 - y0*y4/y1 + y3*y5
     dy1/dtau = y0*y1/y4
@@ -167,7 +167,7 @@ constant and can be *normalised* -- set to 1, which is a choice of units rather 
 assumption, since an auxiliary is a unit and a unit measured in itself is 1.  The choice is
 recorded in the caller's own symbols:
 
-    >>> max_scal2.translate(original_system).normalisations
+    >>> max_scal2.translate().normalisations
     {k_1: 1, k_2: 1}
 
 With :math:`k_2` pinned to 1, the invariant :code:`y2 = k_2*t` **is** :math:`t`, which the
@@ -181,7 +181,7 @@ Pinning :math:`k_2` to 1 is a choice of time unit, so the reduced system's clock
 that unit; :attr:`~desr.ode_system.ODESystem.named_symbols` says which quantity each
 reduced symbol stands for, and the clock is in there with the rest.
 
-    >>> max_scal2.translate(original_system).named_symbols
+    >>> max_scal2.translate().named_symbols
     {tau: k_2*t, y0: C*k_1/k_2, y1: P*k_1/k_m1, y3: E*k_1/k_2, y4: P*k_1/k_2, y5: S*k_1/k_2}
 
 The remaining variables :code:`(y0, y1, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
@@ -192,7 +192,7 @@ carried, and reported as *parameters* because each is a monomial in the original
 alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
 :attr:`~desr.ode_system.ODESystem.auxiliary_names`.
 
-    >>> max_scal2.translate(original_system, normalise_parameters=False,
+    >>> max_scal2.translate(normalise_parameters=False,
     ...                     rescale_clock=False)
     dt/dt = 1
     dy0/dt = y0*(-y2 - y2*y4/y1 + y2*y3*y5/y0)/t
@@ -249,15 +249,15 @@ that order changed.
     [ 0, 0,  0,  0,  1,  0],
     [ 0, 0,  0,  0,  0,  1]])
     >>> max_scal3 = sympy.Matrix.hstack(max_scal2.herm_mult_i, max_scal3)
-    >>> max_scal3 = ODETranslator(max_scal2.scaling_matrix, symbols_domain=original_system.symbols, hermite_multiplier=max_scal3, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
+    >>> max_scal3 = ODETranslator(original_system, scaling_matrix=max_scal2.scaling_matrix, hermite_multiplier=max_scal3, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})
 
-:math:`V_i` is unchanged, since only the invariant block was touched.  ``symbols_domain``
-tells the new translator which symbols the scaling acts on, so the invariants read in them:
+:math:`V_i` is unchanged, since only the invariant block was touched.  The new translator
+is built from the same system, so the invariants read in its symbols:
 
     >>> max_scal3.invariant_monomials()
     Matrix([[k_2/k_m1, k_2*t, C*k_1/k_2, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2]])
 
-    >>> print(max_scal3.translate(original_system).subs({'c0':'alpha'}))
+    >>> print(max_scal3.translate().subs({'c0':'alpha'}))
     dt/dt = 1
     dC/dt = -C - C/alpha + E*S
     dE/dt = C + C/alpha - E*S
@@ -301,7 +301,7 @@ back, which is the end that is kept.
     >>> system.symbols
     (S_0, k_1, k_2, k_m1, E_0, C_0, P_0, t, C, E, P, S)
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.scheme()
     ReductionScheme.PARAMETER
 
@@ -315,7 +315,7 @@ it is zero.
     >>> translator.invariant_monomials()
     Matrix([[k_2/(S_0*k_1), k_m1/(S_0*k_1), E_0/S_0, C_0/S_0, P_0/S_0, S_0*k_1*t, C/S_0, E/S_0, P/S_0, S/S_0]])
 
-    >>> translator.translate(system)
+    >>> translator.translate()
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 - kappa1*nu0 + nu1*nu3
     dnu1/dtau = kappa0*nu0 + kappa1*nu0 - nu1*nu3
@@ -332,7 +332,7 @@ it is zero.
 zero.  Read as values, the substrate starts at one and the complex and the product at
 nothing:
 
-    >>> translator.translate(system).initial_condition_values
+    >>> translator.translate().initial_condition_values
     {nu3: 1, nu0: 0, nu2: 0}
 
 .. todo::

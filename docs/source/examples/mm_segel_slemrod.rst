@@ -58,7 +58,7 @@ Choose a variable order, with initial conditions at the front so the algorithm w
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
+    >>> translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
 
 The column numbers come from :meth:`~desr.ode_translation.ODETranslator.column_of`, so the
 page says which invariant each operation acts on rather than carrying a bare index.
@@ -84,7 +84,7 @@ Here are the substitutions the software will perform:
 
 Translate and obtain a system
 
-    >>> reduced_system = translator.translate(system)
+    >>> reduced_system = translator.translate()
 
 Do a few substitutions, and we have :cite:`Segel1989` (8a-b).  Note the spelling
 :math:`\lambda` has to take: ``lambda`` is a reserved word in Python, so :mod:`sympy` cannot
@@ -137,7 +137,7 @@ A sanity check
 
 Now we can construct the `ODETranslator`
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
+    >>> translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
     Matrix([
     [0, 0, 0, -1, -1, -1, 0, 1, 0, 0],
@@ -145,7 +145,7 @@ Now we can construct the `ODETranslator`
 
 and translate the system
 
-    >>> translator.translate(system)
+    >>> translator.translate()
     dtau/dtau = 1
     dc/dtau = -c*c2 - c*c3 - c*s + c0*s
     ds/dtau = c*c3 + c*s - c0*s
@@ -215,7 +215,7 @@ We have the invariants up to this point of
 
 Making some substitutions leads to :cite:`Segel1989` (21a-d)
 
-    >>> reduced_system = translator.translate(system)
+    >>> reduced_system = translator.translate()
     >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
     ...                                          'c2': '1 / (sigma * (kappa + 1))'},subs_constraints=True,
     ...                    expand_after=True,
@@ -268,7 +268,7 @@ and only the clock changes.  The three column operations act on the time column 
     >>> translator_24.multiplier_add_columns(clock_24, eps, power=2)
     >>> translator_24.invariant_monomials()
     Matrix([[e_0/s_0, s_0/K_m, k_2/(k_1*s_0), k_m1/k_2, epsilon, epsilon*k_2*t, s/s_0, c/(epsilon*s_0)]])
-    >>> reduced_system = translator_24.translate(system)
+    >>> reduced_system = translator_24.translate()
     >>> reduced_system = reduced_system.subs({'c0': 'epsilon * (1 + 1 / sigma)',
     ...                                          'c2': '1 / (sigma * (kappa + 1))'
     ...                                          },subs_constraints=True,
@@ -320,14 +320,14 @@ Check that if we keep :math:`L` out of the normalising positions -- here :math:`
 are the two parameters that get normalised -- we have the same reduced system as before
 
     >>> system_l.reorder_variables(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
-    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
+    >>> translator = ODETranslator(system_l, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
     Matrix([
     [0, 0, 0, -1, -1, 0, 1, 0, 0],
     [1, 1, 1, -1,  0, 1, 0, 1, 1]])
     >>> translator.invariant_monomials()
     Matrix([[L/s_0, e_0/s_0, k_2/(k_1*s_0), K_m/s_0, k_1*s_0*t, s/s_0, c/s_0]])
-    >>> translator.translate(system_l)
+    >>> translator.translate()
     dt/dt = 1
     dc/dt = -c*c3 - c*s + c1*s
     ds/dt = -c*c2 + c*c3 + c*s - c1*s
@@ -338,7 +338,7 @@ are the two parameters that get normalised -- we have the same reduced system as
 Putting :math:`K_m` at the front, we have
 
     >>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
-    >>> translator = ODETranslator.from_ode_system(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
+    >>> translator = ODETranslator(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> clock = translator.column_of('K_m*k_1*t')
     >>> total = translator.column_of('L/K_m')
     >>> substrate = translator.column_of('s/K_m')
@@ -386,7 +386,7 @@ The substitutions that will be made:
 
 Here's the reduced system at this point:
 
-    >>> reduced_system = translator.translate(system_l)
+    >>> reduced_system = translator.translate()
     >>> reduced_system
     dtau/dtau = 1
     dc/dtau = -c*c1*s/c0 - c/c0 + s
@@ -450,7 +450,7 @@ Inspect
 Translate and reduce the system
 
     >>> translator.set_naming_scheme({'parameters': 'c', 'independent': 'T', 'dependents': ['s','c']})
-    >>> reduced_system = translator.translate(system_l)
+    >>> reduced_system = translator.translate()
     >>> reduced_system
     dT/dT = 1
     dc/dT = -c*c1*c3*s/c2 - c*c3/c2 + c0*c3*s/c2

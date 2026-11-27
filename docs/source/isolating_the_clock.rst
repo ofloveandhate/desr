@@ -27,7 +27,7 @@ gives these invariants:
 
     >>> system = ODESystem.from_equations(['du/dt = 2*b**2*u + 1/a**2'])
     >>> system.reorder_variables(['t', 'u', 'a', 'b'])
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.r
     2
     >>> translator.invariant_monomials()
@@ -37,7 +37,7 @@ Both invariants contain :math:`t`.  The second, :math:`b^2 t`, is the independen
 parameter, so the reduction takes it as the clock :math:`\tau`.  The first is
 :math:`y_0 = a^2 u / t`, and its equation has :math:`\tau` in it:
 
-    >>> translator.translate(system)
+    >>> translator.translate()
     dtau/dtau = 1
     dy0/dtau = 2*y0 - y0/tau + 1/tau
 
@@ -63,11 +63,11 @@ integer powers of the other.  In this basis only one invariant contains :math:`t
 basis.  It changes the translator it is called on, as the ``multiplier_*`` operations
 do, so a second translator is built here to keep the first for comparison:
 
-    >>> translator_with_isolate_enabled = ODETranslator.from_ode_system(system)
+    >>> translator_with_isolate_enabled = ODETranslator(system)
     >>> translator_with_isolate_enabled.isolate_clock() # internally manipulates the Hermite multiplier
     >>> translator_with_isolate_enabled.invariant_monomials()
     Matrix([[a**2*b**2*u, b**2*t]])
-    >>> translator_with_isolate_enabled.translate(system)
+    >>> translator_with_isolate_enabled.translate()
     dtau/dtau = 1
     dy0/dtau = 2*y0 + 1
 
@@ -149,7 +149,7 @@ Labahn's example 6.6 is such a system.  Its invariants are :math:`t z_1^3` and
     >>> hl66 = ODESystem.from_equations(
     ...     ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
     ...      'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-    >>> translator = ODETranslator.from_ode_system(hl66)
+    >>> translator = ODETranslator(hl66)
     >>> translator.invariant_monomials()
     Matrix([[t*z1**3, z1**2*z2/t]])
     >>> translator.isolate_clock()

@@ -28,26 +28,25 @@ class TestTranslatorRefusals(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_a_naming_scheme_that_is_not_a_dict(self):
         with self.assertRaises(ValueError) as caught:
-            ODETranslator.from_ode_system(self.system, naming_scheme='kappa')
+            ODETranslator(self.system, naming_scheme='kappa')
         self.assertIn('dict over the keys', str(caught.exception))
         self.assertIn('str', str(caught.exception))
 
-    def test_symbols_that_do_not_match_the_columns(self):
+    def test_a_scaling_matrix_that_does_not_match_the_symbols(self):
         with self.assertRaises(ValueError) as caught:
-            ODETranslator(self.translator.scaling_matrix,
-                          symbols_domain=self.system.symbols[:3])
-        self.assertIn('3 variables given', str(caught.exception))
+            ODETranslator(self.system, scaling_matrix=self.translator.scaling_matrix[:, :3])
+        self.assertIn('has 3 columns and the system has 7 symbols', str(caught.exception))
 
     def test_the_dependent_variable_scheme_on_a_system_whose_clock_is_scaled(self):
         # Michaelis-Menten's scaling moves t, so that scheme does not apply.
         column = self.system.independent_variable_index
         self.assertFalse(self.translator.scaling_matrix[:, column].is_zero_matrix)
         with self.assertRaises(ValueError) as caught:
-            self.translator.translate_dep_var(self.system)
+            self.translator.translate_dep_var()
         self.assertIn('is acted on by', str(caught.exception))
 
     def test_swapping_an_auxiliary_column(self):
@@ -108,9 +107,8 @@ class TestSystemsThatAreNotEqual(TestCase):
     def test_a_parameter_against_a_conserved_variable(self):
         # dw/dt = 0 says w is conserved; no equation says w is a parameter.  Not the same.
         x, w, t = sympy.symbols('x w t')
-        conserved = ODESystem([t, w, x], [sympy.Integer(1), sympy.Integer(0), w * x],
-                              indep_var=t)
-        parameter = ODESystem([w, t, x], [None, sympy.Integer(1), w * x], indep_var=t)
+        conserved = ODESystem({w: sympy.Integer(0), x: w * x})
+        parameter = ODESystem({x: w * x})
         self.assertNotEqual(conserved, parameter)
 
     def test_something_that_is_not_a_system(self):
@@ -121,7 +119,7 @@ class TestNumericRefusals(TestCase):
 
     def test_nothing_to_recover_when_every_auxiliary_is_carried(self):
         system = ODESystem.from_equations(HL_6_4)
-        numeric = NumericTranslator(ODETranslator.from_ode_system(system).translate(system))
+        numeric = NumericTranslator(ODETranslator(system).translate())
         self.assertTrue(numeric.carries_auxiliaries)
         with self.assertRaises(ValueError) as caught:
             numeric.recover_auxiliaries({})
@@ -130,8 +128,7 @@ class TestNumericRefusals(TestCase):
     def test_known_values_and_auxiliaries_together(self):
         system = ChemicalReactionNetwork.from_diagram(
             'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-        numeric = NumericTranslator(ODETranslator.from_ode_system(
-            system).translate_general(system, include_aux_vars=False))
+        numeric = NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
         with self.assertRaises(ValueError) as caught:
             numeric.recover_auxiliaries({}, known_values={'k_0_1': 1.0},
                                         auxiliaries=[1.0, 1.0, 1.0, 1.0])
@@ -143,7 +140,9 @@ class TestMoreTranslatorRefusals(TestCase):
     def test_a_multiplier_that_does_not_give_the_hermite_form(self):
         # A V = [1, -1] for V = I, which is not [h, 0].
         with self.assertRaises(ValueError) as caught:
-            ODETranslator(sympy.Matrix([[1, -1]]), hermite_multiplier=sympy.eye(2))
+            ODETranslator(ODESystem.from_equations(HL_6_4),
+                          scaling_matrix=sympy.Matrix([[1, -1]]),
+                          hermite_multiplier=sympy.eye(2))
         self.assertIn('is not in HNF', str(caught.exception))
         self.assertFalse(is_hnf_col(sympy.Matrix([[1, -1]])))
 
@@ -151,16 +150,16 @@ class TestMoreTranslatorRefusals(TestCase):
         # The parameter scheme refuses; the substitutions, which hold under every scheme,
         # still answer.
         system = ODESystem.from_equations(HL_6_6)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertNotEqual(ReductionScheme.PARAMETER, translator.scheme())
         with self.assertRaises(ValueError) as caught:
-            translator.translate_parameter(system)
+            translator.translate_parameter()
         self.assertIn('not compatible for parameter translation', str(caught.exception))
         self.assertEqual(set(system.symbols), set(translator.substitutions()))
 
     def test_reversing_with_the_wrong_number_of_solutions(self):
         system = ODESystem.from_equations(HL_6_6)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         one = sympy.symbols('a:1')
         for reverse in (lambda: translator.reverse_translate(one),
                         lambda: translator.reverse_translate_general(one),
@@ -169,32 +168,15 @@ class TestMoreTranslatorRefusals(TestCase):
                 reverse()
             self.assertIn('Incorrect number of variables', str(caught.exception))
 
-    def test_a_system_with_a_symbol_more_or_a_symbol_fewer(self):
-        system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
-        more = ODESystem.from_equations(MICHAELIS_MENTEN + ['dp/dt = k_2*c - k_3*p'])
-        fewer = ODESystem.from_equations(['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
-                                          'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c'])
-        with self.assertRaises(ValueError) as caught:
-            translator.translate(more)
-        self.assertIn('has k_3, p instead', str(caught.exception))
-        self.assertNotIn('does not have', str(caught.exception))
-        with self.assertRaises(ValueError) as caught:
-            translator.translate(fewer)
-        self.assertIn('does not have k_2', str(caught.exception))
-        self.assertNotIn('instead', str(caught.exception))
-
-
 class TestMoreNumericRefusals(TestCase):
 
     def carrying(self):
         system = ODESystem.from_equations(HL_6_4)
-        return NumericTranslator(ODETranslator.from_ode_system(system).translate(system))
+        return NumericTranslator(ODETranslator(system).translate())
 
     def dropping(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        return NumericTranslator(ODETranslator.from_ode_system(system).translate_general(
-            system, include_aux_vars=False))
+        return NumericTranslator(ODETranslator(system).translate_general(include_aux_vars=False))
 
     def test_a_carried_auxiliary_with_no_value_given(self):
         numeric = self.carrying()
@@ -230,7 +212,7 @@ class TestMultiplierAndSystemEdits(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_adding_a_column_to_itself(self):
         invariant = list(self.translator.invariant_monomials())[0]
@@ -265,6 +247,6 @@ class TestMultiplierAndSystemEdits(TestCase):
         self.assertIn('unable to make substitution', str(caught.exception))
 
     def test_translating_no_values_forward(self):
-        numeric = NumericTranslator(self.translator.translate(self.system))
+        numeric = NumericTranslator(self.translator.translate())
         with self.assertRaises(ValueError):
             numeric.forward({})

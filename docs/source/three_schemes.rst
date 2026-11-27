@@ -34,9 +34,9 @@ parameters and no auxiliaries at all:
     >>> mm = ODESystem.from_equations(
     ...     ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...      'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-    >>> ODETranslator.from_ode_system(mm).scheme()
+    >>> ODETranslator(mm).scheme()
     ReductionScheme.PARAMETER
-    >>> ODETranslator.from_ode_system(mm).translate(mm)
+    >>> ODETranslator(mm).translate()
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 - kappa1*nu0 - nu0*nu1 + nu1
     dnu1/dtau = kappa1*nu0 + nu0*nu1 - nu1
@@ -45,7 +45,7 @@ parameters and no auxiliaries at all:
 Four parameters became two.  The clock is called :math:`\tau` because it is not
 :math:`t`:
 
-    >>> reduced = ODETranslator.from_ode_system(mm).translate(mm)
+    >>> reduced = ODETranslator(mm).translate()
     >>> reduced.named_symbols[reduced.independent_variable]
     e_0*k_1*t
 
@@ -63,12 +63,12 @@ so the reduction keeps it rather than coining a symbol for it.  Hubert & Labahn 
 
     >>> hl64 = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
     ...                                  'dz2/dt = z2*(1/t - z1*z2)'])
-    >>> translator = ODETranslator.from_ode_system(hl64)
+    >>> translator = ODETranslator(hl64)
     >>> translator.scheme()
     ReductionScheme.DEP_VAR
     >>> translator.scaling_matrix[:, hl64.independent_variable_index]
     Matrix([[0]])
-    >>> translator.translate(hl64)
+    >>> translator.translate()
     dt/dt = 1
     dx0/dt = x0*(-y0 - 1)
     dy0/dt = y0*(1 + 1/t)
@@ -99,9 +99,9 @@ Hubert & Labahn 6.6 is a general reduction that keeps :math:`t`:
     >>> hl66 = ODESystem.from_equations(
     ...     ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
     ...      'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-    >>> ODETranslator.from_ode_system(hl66).scheme()
+    >>> ODETranslator(hl66).scheme()
     ReductionScheme.GENERAL
-    >>> ODETranslator.from_ode_system(hl66).translate(hl66)
+    >>> ODETranslator(hl66).translate()
     dt/dt = 1
     dx0/dt = x0*(2*y0*y1/3 - 1/3)/t
     dy0/dt = y0*(y0*y1 - 1)/t
@@ -130,8 +130,8 @@ does not appear.  It is a rescaled time and takes the name a rescaled time gets:
 
     >>> enzyme = ChemicalReactionNetwork.from_diagram(
     ...     'x + e -> y + e\ny -> z\nz + f -> x + f').to_ode_system()
-    >>> translator = ODETranslator.from_ode_system(enzyme)
-    >>> reduced = translator.translate(enzyme)
+    >>> translator = ODETranslator(enzyme)
+    >>> reduced = translator.translate()
     >>> reduced.independent_variable
     tau
     >>> reduced.named_symbols[reduced.independent_variable]
@@ -140,7 +140,7 @@ does not appear.  It is a rescaled time and takes the name a rescaled time gets:
 The change does not depend on the normalisation.  With nothing normalised the clock
 is the same invariant:
 
-    >>> untouched = translator.translate_general(enzyme, normalise_parameters=False)
+    >>> untouched = translator.translate_general(normalise_parameters=False)
     >>> untouched.independent_variable
     tau
     >>> untouched.named_symbols[untouched.independent_variable]
@@ -149,7 +149,7 @@ is the same invariant:
 Declining the step keeps the original clock, with :math:`k_{23} t` beside it as an
 invariant of its own, which is Hubert & Labahn's form:
 
-    >>> kept = translator.translate_general(enzyme, rescale_clock=False)
+    >>> kept = translator.translate_general(rescale_clock=False)
     >>> kept.independent_variable
     t
     >>> k_2_3, t = sympy.symbols('k_2_3 t')

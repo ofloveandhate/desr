@@ -51,26 +51,26 @@ SECOND_NAMES = {'auxiliaries': 'w', 'dependents': 'v', 'parameters': 'q'}
 def case(shape, seed):
     ''' The system for a case, and its translator. '''
     system = random_system(seed, **SHAPES[shape])
-    return system, ODETranslator.from_ode_system(system)
+    return system, ODETranslator(system)
 
 
 @functools.lru_cache(maxsize=None)
 def general(shape, seed, normalise, identify):
     system, translator = case(shape, seed)
-    return translator.translate_general(system, normalise_parameters=normalise,
+    return translator.translate_general(normalise_parameters=normalise,
                                         rescale_clock=identify)
 
 
 @functools.lru_cache(maxsize=None)
 def dep_var(shape, seed, normalise):
     system, translator = case(shape, seed)
-    return translator.translate_dep_var(system, normalise_parameters=normalise)
+    return translator.translate_dep_var(normalise_parameters=normalise)
 
 
 @functools.lru_cache(maxsize=None)
 def parameter(shape, seed):
     system, translator = case(shape, seed)
-    return translator.translate_parameter(system)
+    return translator.translate_parameter()
 
 
 def cases_under(scheme):
@@ -142,7 +142,8 @@ class TestEveryRowOfTheScalingMatrixIsASymmetry(TestCase):
         # direction: scaling u alone is one, scaling p alone is not.
         t, u, p = sympy.symbols('t u p')
         system = random_system(0)  # for its class; rebuilt below
-        system = type(system)([t, u, p], [sympy.Integer(1), p * u, None], indep_var=t)
+        system = type(system)._from_variables([t, u, p], [sympy.Integer(1), p * u, None],
+                                              indep_var=t)
         self.assertEqual([], rows_that_are_not_symmetries(
             system, sympy.Matrix([[1, 0, -1], [0, 1, 0]])))
         self.assertEqual([0], rows_that_are_not_symmetries(
@@ -155,7 +156,7 @@ class TestEveryReducedEquationIsTrue(TestCase):
         for shape, seed in CASES:
             with self.subTest(shape=shape, seed=seed):
                 system, translator = case(shape, seed)
-                self.assertEqual([], false_equations(system, translator.translate(system)))
+                self.assertEqual([], false_equations(system, translator.translate()))
 
     def test_under_the_general_scheme_with_every_setting_of_its_steps(self):
         for shape, seed in CASES:
@@ -331,7 +332,7 @@ class TestIsolatingTheClock(TestCase):
     def isolated(self, shape, seed):
         ''' The system, its translator as built, and a second one with the clock isolated. '''
         system, translator = case(shape, seed)
-        isolated = ODETranslator.from_ode_system(system)
+        isolated = ODETranslator(system)
         isolated.isolate_clock()
         return system, translator, isolated
 
@@ -376,14 +377,14 @@ class TestIsolatingTheClock(TestCase):
         for shape, seed in CASES[::3]:
             with self.subTest(shape=shape, seed=seed):
                 system, _ = case(shape, seed)
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 translator.inv_herm_mult        # computed, and kept, before the change
                 translator.isolate_clock()
                 n = translator.n
                 self.assertEqual(sympy.eye(n),
                                  translator.inv_herm_mult * translator.herm_mult)
                 # What it reports is what it reduces with.
-                reduced = translator.translate(system)
+                reduced = translator.translate()
                 self.assertEqual(dict(translator.named_symbols()),
                                  dict(reduced.named_symbols))
 
@@ -406,9 +407,9 @@ class TestIsolatingTheClock(TestCase):
         for shape, seed in CASES:
             with self.subTest(shape=shape, seed=seed):
                 system, translator, isolated = self.isolated(shape, seed)
-                self.assertEqual([], false_equations(system, isolated.translate(system)))
+                self.assertEqual([], false_equations(system, isolated.translate()))
                 self.assertEqual([], false_equations(
-                    system, isolated.translate_general(system, normalise_parameters=False)))
+                    system, isolated.translate_general(normalise_parameters=False)))
 
     def test_an_autonomous_system_with_a_rescaled_time_reduces_to_an_autonomous_one(self):
         # The statement the operation is for.  The premise is read off the isolated
@@ -425,7 +426,7 @@ class TestIsolatingTheClock(TestCase):
                     or sympy.degree(holding[0], t) != 1:
                 continue
             with self.subTest(shape=shape, seed=seed):
-                reduced = isolated.translate_general(system)
+                reduced = isolated.translate_general()
                 clock = reduced.independent_variable
                 self.assertEqual(holding[0], reduced.named_symbols[clock])
                 for rate in reduced.derivatives:
@@ -497,8 +498,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                     system, translator = case(shape, seed)
                     self.assertEqual(
                         len(general(shape, seed, normalise, identify).symbols),
-                        translator.expected_variable_count(
-                            system, scheme=ReductionScheme.GENERAL,
+                        translator.expected_variable_count(scheme=ReductionScheme.GENERAL,
                             normalise_parameters=normalise, rescale_clock=identify))
 
     def test_the_count_under_the_dependent_variable_scheme(self):
@@ -508,8 +508,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                     system, translator = case(shape, seed)
                     self.assertEqual(
                         len(dep_var(shape, seed, normalise).symbols),
-                        translator.expected_variable_count(
-                            system, scheme=ReductionScheme.DEP_VAR,
+                        translator.expected_variable_count(scheme=ReductionScheme.DEP_VAR,
                             normalise_parameters=normalise))
 
     def test_the_count_under_the_parameter_scheme(self):
@@ -517,7 +516,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
             with self.subTest(shape=shape, seed=seed):
                 system, translator = case(shape, seed)
                 self.assertEqual(len(parameter(shape, seed).symbols),
-                                 translator.expected_variable_count(system))
+                                 translator.expected_variable_count())
                 self.assertEqual(len(system.symbols) - translator.r,
                                  len(parameter(shape, seed).symbols))
 
@@ -532,9 +531,9 @@ class TestReducingAReducedSystem(TestCase):
 
     def again(self, shape, seed):
         system, translator = case(shape, seed)
-        once = forget(translator.translate(system))
-        second = ODETranslator.from_ode_system(once, naming_scheme=SECOND_NAMES)
-        return once, second, second.translate(once)
+        once = forget(translator.translate())
+        second = ODETranslator(once, naming_scheme=SECOND_NAMES)
+        return once, second, second.translate()
 
     def test_gives_a_true_reduction_with_as_many_symbols(self):
         for shape, seed in CASES:

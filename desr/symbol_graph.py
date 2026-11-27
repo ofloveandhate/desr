@@ -112,9 +112,9 @@ def _reduced_kinds(translator, system):
             for column, role in enumerate(roles)]
 
 
-def symbol_graph(translator, system, direction=FORWARD):
+def symbol_graph(translator, direction=FORWARD):
     '''
-    The exponent graph of `translator` acting on `system`.
+    The exponent graph of `translator` acting on the system it was built for.
 
     Args:
         translator (desr.ode_translation.ODETranslator): The reduction to read.  Its
@@ -122,9 +122,6 @@ def symbol_graph(translator, system, direction=FORWARD):
             :meth:`~desr.ode_translation.ODETranslator.multiplier_add_columns` changes the
             graph -- which is the point, since the graph is what a column operation is for
             looking at.
-        system (desr.ode_system.ODESystem): The system being reduced.  Required: the
-            reduced symbols' names depend on which scheme runs, and their kinds and values
-            on the system itself.
         direction (str): ``'forward'`` for the multiplier, original to reduced, or
             ``'reverse'`` for its inverse.
 
@@ -223,8 +220,8 @@ def symbol_graph(translator, system, direction=FORWARD):
     >>> equations = ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c']
     >>> system = ODESystem.from_equations(equations)
-    >>> translator = ODETranslator.from_ode_system(system)
-    >>> graph = symbol_graph(translator, system)
+    >>> translator = ODETranslator(system)
+    >>> graph = symbol_graph(translator)
     >>> graph.number_of_nodes(), graph.number_of_edges()
     (14, 16)
 
@@ -248,7 +245,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     The reverse graph has the same vertices and different edges, and names a different set
     of symbols -- here both auxiliaries, which the parameter scheme sets to 1:
 
-    >>> back = symbol_graph(translator, system, direction='reverse')
+    >>> back = symbol_graph(translator, direction='reverse')
     >>> back.number_of_nodes()
     14
     >>> sorted(str(symbol) for (layer, symbol), data in back.nodes(data=True)
@@ -276,6 +273,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     names = list(translator.names_per_column())
     monomials = list(translator.forward_monomials())
 
+    system = translator.system
     original_kinds = _original_kinds(system)
     reduced_kinds = _reduced_kinds(translator, system)
 
@@ -297,7 +295,7 @@ def symbol_graph(translator, system, direction=FORWARD):
     reduced_initial, refused = {}, None
     if original_initial:
         try:
-            reduced_initial = translator.translate(system).initial_conditions
+            reduced_initial = translator.translate().initial_conditions
         except (ValueError, NotImplementedError) as error:
             refused = str(error)
 
@@ -705,8 +703,8 @@ def draw_symbol_graph(graph, ax=None, label_edges=True, label_expressions=True,
     >>> from desr.symbol_graph import symbol_graph, draw_symbol_graph
     >>> system = ODESystem.from_equations(['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
     ...                                    'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-    >>> translator = ODETranslator.from_ode_system(system)
-    >>> axes = draw_symbol_graph(symbol_graph(translator, system))
+    >>> translator = ODETranslator(system)
+    >>> axes = draw_symbol_graph(symbol_graph(translator))
     >>> axes.get_xlim() is not None
     True
     '''

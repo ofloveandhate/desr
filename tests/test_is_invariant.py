@@ -53,7 +53,7 @@ class TestIsInvariantExpr(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_it_agrees_with_the_definition(self):
         answers = set()
@@ -70,7 +70,7 @@ class TestIsInvariantExpr(TestCase):
     def test_the_invariants_the_reduction_finds_are_invariant(self):
         for equations in (self.MICHAELIS_MENTEN, self.PREDATOR_PREY):
             system = ODESystem.from_equations(equations)
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for monomial in translator.invariant_monomials():
                 with self.subTest(monomial=str(monomial)):
                     self.assertTrue(translator.is_invariant_expr(monomial))
@@ -79,7 +79,7 @@ class TestIsInvariantExpr(TestCase):
         # The auxiliaries are the directions the scaling moves; that is what they are.
         for equations in (self.MICHAELIS_MENTEN, self.PREDATOR_PREY):
             system = ODESystem.from_equations(equations)
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for monomial in translator.auxiliary_monomials():
                 with self.subTest(monomial=str(monomial)):
                     self.assertFalse(translator.is_invariant_expr(monomial))
@@ -95,7 +95,7 @@ class TestIsInvariantExpr(TestCase):
     def test_a_symbol_the_scaling_leaves_alone_is_invariant(self):
         # `q` enters only as `q - 1`, so no scaling can move it: its column is zero.
         system = ODESystem.from_equations(['dp/dt = p*(q - 1)'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         column = list(system.symbols).index(sympy.Symbol('q'))
         self.assertTrue(translator.scaling_matrix[:, column].is_zero_matrix)
         self.assertTrue(translator.is_invariant_expr('q'))
@@ -110,21 +110,3 @@ class TestIsInvariantExpr(TestCase):
             self.translator.is_invariant_expr('s/q')
         self.assertIn('q', str(caught.exception))
         self.assertIn('does not act on', str(caught.exception))
-
-    def test_a_translator_built_from_a_bare_matrix(self):
-        bare = ODETranslator(self.translator.scaling_matrix)
-        with self.assertRaises(ValueError) as caught:
-            bare.is_invariant_expr('s')
-        self.assertIn('variable_order', str(caught.exception))
-
-        # Given the order, it answers as the system-built one does.
-        order = self.system.symbols
-        for text in ('s', 'k_2/k_m1', '(c + s)/e_0'):
-            with self.subTest(expression=text):
-                self.assertEqual(self.translator.is_invariant_expr(text),
-                                 bare.is_invariant_expr(text, variable_order=order))
-
-    def test_an_order_of_the_wrong_length_is_refused(self):
-        with self.assertRaises(ValueError) as caught:
-            self.translator.is_invariant_expr('s', variable_order=self.system.symbols[:3])
-        self.assertIn('columns', str(caught.exception))

@@ -91,7 +91,7 @@ Reduced parameters are named :math:`\kappa_i`.  Here :math:`c` is a dependent va
 and its initial value is :math:`c_0`, which a parameter named :math:`c_0` would be hard to
 read beside.
 
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 't', 'dependents': ['s','c']})
+    >>> translator = ODETranslator(system, naming_scheme={'parameters': 'kappa', 'independent': 't', 'dependents': ['s','c']})
 
 Optionally, observe some properties.  First, the scaling matrix :math:`A`:
 
@@ -117,7 +117,7 @@ set of symbols that must not be 0)
 
 Just for curiosity, here's what we get if we translate the system at this point:
 
-    >>> translator.translate(system)
+    >>> translator.translate()
     dt/dt = 1
     dc/dt = -c*kappa1 - c*kappa2 - c*s + kappa0*s
     ds/dt = c*kappa2 + c*s - kappa0*s
@@ -144,7 +144,7 @@ Returning back to the original system with initial conditions,
     K_m == (k_2 + k_m1)/k_1
     parameters: s_0, e_0, k_1, k_2, k_m1, K_m, c_0
     parameter values: c_0 = 0
-    >>> translator = ODETranslator.from_ode_system(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['u','v']})
+    >>> translator = ODETranslator(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau', 'dependents': ['u','v']})
 
 Let's do some column operations on the Hermite multiplier to manipulate the invariants.
 
@@ -173,7 +173,7 @@ We have substitutions to make.  Note that many get normalised to :math:`1`.
 
 Once we're done manipulating the multiplier, we finally translate.
 
-    >>> reduced_system = translator.translate(system)
+    >>> reduced_system = translator.translate()
     >>> reduced_system
     dtau/dtau = 1
     du/dtau = kappa2*v + u*v - u
@@ -251,8 +251,7 @@ hold.  Drawing needs :mod:`matplotlib`, which `desr` does not install --
     system.reorder_variables(
         ['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
-    translator = ODETranslator.from_ode_system(
-        system,
+    translator = ODETranslator(system,
         naming_scheme={'parameters': 'kappa', 'independent': 'tau',
                        'dependents': ['u', 'v']})
 

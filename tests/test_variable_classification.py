@@ -66,8 +66,8 @@ class TestParametersAndDependents(TestCase):
 
     def test_a_dependent_variable_with_derivative_one_survives_reduction(self):
         system = ODESystem.from_equations(['dx/dt = 1'])
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate(system)
+        translator = ODETranslator(system)
+        reduced = translator.translate()
         self.assertTrue(reduced.symbols)
 
     def test_the_retired_vocabulary_is_gone(self):
@@ -115,10 +115,10 @@ class TestDeclaringParameters(TestCase):
         by_symbol = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'], parameters=[w])
         self.assertEqual(by_name.parameters, by_symbol.parameters)
 
-    def test_parameters_through_the_raw_constructor(self):
+    def test_parameters_through_the_internal_builder(self):
         base = with_conserved_w()
-        system = ODESystem(base.symbols, base.derivatives, indep_var=base.indep_var,
-                           parameters=['w'])
+        system = ODESystem._from_variables(base.symbols, base.derivatives,
+                                           indep_var=base.indep_var, parameters=['w'])
         self.assertIn(w, system.parameters)
 
     def test_parameters_through_from_tex(self):
@@ -176,7 +176,10 @@ class TestClassificationIsCarriedAround(TestCase):
 
     def test_a_parsed_system_and_a_hand_built_one_agree(self):
         parsed = ODESystem.from_equations(['dz/dt = a*z'])
-        built = ODESystem([a, t, z], [None, sympy.sympify(1), a * z], indep_var=t)
+        # Built the internal way, in an order given by hand, so the comparison does not
+        # run the parser's own path twice.
+        built = ODESystem._from_variables([a, t, z], [None, sympy.sympify(1), a * z],
+                                          indep_var=t)
         self.assertEqual(parsed.symbols, built.symbols)
         self.assertEqual(parsed.derivatives, built.derivatives)
         self.assertEqual(parsed.parameters, built.parameters)
@@ -225,13 +228,13 @@ class TestConservedVariablesAndReduction(TestCase):
         # eligible for a scheme it does not satisfy.
         system = with_conserved_w()
         system.reorder_variables(['t', 'z', 'a', 'w'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertFalse(translator._is_translate_parameter_compatible(system))
 
     def test_a_conserved_variable_keeps_an_equation_in_the_reduced_system(self):
         conserved = with_conserved_w()
-        translator = ODETranslator.from_ode_system(conserved)
-        reduced = translator.translate(conserved)
+        translator = ODETranslator(conserved)
+        reduced = translator.translate()
         # Whatever the scheme chose, the reduction must not have silently dropped it.
         self.assertTrue(reduced.symbols)
 

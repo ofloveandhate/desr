@@ -9,8 +9,8 @@ The names a caller needs are here, so that a whole workflow is one import::
     from desr import ODESystem, ODETranslator
 
     system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/k)'])
-    translator = ODETranslator.from_ode_system(system)
-    reduced = translator.translate(system)
+    translator = ODETranslator(system)
+    reduced = translator.translate()
 
 The submodules remain available for the rest -- :mod:`desr.matrix_normal_forms` for the
 integer matrix algorithms, :mod:`desr.sympy_helper` for the parsing convention,

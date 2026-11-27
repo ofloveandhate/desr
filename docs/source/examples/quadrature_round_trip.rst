@@ -69,7 +69,7 @@ Build the system in Python with desr.  I'll use the `from_equations` form, this 
 
 And nondimensionalise.
 
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.invariant_monomials()
     Matrix([[t*z1**3, z1**2*z2/t]])
     >>> translator.auxiliary_monomials()
@@ -84,7 +84,7 @@ one moves between such choices.
 Reducing the usual way keeps the auxiliary :math:`x_0` as a variable of the reduced system,
 and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
 
-    >>> translator.translate_general(system)
+    >>> translator.translate_general()
     dt/dt = 1
     dx0/dt = x0*(2*y0*y1/3 - 1/3)/t
     dy0/dt = y0*(y0*y1 - 1)/t
@@ -93,7 +93,7 @@ and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:
 Notably for this page's teaching mission, :math:`x_0` appears nowhere but in its own equation -- it's an auxiliary.
 Asking for the invariants alone drops it, leaving one fewer equation to integrate:
 
-    >>> reduced_system = translator.translate_general(system, include_aux_vars=False)
+    >>> reduced_system = translator.translate_general(include_aux_vars=False)
     >>> reduced_system
     dt/dt = 1
     dy0/dt = y0*(y0*y1 - 1)/t
@@ -157,7 +157,7 @@ direct confirmation that the two reductions are the same.
 
     >>> t, z1, z2 = system.symbols
     >>> y0, y1 = numeric_translation.invariant_names
-    >>> with_aux = translator.translate_general(system)
+    >>> with_aux = translator.translate_general()
     >>> x0 = with_aux.symbols[1]
     >>> c1, c2, c3 = sympy.symbols('c1 c2 c3')
     >>> L = sympy.log(c1 - t) - sympy.log(t) + c2

@@ -70,16 +70,17 @@ class TestODESystemScaling(TestCase):
                                                    [1, 0, 1],
                                                    [0, 0, 1]])
 
-        translator = ODETranslator(max_scal_paper, hermite_multiplier=hermite_multiplier_example)
+        translator = ODETranslator(system, scaling_matrix=max_scal_paper,
+                                   hermite_multiplier=hermite_multiplier_example)
 
-        translated = translator.translate_dep_var(system)
+        translated = translator.translate_dep_var()
         answer = ODESystem.from_equations('dx0/dt = x0*(y0 + 1)\ndy0/dt = y0*(1 + 1/t)')
         self.assertEqual(translated, answer)
-        self.assertEqual(translator.translate_dep_var(system), translator.translate(system))
+        self.assertEqual(translator.translate_dep_var(), translator.translate())
 
         ## Check our answer using the general translation.  The paper's answer, so
         ## both of the further steps are turned off: they are departures from it.
-        translated = translator.translate_general(system, normalise_parameters=False,
+        translated = translator.translate_general(normalise_parameters=False,
                                                   rescale_clock=False)
         answer = ODESystem.from_equations('dx0/dt = x0*(y0*y1 + y0)/t\ndy0/dt = y0/t\ndy1/dt = y1*(y0 + 1)/t')
         self.assertEqual(translated, answer)
@@ -89,7 +90,7 @@ class TestODESystemScaling(TestCase):
         ## The clock keeps the name t, because y0's monomial is t itself and identifying
         ## the two changes what nothing denotes.  The name follows the denotation, not the
         ## fact of an identification: tau is for a clock that has become a rescaled time.
-        default = translator.translate_general(system)
+        default = translator.translate_general()
         self.assertEqual(('t', 'x0', 'y1'), tuple(map(str, default.symbols)))
         self.assertEqual(system.independent_variable,
                          default.named_symbols[default.independent_variable])
@@ -101,8 +102,8 @@ class TestODESystemScaling(TestCase):
         self.assertTupleEqual(orig_soln, (reduced_soln[0], reduced_soln[1] / reduced_soln[0]))
 
         ## Check our answer hasn't changed, using our own Hermite multiplier
-        translator = ODETranslator.from_ode_system(system)
-        translated = translator.translate_dep_var(system)
+        translator = ODETranslator(system)
+        translated = translator.translate_dep_var()
         answer = ODESystem.from_equations('dx0/dt = x0*(-y0 - 1)\ndy0/dt = y0*(1 + 1/t)')
         self.assertEqual(translated, answer)
 
@@ -127,9 +128,10 @@ class TestODESystemScaling(TestCase):
                                                [2, 3, 2],
                                                [0, 0, 1]])
 
-        translator = ODETranslator(max_scal_ans, hermite_multiplier=hermite_multiplier_ans)
+        translator = ODETranslator(system, scaling_matrix=max_scal_ans,
+                                   hermite_multiplier=hermite_multiplier_ans)
 
-        translated = translator.translate(system)
+        translated = translator.translate()
         answer = ODESystem.from_equations('dx0/dt = x0*(2*y0*y1/3 - 1/3)/t\ndy0/dt = y0*(y0*y1 - 1)/t\ndy1/dt = y1*(y1 + 1)/t')
         self.assertEqual(translated, answer)
 
@@ -154,9 +156,9 @@ class TestODESystemScaling(TestCase):
         ## of Prop 2.3(ii) is unique, and desr reports it in the paper's convention, so
         ## there is nothing left for the default to disagree with.  This used to be a
         ## regression guard against a different answer of desr's own.
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.herm_mult, hermite_multiplier_ans)
-        self.assertEqual(translator.translate(system), answer)
+        self.assertEqual(translator.translate(), answer)
 
 
     def test_verhulst_log_growth(self):
@@ -181,14 +183,13 @@ class TestODESystemScaling(TestCase):
                                        [0, 1, 0, -1],
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]])
-        translator = ODETranslator(max_scal,
-                                    symbols_domain=system.symbols,
-                                    hermite_multiplier=herm_mult_paper)
+        translator = ODETranslator(system, scaling_matrix=max_scal,
+                                   hermite_multiplier=herm_mult_paper)
         # The paper's answer carries auxiliary variables, so it is the general reduction and
         # is asked for by name.  `translate` would now choose the parameter scheme: the
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
-        translated = translator.translate_general(system, normalise_parameters=False,
+        translated = translator.translate_general(normalise_parameters=False,
                                                   rescale_clock=False)
         self.assertEqual(('t', 'x0', 'x1', 'y0', 'y1'),
                          tuple(map(str, translated.symbols)))
@@ -217,11 +218,11 @@ class TestODESystemScaling(TestCase):
         ## This used to reorder to 'tnrk' first -- the independent variable at the front --
         ## which was the old convention's layout, and then compared against a cached value
         ## of desr's own rather than against the paper.  Neither is necessary now.
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.herm_mult, herm_mult_paper)
         # Same multiplier, so the same reduced system as the one checked above -- asked
         # for the same way, since `translated` above is the paper's reduction.
-        self.assertEqual(translator.translate_general(system, normalise_parameters=False,
+        self.assertEqual(translator.translate_general(normalise_parameters=False,
                                                       rescale_clock=False),
                          translated)
         general_soln = translator.reverse_translate_general(reduced_solutions,
@@ -239,7 +240,7 @@ class TestODESystemScaling(TestCase):
         system = ODESystem.from_equations(equations)
 
         # Take the maximal scaling matrix
-        max_scal = ODETranslator.from_ode_system(system)
+        max_scal = ODETranslator(system)
 
         # Fetched by name, not unpacked positionally: which column a variable occupies is a
         # property of the convention and not something a test should encode.
@@ -262,8 +263,8 @@ class TestODESystemScaling(TestCase):
                               (h*p/d, h*r/k, h*s/k, k*t/h, n/K, h*p/K))
 
 
-        reduced_system = max_scal.translate(system=system)
-        reduced_system2 = max_scal2.translate(system=system)
+        reduced_system = max_scal.translate()
+        reduced_system2 = max_scal2.translate()
 
         self.assertNotEqual(reduced_system, reduced_system2)
 
@@ -297,7 +298,7 @@ class TestInitialConditions(TestCase):
                                        [ 1,  1,  1,  1,  1,  1,  1],
                                        [-1,  0, -1,  0,  0,  1,  1],
                                        [ 1,  0,  1,  1,  0,  0, -1]]))
-        max_scal1 = ODETranslator.from_ode_system(original_system)
+        max_scal1 = ODETranslator(original_system)
         self.assertEqual(max_scal1.scaling_matrix,
                          sympy.Matrix([[ 0, -1, -1, -1,  1,  0,  0],
                                        [ 1, -1,  0,  0,  0,  1,  1]]))
@@ -326,7 +327,7 @@ class TestInitialConditions(TestCase):
                                        [-1,  0, -1,  0,  0,  1,  1,  1],
                                        [ 1,  0,  1,  1,  0,  0, -1,  0]]))
 
-        max_scal1 = ODETranslator.from_ode_system(original_system)
+        max_scal1 = ODETranslator(original_system)
         self.assertEqual(max_scal1.scaling_matrix,
                          sympy.Matrix([[ 0,  0, -1, -1, -1,  1,  0,  0],
                                        [ 1,  1, -1,  0,  0,  0,  1,  1]]))
@@ -334,7 +335,7 @@ class TestInitialConditions(TestCase):
         # The same reduction as before the convention changed, with kappa0 and kappa2
         # exchanged: the reduced constants are numbered in parameter order, and that order
         # is the reverse of the one this test used to give.
-        reduced_system = max_scal1.translate(original_system)
+        reduced_system = max_scal1.translate()
         self.assertSetEqual(set(reduced_system.derivative_dict.items()),
                             set(map(lambda t: (sympy.sympify(t[0]), sympy.sympify(t[1])),
                                     (('nu0', '-kappa0*nu0 - kappa1*nu1 + kappa2*nu1 + nu0*nu1'),
@@ -521,7 +522,7 @@ class TestBlockReordering(TestCase):
 
     def normalised_parameters(self, system):
         ''' The parameters this system's reduction sends to 1. '''
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         substitutions = translator.substitutions()
         return [str(v) for v in system.parameters if substitutions[v] == 1]
 
@@ -841,8 +842,7 @@ class TestCopyCarriesEverything(TestCase):
         '''A reduced system, which carries the provenance an original one does not.'''
         system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        return ODETranslator.from_ode_system(system).translate_general(
-            system, normalise_parameters=False)
+        return ODETranslator(system).translate_general(normalise_parameters=False)
 
     def assert_copy_is_complete(self, system):
         duplicate = system.copy()
@@ -885,7 +885,7 @@ class TestCopyCarriesEverything(TestCase):
         honour even if it saw it.
         '''
         system = ODESystem.from_equations(['dx/dt = c_0*x'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         system.update_parameter_values({'c_0': 5})
         self.assertEqual({}, translator.system.parameter_values)
         self.assertEqual(sympy.Integer(5), system.parameter_values[sympy.Symbol('c_0')])
@@ -904,18 +904,18 @@ class TestParameterValuesSurviveTheSystem(TestCase):
         system.update_parameter_values({'c_0': 2})
         self.assertEqual(system.copy().parameter_values, system.parameter_values)
 
-    def test_the_constructor_takes_them(self):
+    def test_the_internal_builder_takes_them(self):
         system = self.system()
-        rebuilt = ODESystem(system.symbols, system.derivatives,
-                            parameter_values={'c_0': 2})
+        rebuilt = ODESystem._from_variables(system.symbols, system.derivatives,
+                                            parameter_values={'c_0': 2})
         self.assertEqual(rebuilt.parameter_values, {sympy.Symbol('c_0'): sympy.Integer(2)})
 
-    def test_the_constructor_checks_them_against_its_constraints(self):
+    def test_the_internal_builder_checks_them_against_its_constraints(self):
         system = self.system()
         system.add_constraint('c_1 = c_0')
         with self.assertRaises(ConflictingParameterValues):
-            ODESystem(system.symbols, system.derivatives,
-                      constraints=list(system.constraints),
+            ODESystem._from_variables(system.symbols, system.derivatives,
+                                      constraints=list(system.constraints),
                       parameter_values={'c_0': 2, 'c_1': 3})
 
     def test_repr_names_the_values(self):
@@ -1065,28 +1065,28 @@ class TestZeroInitialConditionsThroughAReduction(TestCase):
         # New parameters land at the back of the parameter block, and the back is the keep
         # end, so a zero-valued initial condition is out of harm's way by default.
         system = self.system()
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         must_not_be_zero = translator.forward_symbols_that_must_not_be_zero()
         self.assertNotIn(sympy.Symbol('C_0'), must_not_be_zero)
         self.assertNotIn(sympy.Symbol('P_0'), must_not_be_zero)
 
     def test_the_reduction_goes_through(self):
         system = self.system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         self.assertTrue(reduced.is_reduced)
 
     def test_the_zero_is_visible_in_the_reduced_system(self):
         # Two reduced parameters are zero, each the invariant holding one of C_0, P_0 in
         # its numerator.  Derived, not restated.
         system = self.system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         zero_valued = [parameter for parameter, value in reduced.parameter_values.items()
                        if value == 0]
         self.assertEqual(len(zero_valued), 2)
 
     def test_each_zero_reduced_parameter_is_an_initial_condition(self):
         system = self.system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         zero_valued = {parameter for parameter, value in reduced.parameter_values.items()
                        if value == 0}
         self.assertTrue(zero_valued <= set(reduced.initial_conditions.values()))
@@ -1094,9 +1094,9 @@ class TestZeroInitialConditionsThroughAReduction(TestCase):
     def test_scaling_by_a_zero_is_refused_if_the_order_asks_for_it(self):
         system = self.system()
         system.reorder_parameters(['C_0', 'P_0', 'k_1', 'k_2', 'k_m1', 'S_0', 'E_0'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         with self.assertRaises(ValueError) as caught:
-            translator.translate(system)
+            translator.translate()
         self.assertIn('C_0', str(caught.exception))
 
     def test_naming_a_scale_that_already_exists_adds_no_symbol(self):
@@ -1237,7 +1237,7 @@ class TestTheTwoFacesOfAValue(TestCase):
 
     def test_both_faces_survive_a_reduction(self):
         system = self.system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         # The expression face is whichever invariant C's scale became; the value face is
         # still the zero that was stated.
         valued = reduced.initial_condition_values
@@ -1421,7 +1421,7 @@ class TestStructuralDimensions(TestCase):
         from desr.ode_translation import scale_action
         for label, system in self.systems():
             dimensions = system.dimensions_of()
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for monomial in scale_action(system.symbols, translator.herm_mult_n):
                 with self.subTest(system=label, invariant=str(monomial)):
                     self.assertEqual(
@@ -1433,7 +1433,7 @@ class TestStructuralDimensions(TestCase):
         from desr.ode_translation import scale_action
         for label, system in self.systems():
             dimensions = system.dimensions_of()
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             carried = [self.dimension_of(monomial, dimensions, system)
                        for monomial in scale_action(system.symbols,
                                                     translator.herm_mult_i)]
@@ -1480,7 +1480,7 @@ class TestStructuralDimensions(TestCase):
         # dependent-variable scheme is chosen by.  So t has dimension 1.
         system = ODESystem.from_equations(self.HL64)
         self.assertEqual(1, system.dimensions_of()[sympy.Symbol('t')])
-        self.assertEqual(ODETranslator.from_ode_system(system).scheme(),
+        self.assertEqual(ODETranslator(system).scheme(),
                          ReductionScheme.DEP_VAR)
 
     def test_naming_physical_dimensions_would_change_none_of_this(self):
@@ -1497,7 +1497,7 @@ class TestStructuralDimensions(TestCase):
 
     def test_the_translator_reads_dimensions_in_its_own_scaling(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(system.dimensions_of(), translator.dimensions_of())
 
     def test_an_explicit_scaling_matrix_is_honoured(self):
@@ -1568,7 +1568,7 @@ class TestPhysicalDimensions(TestCase):
         system.set_dimensions({'t': 'time', 'e': 'concentration',
                                'f': 'concentration', 'x': 'concentration'})
         physical = system.physical_dimensions_of()
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         for monomial in scale_action(system.symbols, translator.herm_mult_n):
             with self.subTest(invariant=str(monomial)):
                 powers = monomial.as_powers_dict()
@@ -1662,7 +1662,7 @@ class TestPhysicalDimensions(TestCase):
                 system = self.enzyme()
                 system.set_dimensions(declarations)
                 physical = system.physical_dimensions_of()
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 for monomial in scale_action(system.symbols, translator.herm_mult_n):
                     powers = monomial.as_powers_dict()
                     self.assertEqual(1, sympy.simplify(sympy.prod(
@@ -1703,8 +1703,8 @@ class TestPhysicalDimensions(TestCase):
                          named.maximal_scaling_matrix())
         self.assertEqual(plain.dimensions_of(), named.dimensions_of())
 
-        before = ODETranslator.from_ode_system(plain)
-        after = ODETranslator.from_ode_system(named)
+        before = ODETranslator(plain)
+        after = ODETranslator(named)
         self.assertEqual(before.herm_mult, after.herm_mult)
         self.assertEqual(before.inv_herm_mult, after.inv_herm_mult)
         self.assertEqual(before.r, after.r)
@@ -1726,7 +1726,7 @@ class TestADimensionallyConsistentChangeOfVariables(TestCase):
     SUBSTITUTED = r'\frac{dx}{dt} &= (c) x + b'
 
     def count(self, system):
-        return ODETranslator.from_ode_system(system).num_scaling_symmetries
+        return ODETranslator(system).num_scaling_symmetries
 
     def test_the_system_as_written_has_one(self):
         self.assertEqual(1, self.count(ODESystem.from_tex(self.AS_WRITTEN)))
@@ -1759,8 +1759,8 @@ class TestADimensionallyConsistentChangeOfVariables(TestCase):
         # symbol the model still depends on.
         honest = ODESystem.from_tex(self.AS_WRITTEN)
         naive = ODESystem.from_tex(self.SUBSTITUTED)
-        honest_reduced = ODETranslator.from_ode_system(honest).translate(honest)
-        naive_reduced = ODETranslator.from_ode_system(naive).translate(naive)
+        honest_reduced = ODETranslator(honest).translate()
+        naive_reduced = ODETranslator(naive).translate()
         self.assertEqual(3, len(honest_reduced.symbols))
         self.assertEqual(2, len(naive_reduced.symbols))
 
@@ -1873,7 +1873,7 @@ class TestDimensionOfAMonomial(TestCase):
 
     def test_it_agrees_with_multiplying_the_symbols_dimensions(self):
         for label, system in self.systems():
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for monomial in list(translator.forward_monomials()) + list(system.symbols):
                 with self.subTest(system=label, monomial=str(monomial)):
                     self.assertEqual(self.by_hand(monomial, system),
@@ -1881,7 +1881,7 @@ class TestDimensionOfAMonomial(TestCase):
 
     def test_every_invariant_is_dimensionless(self):
         for label, system in self.systems():
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             for invariant in translator.invariant_monomials():
                 with self.subTest(system=label, invariant=str(invariant)):
                     self.assertEqual(1, system.dimension_of(invariant))
@@ -2098,24 +2098,24 @@ class TestConstructionEqualityAndSmallMethods(TestCase):
     def test_constraints_must_be_a_list_of_equalities(self):
         t, x, k = sympy.symbols('t x k')
         with self.assertRaises(TypeError) as caught:
-            ODESystem([t, x, k], [1, -k * x, None], indep_var=t,
-                      constraints=sympy.Eq(k, 1))
+            ODESystem._from_variables([t, x, k], [1, -k * x, None], indep_var=t,
+                                      constraints=sympy.Eq(k, 1))
         self.assertIn('must be a list', str(caught.exception))
         with self.assertRaises(TypeError) as caught:
-            ODESystem([t, x, k], [1, -k * x, None], indep_var=t, constraints=[k - 1])
+            ODESystem._from_variables([t, x, k], [1, -k * x, None], indep_var=t,
+                                      constraints=[k - 1])
         self.assertIn('is not a sympy equality', str(caught.exception))
 
     def test_a_symbol_in_an_equation_that_is_not_among_the_variables(self):
         t, x, k = sympy.symbols('t x k')
         with self.assertRaises(RuntimeError) as caught:
-            ODESystem([t, x], [1, -k * x], indep_var=t)
+            ODESystem._from_variables([t, x], [1, -k * x], indep_var=t)
         self.assertIn('not in the list of variables', str(caught.exception))
 
     def test_a_parameter_against_a_conserved_variable_from_the_other_side(self):
         x, w, t = sympy.symbols('x w t')
-        conserved = ODESystem([t, w, x], [sympy.Integer(1), sympy.Integer(0), w * x],
-                              indep_var=t)
-        parameter = ODESystem([w, t, x], [None, sympy.Integer(1), w * x], indep_var=t)
+        conserved = ODESystem({w: sympy.Integer(0), x: w * x})
+        parameter = ODESystem({x: w * x})
         self.assertNotEqual(parameter, conserved)
 
     def test_the_same_equations_in_another_independent_variable(self):
@@ -2123,8 +2123,8 @@ class TestConstructionEqualityAndSmallMethods(TestCase):
         # same three right-hand sides, and not the same system.
         t, s, x = sympy.symbols('t s x')
         one = sympy.Integer(1)
-        in_t = ODESystem([t, s, x], [one, one, x], indep_var=t)
-        in_s = ODESystem([t, s, x], [one, one, x], indep_var=s)
+        in_t = ODESystem({s: one, x: x})
+        in_s = ODESystem({t: one, x: x}, indep_var=s)
         self.assertNotEqual(in_t, in_s)
 
     def test_collecting_terms_does_not_change_the_equations(self):
@@ -2226,7 +2226,7 @@ class TestTheShortWays(TestCase):
         for label, equations in self.SYSTEMS.items():
             with self.subTest(system=label):
                 system = ODESystem.from_equations(equations)
-                short, long = system.translator(), ODETranslator.from_ode_system(system)
+                short, long = system.translator(), ODETranslator(system)
                 self.assertEqual(long.scaling_matrix, short.scaling_matrix)
                 self.assertEqual(long.herm_mult, short.herm_mult)
                 self.assertEqual(long.scheme(), short.scheme())
@@ -2240,7 +2240,7 @@ class TestTheShortWays(TestCase):
         for label, equations in self.SYSTEMS.items():
             with self.subTest(system=label):
                 system = ODESystem.from_equations(equations)
-                long = ODETranslator.from_ode_system(system).translate(system)
+                long = ODETranslator(system).translate()
                 short = system.reduce_scaling_symmetries()
                 self.assertEqual(long, short)
                 self.assertEqual(dict(long.named_symbols), dict(short.named_symbols))
@@ -2248,11 +2248,11 @@ class TestTheShortWays(TestCase):
 
     def test_its_options_reach_the_reduction(self):
         system = ODESystem.from_equations(self.SYSTEMS['Hubert & Labahn 6.6'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         for options in ({'normalise_parameters': False}, {'include_aux_vars': False},
                         {'rescale_clock': False}):
             with self.subTest(options=options):
-                self.assertEqual(translator.translate(system, **options),
+                self.assertEqual(translator.translate(**options),
                                  system.reduce_scaling_symmetries(**options))
 
     def test_the_system_is_left_as_it_was(self):
@@ -2297,7 +2297,7 @@ class TestTheTwoCompartmentModel(TestCase):
 
     def test_as_written_it_has_two_symmetries_and_one_unit_of_material(self):
         system = self.as_written()
-        self.assertEqual(2, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+        self.assertEqual(2, ODETranslator(system).num_scaling_symmetries)
         dimensions = system.dimensions_of()
         z_1, z_2 = sympy.symbols('z_1 z_2')
         self.assertEqual(dimensions[z_1], dimensions[z_2])
@@ -2315,7 +2315,7 @@ class TestTheTwoCompartmentModel(TestCase):
 
     def test_lumped_it_has_three_and_two_units(self):
         system = self.lumped()
-        self.assertEqual(3, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+        self.assertEqual(3, ODETranslator(system).num_scaling_symmetries)
         dimensions = system.dimensions_of()
         z_1, z_2 = sympy.symbols('z_1 z_2')
         self.assertNotEqual(dimensions[z_1], dimensions[z_2])
@@ -2360,8 +2360,83 @@ class TestTheTwoCompartmentModel(TestCase):
         z_1, z_2 = sympy.symbols('z_1 z_2')
         for system in (related, same_unit):
             self.assertEqual(
-                2, ODETranslator.from_ode_system(system).num_scaling_symmetries)
+                2, ODETranslator(system).num_scaling_symmetries)
             dimensions = system.dimensions_of()
             self.assertEqual(dimensions[z_1], dimensions[z_2])
         self.assertEqual(3, len(related.reduce_scaling_symmetries().parameters))
         self.assertEqual(2, len(same_unit.reduce_scaling_symmetries().parameters))
+
+
+class TestTheConstructor(TestCase):
+    '''
+    ODESystem takes only forms that say which derivative belongs to which symbol: a dict,
+    or the equations as text, named as equations or as LaTeX.
+    '''
+
+    EQUATIONS = ['dx/dt = -k*x + y', 'dy/dt = x']
+    TEX = r'\frac{dx}{dt} &= -k x + y \\ \frac{dy}{dt} &= x'
+
+    def test_the_three_forms_build_the_system_the_from_methods_build(self):
+        x, y, k = sympy.symbols('x y k')
+        expected = ODESystem.from_equations(self.EQUATIONS)
+        self.assertEqual(expected, ODESystem(equations=self.EQUATIONS))
+        self.assertEqual(expected, ODESystem(equations='\n'.join(self.EQUATIONS)))
+        self.assertEqual(ODESystem.from_tex(self.TEX), ODESystem(tex=self.TEX))
+        self.assertEqual(ODESystem.from_dict({x: -k * x + y, y: x}),
+                         ODESystem({x: -k * x + y, y: x}))
+        # And they are one system written three ways.
+        self.assertEqual(expected.derivative_dict, ODESystem(tex=self.TEX).derivative_dict)
+        self.assertEqual(expected.derivative_dict,
+                         ODESystem({x: -k * x + y, y: x}).derivative_dict)
+
+    def test_the_pairing_is_in_the_syntax(self):
+        # The two systems parallel lists could not tell apart by looking.
+        x, y = sympy.symbols('x y')
+        growth = ODESystem({x: x, y: y})
+        swapped = ODESystem({x: y, y: x})
+        self.assertNotEqual(growth, swapped)
+        self.assertEqual(x, growth.derivative_dict[x])
+        self.assertEqual(y, swapped.derivative_dict[x])
+
+    def test_options_reach_the_parser(self):
+        system = ODESystem(equations=['dx/dt = -k*x'], initial_conditions={'x': 'x_0'},
+                           parameters=['k'])
+        self.assertEqual({sympy.Symbol('x'): sympy.Symbol('x_0')}, system.initial_conditions)
+        # primes reaches from_tex: read as a derivative, x' gives x an equation.
+        primed = ODESystem(tex=r"x' &= -k x", primes='derivative')
+        self.assertEqual(-sympy.Symbol('k') * sympy.Symbol('x'),
+                         primed.derivative_dict[sympy.Symbol('x')])
+
+    def test_parallel_lists_are_refused(self):
+        t, x, k = sympy.symbols('t x k')
+        for arguments in (([t, x, k], [1, -k * x, None]), ([t, x, k],)):
+            with self.subTest(arguments=len(arguments)):
+                with self.assertRaises(TypeError) as caught:
+                    ODESystem(*arguments)
+                self.assertIn('parallel lists', str(caught.exception))
+
+    def test_the_dict_may_hold_strings(self):
+        x, k, s = sympy.symbols('x k s')
+        self.assertEqual(ODESystem({x: -k * x}), ODESystem({'x': '-k*x'}))
+        self.assertEqual(ODESystem({x: -k * x}, indep_var=s),
+                         ODESystem({'x': '-k*x'}, indep_var='s'))
+
+    def test_a_list_of_equations_without_its_keyword_is_refused(self):
+        with self.assertRaises(TypeError) as caught:
+            ODESystem(self.EQUATIONS)
+        self.assertIn('equations=', str(caught.exception))
+
+    def test_a_string_without_a_keyword_is_refused(self):
+        for text in ('dx/dt = -k*x', self.TEX):
+            with self.assertRaises(TypeError) as caught:
+                ODESystem(text)
+            self.assertIn('equations=', str(caught.exception))
+            self.assertIn('tex=', str(caught.exception))
+
+    def test_exactly_one_form(self):
+        with self.assertRaises(TypeError) as caught:
+            ODESystem()
+        self.assertIn('none was given', str(caught.exception))
+        with self.assertRaises(TypeError) as caught:
+            ODESystem(equations=self.EQUATIONS, tex=self.TEX)
+        self.assertIn('equations= and tex= were given', str(caught.exception))

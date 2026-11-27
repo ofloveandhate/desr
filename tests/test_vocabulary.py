@@ -215,7 +215,7 @@ class TestMonomialsVersusNames(TestCase):
     def setUp(self):
         self.system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_monomials_are_expressions_and_names_are_symbols(self):
         monomials = list(self.translator.invariant_monomials())
@@ -248,8 +248,7 @@ class TestMonomialsVersusNames(TestCase):
         # this system's auxiliaries are monomials in the parameters alone, and a
         # reduction that normalises them keeps none.
         monomials = list(self.translator.auxiliary_monomials())
-        names = self.translator.translate_general(
-            self.system, normalise_parameters=False).auxiliary_names
+        names = self.translator.translate_general(normalise_parameters=False).auxiliary_names
         self.assertEqual(len(monomials), len(names))
         self.assertEqual(('x0', 'x1', 'x2'), tuple(map(str, names)))
 
@@ -274,10 +273,10 @@ class TestMonomialsVersusNames(TestCase):
         for scheme in ('parameter', 'general'):
             with self.subTest(scheme=scheme):
                 if scheme == 'parameter':
-                    reduced = self.translator.translate_parameter(self.system)
+                    reduced = self.translator.translate_parameter()
                     expected = self.translator.invariant_names(scheme)
                 else:
-                    reduced = self.translator.translate_general(self.system)
+                    reduced = self.translator.translate_general()
                     expected = ((reduced.independent_variable,)
                                 + self.translator.auxiliary_names(scheme)
                                 + self.translator.invariant_names(scheme))
@@ -293,7 +292,7 @@ class TestStoredProvenance(TestCase):
     def setUp(self):
         self.system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_an_original_system_has_no_provenance(self):
         self.assertIsNone(self.system.scheme)
@@ -301,45 +300,43 @@ class TestStoredProvenance(TestCase):
         self.assertEqual((), self.system.auxiliary_names)
 
     def test_the_parameter_scheme_records_itself(self):
-        reduced = self.translator.translate_parameter(self.system)
+        reduced = self.translator.translate_parameter()
         self.assertEqual(ReductionScheme.PARAMETER, reduced.scheme)
         self.assertEqual(self.translator.r, reduced.num_scaling_symmetries)
 
     def test_the_parameter_scheme_has_no_auxiliaries(self):
         ''' It normalises them to 1 and discards them, so there are none to record. '''
-        reduced = self.translator.translate_parameter(self.system)
+        reduced = self.translator.translate_parameter()
         self.assertEqual((), reduced.auxiliary_names)
 
     def test_the_general_scheme_records_itself_and_its_auxiliaries(self):
-        reduced = self.translator.translate_general(self.system,
-                                                    normalise_parameters=False)
+        reduced = self.translator.translate_general(normalise_parameters=False)
         self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
         self.assertEqual(self.translator.r, reduced.num_scaling_symmetries)
         self.assertEqual(('x0', 'x1', 'x2'),
                          tuple(map(str, reduced.auxiliary_names)))
 
     def test_dropping_the_auxiliaries_records_none(self):
-        reduced = self.translator.translate_general(self.system, include_aux_vars=False)
+        reduced = self.translator.translate_general(include_aux_vars=False)
         self.assertEqual((), reduced.auxiliary_names)
         self.assertEqual(ReductionScheme.GENERAL, reduced.scheme)
 
     def test_the_dep_var_scheme_records_itself(self):
         system = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
                                            'dz2/dt = z2*(1/t - z1*z2)'])
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate_dep_var(system)
+        translator = ODETranslator(system)
+        reduced = translator.translate_dep_var()
         self.assertEqual(ReductionScheme.DEP_VAR, reduced.scheme)
         self.assertEqual(translator.r, reduced.num_scaling_symmetries)
 
     def test_is_auxiliary_takes_a_string_or_a_symbol(self):
-        reduced = self.translator.translate_general(self.system,
-                                                    normalise_parameters=False)
+        reduced = self.translator.translate_general(normalise_parameters=False)
         self.assertTrue(reduced.is_auxiliary('x0'))
         self.assertTrue(reduced.is_auxiliary(sympy.Symbol('x0')))
         self.assertFalse(reduced.is_auxiliary('y3'))
 
     def test_the_provenance_survives_a_copy(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         duplicate = reduced.copy()
         self.assertEqual(reduced.scheme, duplicate.scheme)
         self.assertEqual(reduced.num_scaling_symmetries,
@@ -347,7 +344,7 @@ class TestStoredProvenance(TestCase):
         self.assertEqual(reduced.auxiliary_names, duplicate.auxiliary_names)
 
     def test_the_provenance_survives_a_substitution(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         substituted = reduced.subs({'y3': 'Y'})
         self.assertEqual(reduced.scheme, substituted.scheme)
         self.assertEqual(reduced.num_scaling_symmetries,
@@ -360,8 +357,7 @@ class TestStoredProvenance(TestCase):
         in the original parameters has no equation, so it would be pruned -- losing part of
         the record of how the system was reduced, which it cannot reconstruct.
         '''
-        reduced = self.translator.translate_general(self.system,
-                                                    normalise_parameters=False)
+        reduced = self.translator.translate_general(normalise_parameters=False)
         substituted = reduced.subs({'y3': 'Y'})
         self.assertEqual(('x0', 'x1', 'x2'),
                          tuple(map(str, substituted.auxiliary_names)))
@@ -375,8 +371,7 @@ class TestStoredProvenance(TestCase):
         no equation does nothing.  It used to *delete* it; now it is left as it was, which
         is at least not lossy.
         '''
-        reduced = self.translator.translate_general(self.system,
-                                                    normalise_parameters=False)
+        reduced = self.translator.translate_general(normalise_parameters=False)
         substituted = reduced.subs({'x0': 'w0'})
         self.assertIn(sympy.Symbol('x0'), substituted.symbols)
         self.assertNotIn(sympy.Symbol('w0'), substituted.symbols)
@@ -391,7 +386,7 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
     def test_an_auxiliary_can_be_a_parameter(self):
         system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         for auxiliary in reduced.auxiliary_names:
             with self.subTest(auxiliary=str(auxiliary)):
                 self.assertIn(auxiliary, reduced.parameters)
@@ -401,7 +396,7 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
         system = ODESystem.from_equations(
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        reduced = ODETranslator.from_ode_system(system).translate_general(system)
+        reduced = ODETranslator(system).translate_general()
         auxiliary, = reduced.auxiliary_names
         self.assertIn(auxiliary, reduced.dependents)
         self.assertNotEqual(0, reduced.derivative_dict[auxiliary])
@@ -413,13 +408,12 @@ class TestAuxiliaryNessIsOrthogonal(TestCase):
                            'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']):
             with self.subTest(equations=equations[0]):
                 system = ODESystem.from_equations(equations)
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 # Normalisation off: it is what makes both kinds reachable at once.
                 # With it on, a parameter auxiliary is always normalised away, so a
                 # surviving auxiliary is always one that moves -- which is the
                 # subject of its own test rather than a counterexample to this one.
-                reduced = translator.translate_general(system,
-                                                       normalise_parameters=False)
+                reduced = translator.translate_general(normalise_parameters=False)
                 self.assertEqual(translator.r, len(reduced.auxiliary_names))
 
 
@@ -432,10 +426,10 @@ class TestClassificationSurvivesTheReduction(TestCase):
     def setUp(self):
         self.system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_a_parameter_monomial_becomes_a_parameter(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         named = self.translator.named_symbols(scheme='general')
         dynamic = set(self.system.variables)
         for symbol, monomial in named.items():
@@ -448,7 +442,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
                     self.assertIn(symbol, reduced.parameters)
 
     def test_no_reduced_parameter_has_an_equation(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         for parameter in reduced.parameters:
             with self.subTest(parameter=str(parameter)):
                 self.assertNotIn(parameter, reduced.derivative_dict)
@@ -464,19 +458,18 @@ class TestClassificationSurvivesTheReduction(TestCase):
         invariant is identified with `t`.  Fewer symbols, each still classified as
         what it is, which is the claim being made here.
         '''
-        reduced = self.translator.translate_general(self.system,
-                                                    normalise_parameters=False,
+        reduced = self.translator.translate_general(normalise_parameters=False,
                                                     rescale_clock=False)
         self.assertEqual(6, self.system.num_parameters)
         self.assertEqual(6, reduced.num_parameters)
         self.assertEqual(3, reduced.num_dependents)
 
-        normalised = self.translator.translate_general(self.system)
+        normalised = self.translator.translate_general()
         self.assertEqual(3, normalised.num_parameters)
         self.assertEqual(2, normalised.num_dependents)
 
     def test_only_the_genuinely_moving_symbols_need_integrating(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         self.assertEqual((), reduced.conserved_variables)
         # Two, not three: the third was the clock invariant, now identified with `t`.
         self.assertEqual(2, len(reduced.dependents))
@@ -488,8 +481,8 @@ class TestClassificationSurvivesTheReduction(TestCase):
         '''
         system = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
-        translator = ODETranslator.from_ode_system(system)
-        reduced = translator.translate_general(system)
+        translator = ODETranslator(system)
+        reduced = translator.translate_general()
 
         conserved = sympify_expression('E*k_0_1/k_2_3')
         named = translator.named_symbols(scheme='general')
@@ -512,8 +505,7 @@ class TestClassificationSurvivesTheReduction(TestCase):
         '''
         catalyst = ChemicalReactionNetwork.from_diagram(
             'E + S -> E + P \n P -> ').to_ode_system()
-        reduced = ODETranslator.from_ode_system(catalyst).translate_general(
-            catalyst, normalise_parameters=False)
+        reduced = ODETranslator(catalyst).translate_general(normalise_parameters=False)
         self.assertTrue(reduced.parameters)
         self.assertTrue(reduced.conserved_variables)
         self.assertEqual(set(), set(reduced.parameters) & set(reduced.conserved_variables))
@@ -525,10 +517,10 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
     def setUp(self):
         self.system = ODESystem.from_equations(
             ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )', 'dp/dt = s*p*(1 - h*p / n)'])
-        self.translator = ODETranslator.from_ode_system(self.system)
+        self.translator = ODETranslator(self.system)
 
     def test_the_kinds_agree_under_the_parameter_scheme(self):
-        reduced = self.translator.translate_parameter(self.system)
+        reduced = self.translator.translate_parameter()
         kinds = self.translator.symbol_kinds(scheme='parameter')
         self.assertEqual(set(reduced.parameters),
                          {s for s, kind in kinds.items() if kind == 'parameter'})
@@ -538,7 +530,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
                          {s for s, kind in kinds.items() if kind == 'independent'})
 
     def test_the_auxiliaries_agree_under_the_general_scheme(self):
-        reduced = self.translator.translate_general(self.system)
+        reduced = self.translator.translate_general()
         kinds = self.translator.symbol_kinds(scheme='general')
         self.assertEqual(set(reduced.auxiliary_names),
                          {s for s, kind in kinds.items() if kind == 'auxiliary'})
@@ -547,22 +539,20 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
         for scheme, include in (('parameter', True), ('general', True), ('general', False)):
             with self.subTest(scheme=scheme, include_aux_vars=include):
                 if scheme == 'parameter':
-                    reduced = self.translator.translate_parameter(self.system)
+                    reduced = self.translator.translate_parameter()
                 else:
-                    reduced = self.translator.translate_general(
-                        self.system, include_aux_vars=include)
+                    reduced = self.translator.translate_general(include_aux_vars=include)
                 self.assertEqual(
-                    self.translator.expected_variable_count(
-                        self.system, scheme=scheme, include_aux_vars=include),
+                    self.translator.expected_variable_count(scheme=scheme, include_aux_vars=include),
                     len(reduced.symbols))
 
     def test_the_names_match_the_reduced_systems_symbols(self):
         for scheme in ('parameter', 'general'):
             with self.subTest(scheme=scheme):
                 if scheme == 'parameter':
-                    reduced = self.translator.translate_parameter(self.system)
+                    reduced = self.translator.translate_parameter()
                 else:
-                    reduced = self.translator.translate_general(self.system)
+                    reduced = self.translator.translate_general()
                 named = self.translator.named_symbols(scheme=scheme)
                 self.assertEqual(set(reduced.symbols), set(named))
 
@@ -584,8 +574,8 @@ class TestTheDependentVariableSchemesNames(TestCase):
 
     def setUp(self):
         self.system = ODESystem.from_equations(self.EQUATIONS)
-        self.translator = ODETranslator.from_ode_system(self.system)
-        self.reduced = self.translator.translate(self.system)
+        self.translator = ODETranslator(self.system)
+        self.reduced = self.translator.translate()
         self.assertEqual(self.translator.scheme(), ReductionScheme.DEP_VAR)
 
     def test_the_names_match_the_reduced_systems_symbols(self):
@@ -653,7 +643,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # The two empty cells, which are what the scheme is.  Equivalently: every column
         # of V_i sits on parameter rows, which is Hubert & Labahn's block condition.
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
         for monomial in translator.auxiliary_monomials():
             with self.subTest(auxiliary=str(monomial)):
@@ -661,15 +651,15 @@ class TestTheTwoAxesAreIndependent(TestCase):
 
     def test_so_the_reduction_keeps_no_auxiliaries(self):
         system = ODESystem.from_equations(self.MICHAELIS_MENTEN)
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.auxiliary_names(), ())
-        self.assertEqual(translator.translate(system).auxiliary_names, ())
+        self.assertEqual(translator.translate().auxiliary_names, ())
 
     def test_the_general_scheme_can_occupy_the_cell_that_was_empty(self):
         # One auxiliary that evolves is enough to make the difference, and the enzyme
         # chain has exactly one among four.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         self.assertEqual(translator.scheme(), ReductionScheme.GENERAL)
         moving = [monomial for monomial in translator.auxiliary_monomials()
                   if self.moves_in_time(monomial, system)]
@@ -679,11 +669,11 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # The axes being independent is not a claim about naming: the reduced system
         # sorts its own auxiliaries into parameters and dependents on exactly this test.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         # Normalisation off, so that every auxiliary is still a symbol to sort.  With it
         # on, the ones that do not evolve are exactly the ones normalised away, and the
         # claim being made here would have nothing left to be made about.
-        reduced = translator.translate_general(system, normalise_parameters=False)
+        reduced = translator.translate_general(normalise_parameters=False)
         for name, monomial in zip(reduced.auxiliary_names,
                                   translator.auxiliary_monomials()):
             with self.subTest(auxiliary=str(name)):
@@ -697,8 +687,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # whole claim that the two questions are independent.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
         # Normalisation off, for the reason the previous test gives.
-        reduced = ODETranslator.from_ode_system(system).translate_general(
-            system, normalise_parameters=False)
+        reduced = ODETranslator(system).translate_general(normalise_parameters=False)
         auxiliaries = set(reduced.auxiliary_names)
         self.assertTrue(auxiliaries & set(reduced.parameters))
         self.assertTrue(auxiliaries & set(reduced.dependents))
@@ -710,7 +699,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # cannot remove it.
         system = ODESystem.from_equations(['dn/dt = r*n*(1 - n/K)',
                                            'dp/dt = p*(q - 1)'])
-        translator = ODETranslator.from_ode_system(system)
+        translator = ODETranslator(system)
         untouched = [symbol for index, symbol in enumerate(system.symbols)
                      if translator.scaling_matrix[:, index].is_zero_matrix]
         self.assertIn(sympy.Symbol('q'), untouched)
@@ -726,7 +715,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         for label, equations in (('michaelis-menten', self.MICHAELIS_MENTEN),
                                  ('logistic', ['dn/dt = r*n*(1 - n/K)'])):
             system = ODESystem.from_equations(equations)
-            translator = ODETranslator.from_ode_system(system)
+            translator = ODETranslator(system)
             with self.subTest(system=label):
                 self.assertEqual(
                     [symbol for index, symbol in enumerate(system.symbols)
@@ -737,7 +726,7 @@ class TestTheTwoAxesAreIndependent(TestCase):
         # The same rule one level in: a zero equation is a dependent whose rate vanishes,
         # not a parameter.  The enzyme chain's reduction has two such invariants.
         system = ChemicalReactionNetwork.from_diagram(self.ENZYME_CHAIN).to_ode_system()
-        reduced = ODETranslator.from_ode_system(system).translate(system)
+        reduced = ODETranslator(system).translate()
         self.assertTrue(reduced.conserved_variables)
         for symbol in reduced.conserved_variables:
             with self.subTest(symbol=str(symbol)):
@@ -768,8 +757,8 @@ class TestForwardAndReverseMeanTheSameOnBothClasses(TestCase):
     def test_a_reduced_system_carries_the_translator_s_forward_monomials(self):
         for label, system in self.systems():
             with self.subTest(system=label):
-                translator = ODETranslator.from_ode_system(system)
-                reduced = translator.translate(system)
+                translator = ODETranslator(system)
+                reduced = translator.translate()
                 self.assertEqual(tuple(translator.forward_monomials()),
                                  reduced.forward_monomials)
 
@@ -781,7 +770,7 @@ class TestForwardAndReverseMeanTheSameOnBothClasses(TestCase):
     def test_forward_and_reverse_undo_each_other(self):
         for label, system in self.systems():
             with self.subTest(system=label):
-                translator = ODETranslator.from_ode_system(system)
+                translator = ODETranslator(system)
                 forward = dict(zip(translator.column_names(),
                                    translator.forward_monomials()))
                 self.assertEqual(

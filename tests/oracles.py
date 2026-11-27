@@ -43,5 +43,5 @@ def false_equations(system, reduced):
 
 def forget(reduced):
     ''' The same equations as a plain system, with no record of being a reduction. '''
-    return ODESystem(reduced.symbols, reduced.derivatives,
+    return ODESystem._from_variables(reduced.symbols, reduced.derivatives,
                      indep_var=reduced.independent_variable)

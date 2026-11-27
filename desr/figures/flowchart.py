@@ -736,7 +736,7 @@ def flowchart_panels(system, font):
     Returns:
         tuple: ``(panels, labels)``, one label per arrow.
     """
-    translator = ODETranslator.from_ode_system(system)
+    translator = ODETranslator(system)
     old = [_tex(symbol) for symbol in system.symbols]
     # One name per column, so that a reduction which keeps the clock -- the
     # dependent-variable scheme -- labels the clock's column with the clock rather
@@ -754,7 +754,7 @@ def flowchart_panels(system, font):
 
     kinds = {index: (UNIT_COLOUR if index < r else VALUE_COLOUR)
              for index in range(len(new))}
-    reduced = translator.translate(system)
+    reduced = translator.translate()
     # The rows of A are the scalings, and naming them after their factors is what ties
     # the matrix to the substitutions written out beside it.
     lamdas = ['$\\lambda$'] if r == 1 else \

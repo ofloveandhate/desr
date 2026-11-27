@@ -45,7 +45,7 @@ The reduction uses as units the parameters at the front of the variable order; s
 loss rate :math:`a_2` of compartment 2 go first:
 
     >>> system.reorder_variables(['u_2', 'a_2', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.num_scaling_symmetries
     2
     >>> system.dimensions_of()
@@ -60,7 +60,7 @@ compartment 2 arrives in compartment 1 in the unit it left in.
 
 Of the four parameters, two remain after scaling symmetry reduction:
 
-    >>> reduced = translator.translate(system)
+    >>> reduced = translator.translate()
     >>> reduced
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 + kappa1*nu1
@@ -90,7 +90,7 @@ Given to the reduction in that form:
     ... \frac{dz_2}{dt} &= -b_22 z_2 + u_2
     ... ''')
     >>> substituted.reorder_variables(['u_2', 'b_22', 'a_12', 'a_1', 't', 'z_1', 'z_2'])
-    >>> translator = ODETranslator.from_ode_system(substituted)
+    >>> translator = ODETranslator(substituted)
     >>> translator.num_scaling_symmetries
     3
     >>> substituted.dimensions_of()
@@ -105,7 +105,7 @@ The substitution lost the constraint.
 
 The reduced system has only one parameter:
 
-    >>> reduced = translator.translate(substituted)
+    >>> reduced = translator.translate()
     >>> reduced
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 + nu1
@@ -138,12 +138,12 @@ system.  The sum is then part of the system again, and the units it implies come
     ... ''')
     >>> substituted_but_kept.add_constraint(lhs='b_22', rhs='a_2 + a_12')
     >>> substituted_but_kept.reorder_variables(['a_2', 'u_2', 'a_1', 'a_12', 'b_22', 't', 'z_1', 'z_2'])
-    >>> translator = ODETranslator.from_ode_system(substituted_but_kept)
+    >>> translator = ODETranslator(substituted_but_kept)
     >>> translator.num_scaling_symmetries
     2
     >>> substituted_but_kept.dimensions_of()
     {a_2: 1/[t], u_2: [z_1]/[t], a_1: 1/[t], a_12: 1/[t], b_22: 1/[t], t: [t], z_1: [z_1], z_2: [z_1]}
-    >>> translator.translate(substituted_but_kept)
+    >>> translator.translate()
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 + kappa1*nu1
     dnu1/dtau = -kappa2*nu1 + 1
@@ -164,10 +164,10 @@ enough:
     ... ''')
     >>> sys_with_same_unit.require_same_unit({'b_22': 'a_12'})
     >>> sys_with_same_unit.reorder_variables(['u_2', 'b_22', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
-    >>> translator = ODETranslator.from_ode_system(sys_with_same_unit)
+    >>> translator = ODETranslator(sys_with_same_unit)
     >>> translator.num_scaling_symmetries
     2
-    >>> translator.translate(sys_with_same_unit)
+    >>> translator.translate()
     dtau/dtau = 1
     dnu0/dtau = -kappa0*nu0 + kappa1*nu1
     dnu1/dtau = 1 - nu1

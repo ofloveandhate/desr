@@ -26,7 +26,7 @@ of :math:`1/t`.  Standing alone, it has the unit of :math:`x/t`.  Both can hold 
 :math:`x` has no unit of its own, and that is what the reduction finds:
 
     >>> system = ODESystem.from_tex(r'\frac{dx}{dt} &= (a + b) x + b')
-    >>> translator = ODETranslator.from_ode_system(system)
+    >>> translator = ODETranslator(system)
     >>> translator.num_scaling_symmetries
     1
     >>> system.dimensions_of()
@@ -37,7 +37,7 @@ translating using desr leaves one parameter:
 
     >>> translator.invariant_monomials()
     Matrix([[b/a, a*t, x]])
-    >>> translator.translate(system)
+    >>> translator.translate()
     dtau/dtau = 1
     dx/dtau = kappa0*x + kappa0 + x
     parameters: kappa0
@@ -54,7 +54,7 @@ Write :math:`c = a + b`, and put :math:`c` in the equation in place of the sum:
 Given to the reduction in that form:
 
     >>> substituted = ODESystem.from_tex(r'\frac{dx}{dt} &= (c) x + b')
-    >>> translator = ODETranslator.from_ode_system(substituted)
+    >>> translator = ODETranslator(substituted)
     >>> translator.num_scaling_symmetries
     2
     >>> substituted.dimensions_of()
@@ -72,7 +72,7 @@ Further, the reduction removes both parameters:
 
     >>> translator.invariant_monomials()
     Matrix([[c*t, c*x/b]])
-    >>> translator.translate(substituted)
+    >>> translator.translate()
     dtau/dtau = 1
     dnu0/dtau = nu0 + 1
 
@@ -95,12 +95,12 @@ Two ways to keep the information
 
     >>> constrained = ODESystem.from_tex(r'\frac{dx}{dt} &= (c) x + b')
     >>> constrained.require_same_unit({'c': 'b'})
-    >>> translator = ODETranslator.from_ode_system(constrained)
+    >>> translator = ODETranslator(constrained)
     >>> translator.num_scaling_symmetries
     1
     >>> constrained.dimensions_of()
     {b: 1/[t], c: 1/[t], t: [t], x: 1}
-    >>> translator.translate(constrained)
+    >>> translator.translate()
     dtau/dtau = 1
     dx/dtau = kappa0*x + 1
     parameters: kappa0
@@ -115,10 +115,10 @@ still related, and the constraint is carried through the reduction:
 
     >>> related = ODESystem.from_tex(r'\frac{dx}{dt} &= (a + b) x + b')
     >>> related.add_constraint('c = a+b')
-    >>> translator = ODETranslator.from_ode_system(related)
+    >>> translator = ODETranslator(related)
     >>> translator.num_scaling_symmetries
     1
-    >>> translator.translate(related)
+    >>> translator.translate()
     dtau/dtau = 1
     dx/dtau = kappa0*x + kappa0 + x
     kappa1 == kappa0 + 1
