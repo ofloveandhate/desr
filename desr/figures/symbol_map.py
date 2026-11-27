@@ -17,7 +17,7 @@ What each stage is
 
 **original** -- what you wrote down, with its dimensions.
 
-**reduced** -- Hubert & Labahn's reduction, every column kept.  Its invariants are
+**reduced** -- the reduction, every column kept.  Its invariants are
 scale-invariant and so dimensionless already; what it also carries is the auxiliaries,
 which is where the dimensions went.  For a general-scheme system this stage reports
 parameters its own equations never use, which is the thing that made them worth
@@ -74,7 +74,7 @@ def auxiliary_split(system):
 
     An auxiliary built from the original parameters alone cannot vary, so it is a *unit*
     the normalisation can set to 1, after which it is gone.  One the scaling moves
-    carries dimension and has to be integrated, which is Hubert & Labahn's *quadrature*.
+    carries dimension and has to be integrated, which is a *quadrature*.
     Counting them together would say a reduction owes four integrals when it owes one.
 
     Returns:

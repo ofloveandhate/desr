@@ -3,7 +3,7 @@
 The three reduction schemes
 =============================
 
-`desr` implements three reductions from Hubert & Labahn, and
+`desr` implements three reductions from Hubert & Labahn :cite:`Hubert2013c`:, and
 :meth:`~desr.ode_translation.ODETranslator.translate` automatically picks between them.
 Each applies to a different shape of system, and
 they at disagree about what the reduced system's clock is.  That last point is the one
@@ -115,7 +115,7 @@ The clock, and when it is still ``t``
 ---------------------------------------
 
 The general scheme runs two further steps by default, and both can be turned off.
-Turning both off reproduces Hubert & Labahn exactly.
+Turning both off reproduces :cite:`Hubert2013c`: exactly.
 
 **Normalising** sets every constant auxiliary to 1, which is the choice of units
 described in :ref:`dimensions`.

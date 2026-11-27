@@ -187,7 +187,7 @@ reduced symbol stands for, and the clock is in there with the rest.
 The remaining variables :code:`(y0, y1, y3, y4, y5) = (C*k_1/k_2, P*k_1/k_m1, E*k_1/k_2, P*k_1/k_2, S*k_1/k_2)`
 are our new dependent invariants; the first two are exactly the invariants we chose to study.
 
-To reproduce Hubert & Labahn exactly, ask for neither step.  The auxiliaries are then
+To reproduce :cite:`Hubert2013c`: exactly, ask for neither step.  The auxiliaries are then
 carried, and reported as *parameters* because each is a monomial in the original parameters
 alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
 :attr:`~desr.ode_system.ODESystem.auxiliary_names`.

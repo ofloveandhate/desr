@@ -935,7 +935,7 @@ class NumericTranslator(object):
 
         Read off the rate's own denominator, evaluated along the samples, because that is
         the exact condition: a system such as Hubert & Labahn 6.6 has a :math:`1/t` in
-        its equations that no rewriting removes, and it cannot be integrated through
+        its equations, and it cannot be integrated through
         :math:`t = 0` in any coordinates.
 
         Raises:

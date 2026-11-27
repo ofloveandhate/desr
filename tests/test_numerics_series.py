@@ -314,7 +314,7 @@ class TestWhatASeriesIsToldWhenNoConstantCanHelp(SeriesCase):
 @skipUnless(hasattr(signal, 'SIGALRM'), 'needs SIGALRM to bound a run that may not return')
 class TestASeriesThatStartsAtZero(SeriesCase):
     '''
-    Hubert & Labahn write a system as `t dz/dt = z * F`, so a reduction kept in their form
+    Hubert & Labahn write a system as `t dz/dt = z * F` (eq 20), so a reduction kept in their form
     has a `1/t` in every rate.  For the enzyme chain that is only how the form writes it:
     the invariant `k_2_3*t` is a clock, and the reduction takes it as one unless it is told
     not to, which leaves no `1/t` at all.  Told not to, the invariant sits beside `t` and
