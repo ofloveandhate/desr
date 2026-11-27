@@ -1596,25 +1596,84 @@ class TestPhysicalDimensions(TestCase):
             system.set_dimension('nonsense', 'time')
         self.assertIn('not a symbol of this system', str(caught.exception))
 
-    def test_a_symbol_the_declarations_do_not_reach_has_no_dimension(self):
-        # Declaring t and x reaches two of the enzyme chain's four directions.  e is
-        # left unsaid, and k_0_1 multiplies e, so neither follows.  Reporting 1 for
-        # those would read as "dimensionless", which nobody said.
+    @staticmethod
+    def structural_names(dimension):
+        '''The names in a dimension that are desr's own, written in brackets.'''
+        return {name for name in dimension.free_symbols if str(name).startswith('[')}
+
+    def in_declared_span(self, system, symbol):
+        '''Whether a symbol's weight is a combination of the declared symbols' weights.'''
+        matrix = system.maximal_scaling_matrix()
+        symbols = list(system.symbols)
+        declared = sympy.Matrix([[matrix[row, symbols.index(each)]
+                                  for row in range(matrix.rows)]
+                                 for each in system.physical_dimensions])
+        weight = sympy.Matrix([[matrix[row, symbols.index(symbol)]
+                                for row in range(matrix.rows)]])
+        return declared.col_join(weight).rank() == declared.rank()
+
+    def test_a_symbol_the_declarations_do_not_reach_keeps_a_name_of_desrs_own(self):
+        # Declaring t and x reaches two of the enzyme chain's four directions.  A symbol
+        # whose weight the declarations span gets declared names only; any other keeps a
+        # structural name for the part no declaration reaches.  Nothing comes out 1
+        # unless it is dimensionless.
         system = self.enzyme()
         system.set_dimensions({'t': 'time', 'x': 'concentration'})
         physical = system.physical_dimensions_of()
 
         self.assertEqual(sympy.Symbol('concentration'), physical[sympy.Symbol('x')])
         self.assertEqual(sympy.Symbol('time'), physical[sympy.Symbol('t')])
-        for name in ('e', 'f', 'k_0_1', 'k_4_5'):
-            with self.subTest(symbol=name):
-                self.assertIsNone(physical[sympy.Symbol(name)])
+        reached = 0
+        for symbol in system.symbols:
+            with self.subTest(symbol=str(symbol)):
+                spanned = self.in_declared_span(system, symbol)
+                self.assertEqual(spanned, not self.structural_names(physical[symbol]))
+                self.assertNotEqual(1, physical[symbol])
+                reached += spanned
+        # Some are reached and some are not, so both halves were tested.
+        self.assertTrue(0 < reached < len(system.symbols))
 
-    def test_declaring_the_rest_turns_none_into_a_dimension(self):
-        # The same system, said in full.  Nothing but a declaration can fill the gap.
+    def test_the_mixed_dimensions_are_the_structural_ones_renamed(self):
+        # Each declared name stands for the structural dimension of what it was declared
+        # for.  Putting that back must give dimensions_of() exactly, for every symbol:
+        # the mix-in renames and claims nothing else.
+        for declarations in ({'t': 'time'}, {'t': 'time', 'x': 'concentration'},
+                             {'k_2_3': '1/time', 'e': 'mass'}):
+            with self.subTest(declared=declarations):
+                system = self.enzyme()
+                structural = system.dimensions_of()
+                system.set_dimensions(declarations)
+                physical = system.physical_dimensions_of()
+                back = {}
+                for symbol, dimension in system.physical_dimensions.items():
+                    # A declared dimension is a single name to a power.
+                    (name, power), = dimension.as_powers_dict().items()
+                    back[name] = structural[symbol] ** sympy.Rational(1, power)
+                for symbol in system.symbols:
+                    self.assertEqual(
+                        sympy.simplify(structural[symbol]),
+                        sympy.simplify(physical[symbol].subs(back, simultaneous=True)),
+                        str(symbol))
+
+    def test_every_invariant_stays_dimensionless_however_little_is_declared(self):
+        from desr.ode_translation import scale_action
+        for declarations in ({}, {'t': 'time'}, {'t': 'time', 'x': 'concentration'}):
+            with self.subTest(declared=declarations):
+                system = self.enzyme()
+                system.set_dimensions(declarations)
+                physical = system.physical_dimensions_of()
+                translator = ODETranslator.from_ode_system(system)
+                for monomial in scale_action(system.symbols, translator.herm_mult_n):
+                    powers = monomial.as_powers_dict()
+                    self.assertEqual(1, sympy.simplify(sympy.prod(
+                        [physical[s] ** powers.get(s, 0) for s in system.symbols])))
+
+    def test_declaring_the_rest_replaces_desrs_names(self):
+        # The same system, said in full.  Only a declaration replaces a structural name.
         system = self.enzyme()
         system.set_dimensions({'t': 'time', 'x': 'concentration'})
-        self.assertIsNone(system.physical_dimensions_of()[sympy.Symbol('e')])
+        self.assertTrue(self.structural_names(
+            system.physical_dimensions_of()[sympy.Symbol('e')]))
 
         system.set_dimensions({'e': 'concentration', 'f': 'concentration'})
         physical = system.physical_dimensions_of()
@@ -1623,11 +1682,14 @@ class TestPhysicalDimensions(TestCase):
         # k_0_1 is second order, k_2_3 first, read off the equations as always.
         self.assertEqual(1 / (concentration * time), physical[sympy.Symbol('k_0_1')])
         self.assertEqual(1 / time, physical[sympy.Symbol('k_2_3')])
+        for symbol, dimension in physical.items():
+            self.assertFalse(self.structural_names(dimension), str(symbol))
 
-    def test_nothing_declared_is_not_a_claim_that_there_are_none(self):
+    def test_nothing_declared_is_the_structural_dimensions(self):
+        # Declaring nothing claims nothing: every dimension is desr's own.
         system = self.michaelis_menten()
         self.assertEqual({}, system.physical_dimensions)
-        self.assertEqual({}, system.physical_dimensions_of())
+        self.assertEqual(system.dimensions_of(), system.physical_dimensions_of())
 
     def test_naming_changes_nothing(self):
         # Physical dimensions are an overlay.  Whatever is declared, the scaling matrix,

@@ -2110,16 +2110,20 @@ class TestUnitTable(TestCase):
                           sympy.Symbol('[f]'), sympy.Symbol('[x]')},
                          {row['dimension'] for row in units})
 
-    def test_a_unit_the_declarations_do_not_reach_has_no_dimension(self):
-        # Declaring t and x leaves e unsaid, so k_2_3/k_0_1 is unsaid.  A 1 in that
-        # cell would read as "dimensionless", which is a claim nobody made, and the
-        # count refuses to be drawn from a partial declaration.
+    def test_a_unit_the_declarations_do_not_reach_keeps_a_name_of_desrs_own(self):
+        # Declaring t and x leaves e unsaid, so the unit k_2_3/k_0_1 measures is in a
+        # direction nobody named.  Its cell says so with a structural name, rather than
+        # a 1 that would read as "dimensionless".  The count still refuses to be drawn
+        # from a partial declaration: two unnamed directions might be one dimension.
         system = self.enzyme(declare=False)
         system.set_dimensions({'t': 'time', 'x': 'concentration'})
         dimensions = {str(row['symbol']): row['dimension']
                       for row in self.table(system)}
         self.assertEqual(sympy.Symbol('time'), dimensions['x0'])
-        self.assertIsNone(dimensions['x1'])
+        self.assertTrue(any(str(name).startswith('[')
+                            for name in dimensions['x1'].free_symbols))
+        self.assertEqual(system.physical_dimensions_of()[sympy.Symbol('e')],
+                         dimensions['x1'])
         self.assertEqual(
             {'units': 4, 'dimensions': None},
             ODETranslator.from_ode_system(system).num_units_and_dimensions())

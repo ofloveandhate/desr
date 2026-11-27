@@ -107,7 +107,10 @@ each can be turned off.
     `[t]`, after the symbol that names the direction.
   - `set_dimension`, `set_dimensions` and `physical_dimensions_of()` are the
     overlay: declare `[t] = time` and the rest follows.  Naming changes no
-    matrix.  A dimension no declaration reaches is `None`, not 1.
+    matrix.  Every symbol gets a dimension: where the declarations reach, in
+    the names declared; where they do not, the rest keeps desr's own name,
+    so declaring only time leaves `k_1: 1/([e_0]*time)`.  With nothing
+    declared it is `dimensions_of()`.
   - `scaling_symmetries()` reports a symmetry as an action —
     `t -> lamda*t, k_2 -> k_2/lamda` — checked against the equations.
   - `unit_table()` is the reduction's symbols with what each denotes, what it
