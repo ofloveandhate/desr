@@ -68,7 +68,7 @@ Instead, we can normalise by :math:`k_{-1}` and leave :math:`k_2` in the ratio, 
 Note that we need to recalculate the :class:`~desr.ode_translation.ODETranslator` instance.
 
     >>> original_system_reorder = original_system.copy()
-    >>> original_system_reorder.reorder_variables(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
+    >>> original_system_reorder.reorder_symbols(['k_1', 'k_m1', 'k_2', 't', 'C', 'E', 'P', 'S'])
     >>> original_system_reorder.symbols
     (k_1, k_m1, k_2, t, C, E, P, S)
     >>> max_scal1_reorder = ODETranslator(original_system_reorder, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['C','E','P','S']})

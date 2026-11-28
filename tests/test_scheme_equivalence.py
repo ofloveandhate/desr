@@ -162,7 +162,7 @@ class TestATranslatorBuiltWithoutTheClocksColumn(TestCase):
         # the scaling -- so what is required is a true reduction with n - r invariants,
         # the clock among them.
         system = ODESystem.from_equations(self.HL_6_4)
-        system.reorder_variables('z1 t z2')
+        system.reorder_symbols('z1 t z2')
         self.assertEqual(1, system.independent_variable_index)
         full = ODETranslator(system)
         reduced = ODETranslator(system, scaling_matrix=sympy.Matrix([[1, -1]])).translate_dep_var()
@@ -224,7 +224,7 @@ class TestTheOrderOfTheSymbolsDoesNotChangeTheTruth(TestCase):
         self.assertEqual(ReductionScheme.PARAMETER,
                          ODETranslator(system).scheme())
         symbols = list(system.symbols)
-        system.reorder_variables([symbols[-1]] + symbols[:-1])
+        system.reorder_symbols([symbols[-1]] + symbols[:-1])
         self.assertIn(system.symbols[0], system.dependents)
         translator = ODETranslator(system)
         self.assertNotEqual(ReductionScheme.PARAMETER, translator.scheme())

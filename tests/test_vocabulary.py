@@ -543,7 +543,7 @@ class TestTheTranslatorAgreesWithTheReducedSystem(TestCase):
                 else:
                     reduced = self.translator.translate_general(include_aux_vars=include)
                 self.assertEqual(
-                    self.translator.expected_variable_count(scheme=scheme, include_aux_vars=include),
+                    self.translator.expected_symbol_count(scheme=scheme, include_aux_vars=include),
                     len(reduced.symbols))
 
     def test_the_names_match_the_reduced_systems_symbols(self):

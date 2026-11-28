@@ -67,7 +67,7 @@ Choose the symbol order.  :math:`c_0` goes towards the back, which is the end th
 *kept*: the front is the end that gets scaled by, and a quantity known to be zero must not
 be scaled by, lest we are required to divide by zero.
 
-    >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
+    >>> system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
 Now the exponent matrix can be read against that order: one row per symbol, in the order
 just chosen; one column per monomial appearing in the system.
@@ -248,7 +248,7 @@ hold.  Drawing needs :mod:`matplotlib`, which `desr` does not install --
         r'\frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c')
     system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
     system.update_initial_conditions(['s(0) = s_0', 'c(0) = 0'])
-    system.reorder_variables(
+    system.reorder_symbols(
         ['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
     translator = ODETranslator(system,

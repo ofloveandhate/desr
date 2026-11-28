@@ -74,7 +74,7 @@ The order of the symbols
 ----------------------------
 
 The reduction uses as units the parameters at the front of the symbol order; see
-:meth:`~desr.ode_system.ODESystem.reorder_variables`.  The order is parameters, then
+:meth:`~desr.ode_system.ODESystem.reorder_symbols`.  The order is parameters, then
 the independent variable, then the dependent variables.
 
 Here the five total amounts come first (so that each species is measured in its total),
@@ -90,7 +90,7 @@ a fixed order, which is the order their reduced counterparts are numbered in.
     ...                         'V_25prime', 'V_25primeprime',
     ...                         'V_weeprime', 'V_weeprimeprime', 'V_2prime']
     >>> species = ['Cyclin', 'MPF', 'preMPF', 'Cdc25P', 'Wee1P', 'IEP', 'APC']
-    >>> system.reorder_variables(used_as_units + remaining_parameters + ['t'] + species)
+    >>> system.reorder_symbols(used_as_units + remaining_parameters + ['t'] + species)
 
 Scaling symmetries
 --------------------------

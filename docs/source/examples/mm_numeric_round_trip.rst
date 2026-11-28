@@ -35,7 +35,7 @@ The symbol order matters: the reduction tends to normalise away the parameters t
     ...          \frac{dc}{dt} &= k_1 e_0 s - k_1 c s - k_{-1} c - k_2 c'''
     >>> system = ODESystem.from_tex(system_tex)
     >>> system.update_initial_conditions({'s': 's_0'})
-    >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+    >>> system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
 Reduce it, naming the new variables :math:`\tau, u, v` and the new parameters :math:`c_i`.
 

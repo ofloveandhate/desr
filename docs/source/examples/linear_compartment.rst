@@ -41,10 +41,10 @@ The model as written
     (a_1, a_12, a_2, u_2)
 
 The reduction uses as units the parameters at the front of the symbol order; see
-:meth:`~desr.ode_system.ODESystem.reorder_variables`.  The input :math:`u_2` and the
+:meth:`~desr.ode_system.ODESystem.reorder_symbols`.  The input :math:`u_2` and the
 loss rate :math:`a_2` of compartment 2 go first:
 
-    >>> system.reorder_variables(['u_2', 'a_2', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
+    >>> system.reorder_symbols(['u_2', 'a_2', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
     >>> translator = ODETranslator(system)
     >>> translator.num_scaling_symmetries
     2
@@ -89,7 +89,7 @@ Given to the reduction in that form:
     ... \frac{dz_1}{dt} &= -a_1 z_1 + a_12 z_2\\
     ... \frac{dz_2}{dt} &= -b_22 z_2 + u_2
     ... ''')
-    >>> substituted.reorder_variables(['u_2', 'b_22', 'a_12', 'a_1', 't', 'z_1', 'z_2'])
+    >>> substituted.reorder_symbols(['u_2', 'b_22', 'a_12', 'a_1', 't', 'z_1', 'z_2'])
     >>> translator = ODETranslator(substituted)
     >>> translator.num_scaling_symmetries
     3
@@ -137,7 +137,7 @@ system.  The sum is then part of the system again, and the units it implies come
     ... \frac{dz_2}{dt} &= -b_22 z_2 + u_2
     ... ''')
     >>> substituted_but_kept.add_constraint(lhs='b_22', rhs='a_2 + a_12')
-    >>> substituted_but_kept.reorder_variables(['a_2', 'u_2', 'a_1', 'a_12', 'b_22', 't', 'z_1', 'z_2'])
+    >>> substituted_but_kept.reorder_symbols(['a_2', 'u_2', 'a_1', 'a_12', 'b_22', 't', 'z_1', 'z_2'])
     >>> translator = ODETranslator(substituted_but_kept)
     >>> translator.num_scaling_symmetries
     2
@@ -163,7 +163,7 @@ enough:
     ... \frac{dz_2}{dt} &= -b_22 z_2 + u_2
     ... ''')
     >>> sys_with_same_unit.require_same_unit({'b_22': 'a_12'})
-    >>> sys_with_same_unit.reorder_variables(['u_2', 'b_22', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
+    >>> sys_with_same_unit.reorder_symbols(['u_2', 'b_22', 'a_1', 'a_12', 't', 'z_1', 'z_2'])
     >>> translator = ODETranslator(sys_with_same_unit)
     >>> translator.num_scaling_symmetries
     2

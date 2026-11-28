@@ -65,7 +65,7 @@ Build the system in Python with desr.  I'll use the ``from_equations`` form, thi
     >>> eq2 = 'dz2/dt = z2/t * ( 10/3 - 2/3 *z1**5 *z2 + z1**2*z2/t )'
     >>> eqns = [eq1, eq2]
     >>> system = ODESystem.from_equations(eqns)
-    >>> system.reorder_variables(['t', 'z1', 'z2'])
+    >>> system.reorder_symbols(['t', 'z1', 'z2'])
 
 And nondimensionalise.
 

@@ -627,7 +627,7 @@ class NumericTranslator(object):
         >>> equations = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
-        >>> system.reorder_variables(['t', 'z1', 'z2'])
+        >>> system.reorder_symbols(['t', 'z1', 'z2'])
         >>> translator = ODETranslator(system)
         >>> moving = translator.translate_general(
         ...     include_aux_vars=False).numeric_translator()

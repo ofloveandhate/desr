@@ -996,7 +996,7 @@ class ODESystem(object):
         a dependent variable; this is how to say instead that it is fixed by the model.
 
         The symbol keeps its place in the ordering.  Only
-        :meth:`~desr.ode_system.ODESystem.default_order_variables` moves it to sit with the
+        :meth:`~desr.ode_system.ODESystem.default_order_symbols` moves it to sit with the
         other parameters, because the ordering decides which parameters are normalised away.
 
         Args:
@@ -1606,7 +1606,7 @@ class ODESystem(object):
             raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
         # get the symbols from the constraint
-        all_constraint_vars, dependent_vars, new_vars = self.equation_variables(lhs, rhs)
+        all_constraint_vars, dependent_vars, new_vars = self.constraint_symbols(lhs, rhs)
 
         # A constraint may only relate parameters.  One involving a dependent variable is a
         # statement about the trajectory, which this library cannot act on.
@@ -1637,7 +1637,7 @@ class ODESystem(object):
 
         The insertion point is the independent variable's index rather than
         `num_parameters`, so that a system the caller has deliberately put in a
-        non-canonical order -- :meth:`reorder_variables` allows any permutation -- is not
+        non-canonical order -- :meth:`reorder_symbols` allows any permutation -- is not
         silently rearranged around the new parameter.  For a canonical system the two
         agree.
 
@@ -1652,16 +1652,16 @@ class ODESystem(object):
         self._variables = tuple(variables[:at] + list(new_vars) + variables[at:])
         self._derivatives = tuple(derivatives[:at] + [None] * len(new_vars) + derivatives[at:])
 
-    def equation_variables(self, lhs, rhs):
+    def constraint_symbols(self, lhs, rhs):
         """
-        compute the variables in the left and right hand side of a constraint:
-        all, the non-constant ones that exist in the system, and the new ones.
+        The symbols in the two sides of a constraint: all of them, the ones that are
+        dependent variables of this system, and the ones this system does not have yet.
 
         Args:
             lhs (sympy.Expr): The left hand side of the constraint.
             rhs (sympy.Expr): The right hand side of the constraint.
 
-        Returns: length-three tuple of containers of variables: all, existing dependent, new
+        Returns: a tuple of three containers of symbols: all, existing dependents, new
         """
         all_vars = expressions_to_variables([lhs, rhs])
         dependent_vars = all_vars.intersection(self.dependents)
@@ -1992,7 +1992,7 @@ class ODESystem(object):
 
         deriv_dict = dict(map(lambda x: parse_de(x, indep_var=str(indep_var)), equations))
         system = cls.from_dict(deriv_dict=deriv_dict, indep_var=indep_var, initial_conditions=initial_conditions, is_reduced=is_reduced, parameters=parameters)
-        system.default_order_variables()
+        system.default_order_symbols()
 
         system._variable_sanity_check()
 
@@ -2058,7 +2058,7 @@ class ODESystem(object):
                      is_reduced=is_reduced,
                      parameters=parameters)
 
-        system.default_order_variables()
+        system.default_order_symbols()
 
         system._variable_sanity_check()
 
@@ -2459,7 +2459,7 @@ class ODESystem(object):
 
         The initial-condition parameter is appended, so it lands after the dependent
         variables rather than among the parameters where it belongs; see
-        :meth:`~desr.ode_system.ODESystem.default_order_variables`.
+        :meth:`~desr.ode_system.ODESystem.default_order_symbols`.
 
         >>> system.update_initial_conditions({'s': 's_0'})
         >>> system.exponent_matrix()
@@ -3258,13 +3258,13 @@ class ODESystem(object):
             symmetries.append(moved)
         return symmetries
 
-    def reorder_variables(self, variables):
+    def reorder_symbols(self, symbols):
         '''
-        Store the new variable order, and reorder the equations according to the new order of variables.
+        Put the symbols in a new order, and the equations with them.
 
         The order within the parameters is the one that changes the answer: the parameters
         placed **first** tend to be the ones normalised to 1, and the rest become the
-        reduced constants.  "Tend to" rather than "are": :math:`r` of them are normalised,
+        reduced parameters.  "Tend to" rather than "are": :math:`r` of them are normalised,
         the leading ones are the natural candidates, but the Hermite structure decides which
         set actually can be, so a parameter that cannot participate is skipped over.  Put
         the ones you would rather see disappear at the front, then check
@@ -3272,8 +3272,8 @@ class ODESystem(object):
         which went.
 
         Args:
-            variables (str, iter):
-                Another ordering of the variables.
+            symbols (str, iter):
+                Every symbol of the system, in the new order.
 
         >>> eqns = ['dz_1/dt = z_1*z_3', 'dz_2/dt = z_1*z_2 / (z_3 ** 2)']
         >>> system = ODESystem.from_equations('\\n'.join(eqns))
@@ -3281,12 +3281,12 @@ class ODESystem(object):
         (z_3, t, z_1, z_2)
 
         `z_3` is a parameter, so it comes first, has no equation, and its entry is
-        :const:`None`.  The classification travels with the variable through a reordering.
+        :const:`None`.  The classification travels with the symbol through a reordering.
 
         >>> system.derivatives
         (None, 1, z_1*z_3, z_1*z_2/z_3**2)
 
-        >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
+        >>> system.reorder_symbols(['z_2', 'z_3', 't', 'z_1'])
         >>> system.symbols
         (z_2, z_3, t, z_1)
         >>> system.derivatives
@@ -3294,19 +3294,19 @@ class ODESystem(object):
         >>> system.parameters
         (z_3,)
         '''
-        if isinstance(variables, str):
-            if ' ' in variables:
-                variables = variables.split(' ')
+        if isinstance(symbols, str):
+            if ' ' in symbols:
+                symbols = symbols.split(' ')
             else:
-                variables = tuple(variables)
+                symbols = tuple(symbols)
 
-        variables = [sympy.Symbol(v) if isinstance(v, str) else v for v in variables]
+        symbols = [sympy.Symbol(v) if isinstance(v, str) else v for v in symbols]
 
-        if set(variables) != set(self.symbols):
-            raise ValueError('Mismatching variables:\n{} vs\n{}'.format(sorted(self.symbols, key=str), sorted(variables, key=str)))
+        if set(symbols) != set(self.symbols):
+            raise ValueError('Mismatching symbols:\n{} vs\n{}'.format(sorted(self.symbols, key=str), sorted(symbols, key=str)))
 
         var_to_index = {var: i for i, var in enumerate(self.symbols)}
-        column_shuffle = [var_to_index[new_var] for new_var in variables]
+        column_shuffle = [var_to_index[new_var] for new_var in symbols]
 
         self._variables = tuple( [self._variables[i] for i in column_shuffle])
         self._derivatives = tuple( [self._derivatives[i] for i in column_shuffle])
@@ -3321,7 +3321,7 @@ class ODESystem(object):
             return 'a parameter'
         if variable in self.dependents:
             return 'a dependent variable'
-        return 'not a variable of this system'
+        return 'not a symbol of this system'
 
     def _block_reorder(self, order, current, what):
         '''
@@ -3353,10 +3353,10 @@ class ODESystem(object):
             if var not in current:
                 if var in self.symbols:
                     raise ValueError(
-                        '{} is not one of the {}; it is {}.  Use reorder_variables to move a '
-                        'variable between blocks, or make_parameter to change what it '
+                        '{} is not one of the {}; it is {}.  Use reorder_symbols to move a '
+                        'symbol between blocks, or make_parameter to change what it '
                         'is.'.format(var, what, self._describe_variable(var)))
-                raise ValueError('{} is not a variable of this system.  The {} are {}.'.format(
+                raise ValueError('{} is not a symbol of this system.  The {} are {}.'.format(
                     var, what, ', '.join(map(str, current))))
 
         return named + [var for var in current if var not in seen]
@@ -3368,7 +3368,7 @@ class ODESystem(object):
         The order within the parameters is the one that changes the answer -- the leading
         ones tend to be normalised to 1 -- and this is the way to set it without having to
         write out the independent variable and the dependents as well.  See
-        :meth:`reorder_variables` for the "tend to" caveat.
+        :meth:`reorder_symbols` for the "tend to" caveat.
 
         The list may be partial.  The parameters named come first, in the order given, and
         the rest follow in the order they are already in, so naming one parameter is enough
@@ -3378,7 +3378,7 @@ class ODESystem(object):
             order (str, iter): The parameters to bring to the front.
 
         The layout is left canonical: parameters, independent variable, dependents.  A
-        system deliberately put in some other order by :meth:`reorder_variables` is
+        system deliberately put in some other order by :meth:`reorder_symbols` is
         canonicalised by this call, which is the point of it -- say what is meaningful, and
         let the library place the blocks.
 
@@ -3405,10 +3405,10 @@ class ODESystem(object):
         >>> system.reorder_parameters('s')
         Traceback (most recent call last):
             ...
-        ValueError: s is not one of the parameters; it is a dependent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
+        ValueError: s is not one of the parameters; it is a dependent variable.  Use reorder_symbols to move a symbol between blocks, or make_parameter to change what it is.
         '''
         parameters = self._block_reorder(order, self.parameters, 'parameters')
-        self.reorder_variables(parameters + [self.independent_variable]
+        self.reorder_symbols(parameters + [self.independent_variable]
                                + list(self.dependents))
 
     def reorder_dependents(self, order):
@@ -3440,17 +3440,17 @@ class ODESystem(object):
         >>> system.reorder_dependents('t')
         Traceback (most recent call last):
             ...
-        ValueError: t is not one of the dependent variables; it is the independent variable.  Use reorder_variables to move a variable between blocks, or make_parameter to change what it is.
+        ValueError: t is not one of the dependent variables; it is the independent variable.  Use reorder_symbols to move a symbol between blocks, or make_parameter to change what it is.
         '''
         dependents = self._block_reorder(order, self.dependents,
                                          'dependent variables')
-        self.reorder_variables(list(self.parameters) + [self.independent_variable] + dependents)
+        self.reorder_symbols(list(self.parameters) + [self.independent_variable] + dependents)
 
-    def default_order_variables(self):
+    def default_order_symbols(self):
         '''
-        Reorder the variables into (parameters, independent variable, dependent variables),
+        Put the symbols in the order (parameters, independent variable, dependent variables),
         which is the order the parameter scheme of translation requires.
-        Variables of the same type are sorted by their string representations.
+        Symbols of the same kind are sorted by their string representations.
 
         A conserved variable is a dependent variable, so it sorts with the dependents rather
         than with the parameters.
@@ -3476,21 +3476,21 @@ class ODESystem(object):
         >>> system.symbols
         (z_3, t, z_1, z_2)
 
-        >>> system.reorder_variables(['z_2', 'z_3', 't', 'z_1'])
+        >>> system.reorder_symbols(['z_2', 'z_3', 't', 'z_1'])
         >>> system.symbols
         (z_2, z_3, t, z_1)
 
-        >>> system.default_order_variables()
+        >>> system.default_order_symbols()
         >>> system.symbols
         (z_3, t, z_1, z_2)
         '''
         dep_var = sorted(self.dependents, key=str)
         parameters = sorted(self.parameters, key=str)
 
-        # Order variables as parameters, independent, dependent
-        variables = parameters + [self.independent_variable] + dep_var
-        assert len(variables) == len(set(variables)) # assures no duplicates
-        self.reorder_variables(variables=variables)
+        # Order the symbols as parameters, independent, dependent
+        symbols = parameters + [self.independent_variable] + dep_var
+        assert len(symbols) == len(set(symbols)) # assures no duplicates
+        self.reorder_symbols(symbols)
 
 def parse_de(diff_eq, indep_var='t'):
     ''' Parse a first order ordinary differential equation and return (variable of derivative, rational function

@@ -362,7 +362,7 @@ k_2 &= V_2' \left( \textrm{[total APC]} - \textrm{[APC]} \right) + V_2'' \textrm
     def reduction(self):
         from desr import ODETranslator
         system = ODESystem.from_tex(self.TEX, sub_defns=True)
-        system.reorder_variables(
+        system.reorder_symbols(
             self.USED_AS_UNITS + self.REMAINING_PARAMETERS + ('t',) + self.SPECIES)
         translator = ODETranslator(system)
         return system, translator, translator.translate()

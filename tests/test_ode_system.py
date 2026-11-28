@@ -26,7 +26,7 @@ class TestODESystemScaling(TestCase):
 
         # Swap around some columns so we agree on the order (quick and dirty)
         answer_var = 'rhKskdtnp'
-        system.reorder_variables(answer_var)
+        system.reorder_symbols(answer_var)
 
         # Take the maximal scaling matrix
         max_scal = system.maximal_scaling_matrix()
@@ -54,7 +54,7 @@ class TestODESystemScaling(TestCase):
 
         system = ODESystem.from_equations(equations)
         var_order = ['t', 'z1', 'z2']
-        system.reorder_variables(var_order)
+        system.reorder_symbols(var_order)
 
         ## Check against the answer in the paper
         # Match the maximal scaling matrix.  The paper prints [[0, 1, -1]]; desr reports its
@@ -115,7 +115,7 @@ class TestODESystemScaling(TestCase):
         equations = '''dz1/dt = z1*(z1**5*z2 - 2)/(3*t);dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'''.split(';')
 
         system = ODESystem.from_equations(equations)
-        system.reorder_variables(['t', 'z1', 'z2'])
+        system.reorder_symbols(['t', 'z1', 'z2'])
 
         ## Check against the answer in the paper
         # Match the maximal scaling matrix
@@ -168,7 +168,7 @@ class TestODESystemScaling(TestCase):
         equations = '''dn/dt = r*n*(1-n/k)'''
 
         system = ODESystem.from_equations(equations)
-        system.reorder_variables('rktn')
+        system.reorder_symbols('rktn')
 
         ## Check against the answer in the paper
         # Match the maximal scaling matrix
@@ -291,7 +291,7 @@ class TestInitialConditions(TestCase):
         # parameters the leading ones are normalised to 1, so this is the old order's
         # parameter list reversed -- which keeps the reduction it was chosen to produce.
         variables = ['e_0', 'k_1', 'k_2', 'K', 't', 's', 'c']
-        original_system.reorder_variables(variables)
+        original_system.reorder_symbols(variables)
         self.assertEqual(variables, list(map(str, original_system.symbols)))
         self.assertEqual(original_system.exponent_matrix(),
                          sympy.Matrix([[ 0,  1,  0,  0,  0,  0,  1],
@@ -318,7 +318,7 @@ class TestInitialConditions(TestCase):
         self.assertEqual(original_system.indep_var_index, original_system.num_parameters)
         # Moving it to the front is now a choice, not a repair: leading parameters are the
         # ones the reduction normalises, and the rest of this test wants s_0 normalised.
-        original_system.reorder_variables(['s_0'] + variables)
+        original_system.reorder_symbols(['s_0'] + variables)
 
         self.assertEqual(original_system.exponent_matrix(),
                          sympy.Matrix([[ 0,  0,  0,  0,  0,  0,  0, -1],
@@ -405,7 +405,7 @@ class TestCanonicalOrder(TestCase):
     def test_a_new_parameter_respects_the_chosen_within_block_order(self):
         ''' The dependents keep the order the caller asked for; c_2 goes at the block end. '''
         system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
-        system.reorder_variables(['c_1', 'c_0', 't', 'y', 'x'])
+        system.reorder_symbols(['c_1', 'c_0', 't', 'y', 'x'])
         self.assertCanonicalOrder(system)
         system.add_constraint('c_2', 'c_0 + c_1')
         self.assertEqual(('c_1', 'c_0', 'c_2', 't', 'y', 'x'),
@@ -414,13 +414,13 @@ class TestCanonicalOrder(TestCase):
 
     def test_a_non_canonical_order_is_not_silently_rearranged(self):
         '''
-        `reorder_variables` takes any permutation, by design, so a caller may deliberately
+        `reorder_symbols` takes any permutation, by design, so a caller may deliberately
         leave the system non-canonical.  Adding a parameter then puts it immediately before
         the independent variable and disturbs nothing else -- it does not quietly shuffle
         the system into canonical order behind the caller's back.
         '''
         system = ODESystem.from_equations(['dx/dt = c_0*x*y', 'dy/dt = c_1*(1-x)*(1-y)'])
-        system.reorder_variables(['c_0', 't', 'x', 'y', 'c_1'])  # an interleaved order
+        system.reorder_symbols(['c_0', 't', 'x', 'y', 'c_1'])  # an interleaved order
         system.add_constraint('c_2', 'c_0 + c_1')
         self.assertEqual(('c_0', 'c_2', 't', 'x', 'y', 'c_1'),
                          tuple(map(str, system.symbols)))
@@ -433,7 +433,7 @@ class TestBlockReordering(TestCase):
     meaningful: the order *within* a block. Which block comes first is forced by the
     Hermite convention and is not theirs to think about.
 
-    `reorder_variables` stays as it was, taking a full permutation, so an interleaved order
+    `reorder_symbols` stays as it was, taking a full permutation, so an interleaved order
     remains expressible -- the user was explicit that one function could not do both jobs.
     '''
 
@@ -503,7 +503,7 @@ class TestBlockReordering(TestCase):
         with self.assertRaises(ValueError) as caught:
             self.system.reorder_parameters('nonesuch')
         message = str(caught.exception)
-        self.assertIn('not a variable of this system', message)
+        self.assertIn('not a symbol of this system', message)
         self.assertIn('k_1', message)
 
     def test_a_repeated_name_is_refused(self):
@@ -513,11 +513,11 @@ class TestBlockReordering(TestCase):
 
     def test_an_interleaved_order_is_canonicalised(self):
         '''
-        `reorder_variables` permits a non-canonical layout on purpose. The block reorderers
+        `reorder_symbols` permits a non-canonical layout on purpose. The block reorderers
         are the ergonomic layer, so they put the blocks back -- documented, and the reason
         they exist.
         '''
-        self.system.reorder_variables(['k_1', 't', 's', 'c', 'e_0', 'k_2', 'k_m1'])
+        self.system.reorder_symbols(['k_1', 't', 's', 'c', 'e_0', 'k_2', 'k_m1'])
         self.assertNotEqual(self.system.indep_var_index, self.system.num_parameters)
         self.system.reorder_parameters('k_2')
         self.assertCanonical(self.system)
@@ -2290,12 +2290,12 @@ class TestTheTwoCompartmentModel(TestCase):
 
     def as_written(self):
         system = ODESystem.from_tex(self.AS_WRITTEN)
-        system.reorder_variables(self.ORDER_AS_WRITTEN)
+        system.reorder_symbols(self.ORDER_AS_WRITTEN)
         return system
 
     def lumped(self):
         system = ODESystem.from_tex(self.LUMPED)
-        system.reorder_variables(self.ORDER_LUMPED)
+        system.reorder_symbols(self.ORDER_LUMPED)
         return system
 
     def test_as_written_it_has_two_symmetries_and_one_unit_of_material(self):
@@ -2356,10 +2356,10 @@ class TestTheTwoCompartmentModel(TestCase):
     def test_the_relation_or_the_same_unit_gives_two_symmetries_back(self):
         related = ODESystem.from_tex(self.LUMPED)
         related.add_constraint(lhs='b_22', rhs='a_2 + a_12')
-        related.reorder_variables(self.ORDER_RELATED)
+        related.reorder_symbols(self.ORDER_RELATED)
         same_unit = ODESystem.from_tex(self.LUMPED)
         same_unit.require_same_unit({'b_22': 'a_12'})
-        same_unit.reorder_variables(self.ORDER_SAME_UNIT)
+        same_unit.reorder_symbols(self.ORDER_SAME_UNIT)
         z_1, z_2 = sympy.symbols('z_1 z_2')
         for system in (related, same_unit):
             self.assertEqual(

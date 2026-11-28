@@ -63,7 +63,7 @@ Stores a system of ODEs as parallel tuples of `symbols` and `derivatives`. The i
   the private `ODESystem._from_variables`; nothing public does.
 - `exponent_matrix()` — build the exponent (power) matrix used by the scaling algorithm
 - `maximal_scaling_matrix()` — compute the scaling matrix `A` from the system
-- `reorder_variables(order)` — variable order affects which parameters get normalised out
+- `reorder_symbols(order)` — the symbol order affects which parameters get normalised out
 - `update_initial_conditions(...)`, `add_constraint(lhs, rhs)` — enrich the system before reduction
 
 **`desr/ode_translation.py` — `ODETranslator`**
@@ -91,15 +91,21 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
 
 ### Key design notes
 
-- Variables are ordered; the order matters because the last variables tend to be "normalised out" (set to 1) during reduction. Use `reorder_variables()` to control this.
-- **Parameters versus dependent variables.** A variable with no equation is a *parameter*
-  (`system.parameters`); it is stored as `None` in `system.derivatives`. A variable with an
-  equation is a *dependent variable* (`system.dependent_variables`), and that includes a
-  conserved variable whose equation says `0` — writing `dw/dt = 0` is a deliberate
-  statement, not a way of declaring a constant. `parameters=[...]` at construction, or
-  `system.make_parameter(name)` afterwards, discards such an equation and makes the
-  variable a parameter. Say "parameter", never "constant"; `constant_variables`,
-  `num_constants` and `non_constant_variables` were removed in 2.0 without aliases.
+- Symbols are ordered; the order matters because the parameters placed first tend to be "normalised out" (set to 1) during reduction. Use `reorder_parameters()` to choose them, or `reorder_symbols()` for the whole order. Methods that order, count or collect every symbol say "symbols" in their names, never "variables".
+- **The vocabulary.** *Symbols* are every name a system declares, and what `n` counts;
+  symbols = parameters + variables. The *variables* are the ones that vary: the
+  independent variable and the dependent variables. Say "symbols" whenever parameters are
+  included — "the symbol order", "n symbols" — and "auxiliaries", never "auxiliary
+  variables", since an auxiliary may be a parameter.
+- **Parameters versus dependent variables.** A symbol with no equation is a *parameter*
+  (`system.parameters`); it is stored as `None` in `system.derivatives`. A symbol other than
+  the independent variable with an equation is a *dependent variable*
+  (`system.dependent_variables`), and that includes a conserved variable whose equation
+  says `0` — writing `dw/dt = 0` is a deliberate statement, not a way of declaring a
+  parameter. `parameters=[...]` at construction, or `system.make_parameter(name)`
+  afterwards, discards such an equation and makes the symbol a parameter. Say
+  "parameter", never "constant"; `constant_variables`, `num_constants` and
+  `non_constant_variables` were removed in 2.0 without aliases.
 - `repr` lists only variables that have equations, then names the parameters on a
   `parameters:` line. `to_tex` omits parameters entirely.
 - **pytest is the primary test mechanism**, in the top-level `tests/`. Doctests are
@@ -129,7 +135,7 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   for the parameter scheme, Hubert & Labahn's `x` and `y` for the general and
   dependent-variable schemes, which also keep the system's own clock unless `independent` says
   otherwise. Whatever is set is honoured by all of them. The positional 3-tuple was removed in
-  2.0: its order followed the variable order, which changed, so re-reading it would have
+  2.0: its order followed the symbol order, which changed, so re-reading it would have
   silently re-pointed every entry.
 - `exponent_matrix` was previously called `power_matrix` — watch for stale references in docs/comments.
 

@@ -133,7 +133,7 @@ class TestTheExampleReactionNetworks(TestCase):
             with self.subTest(network=label):
                 translator = ODETranslator(system)
                 reduced = translator.translate()
-                self.assertEqual(translator.expected_variable_count(),
+                self.assertEqual(translator.expected_symbol_count(),
                                  len(reduced.symbols))
                 self.assertLess(len(reduced.symbols), len(system.symbols))
 

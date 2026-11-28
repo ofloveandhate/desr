@@ -62,7 +62,7 @@ class TestODETranslatorTraps(TestCase):
                              indep_var=system.indep_var)
         # Parameters, then the independent variable, then the dependents.  The scaling
         # matrix below is unchanged by the move because its pattern repeats with period 3.
-        extended.reorder_variables(['t0', 'z10', 'z20', 't', 'z1', 'z2'])
+        extended.reorder_symbols(['t0', 'z10', 'z20', 't', 'z1', 'z2'])
         # Each constant is a starting value, measured in the unit of its variable.
         extended.require_same_unit({'t0': 't', 'z10': 'z1', 'z20': 'z2'})
         translator = ODETranslator(extended)
@@ -94,7 +94,7 @@ class TestODETranslatorTraps(TestCase):
         # order: the auxiliaries, then the invariants as forward_monomials lists them.
         system = ODESystem.from_equations(['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
                                            'dp/dt = s*p*(1 - h*p / n)'])
-        system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        system.reorder_symbols(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
         translator = ODETranslator(system, naming_scheme={
             'parameters': 'c', 'independent': 't', 'dependents': ['n', 'p']})
         self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
@@ -170,7 +170,7 @@ class TestATranslatorIsBuiltFromItsSystem(TestCase):
         system = ODESystem.from_equations(self.PREDATOR_PREY)
         translator = ODETranslator(system)
         before = translator.translate()
-        system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        system.reorder_symbols(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
         self.assertEqual(before, translator.translate())
         self.assertNotEqual(tuple(system.symbols), tuple(translator.system.symbols))
 
@@ -305,7 +305,7 @@ class TestColumnLookup(TestCase):
         system.update_initial_conditions({'s': 's_0'})
         system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
         system.add_constraint('epsilon', 'e_0 / (s_0 + K_m)')
-        system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon',
+        system.reorder_symbols(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon',
                                   't', 's', 'c'])
         translator = ODETranslator(system, naming_scheme={
             'parameters': 'c', 'independent': 'tau', 'dependents': ['s', 'c']})
@@ -565,7 +565,7 @@ class TestInvariantClassification(TestCase):
                 self.assertEqual(r, tally.get('auxiliary', 0))
                 self.assertEqual(n - r, tally.get('parameter', 0) + tally.get('dependent', 0))
                 self.assertEqual(n + 1, len(kinds))
-                self.assertEqual(n + 1, translator.expected_variable_count(scheme='general', **faithful))
+                self.assertEqual(n + 1, translator.expected_symbol_count(scheme='general', **faithful))
 
     def test_the_extra_variable_goes_to_the_identification(self):
         '''
@@ -586,7 +586,7 @@ class TestInvariantClassification(TestCase):
                 self.assertEqual(n + 1 - normalised - identified,
                                  len(reduced.symbols))
                 self.assertEqual(len(reduced.symbols),
-                                 translator.expected_variable_count(scheme='general'))
+                                 translator.expected_symbol_count(scheme='general'))
 
     def test_auxiliaries_are_their_own_kind(self):
         translator = ODETranslator(self.prey_predator)
@@ -671,12 +671,12 @@ class TestNamingScheme(TestCase):
         self.general_system = ODESystem.from_equations(
             ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        self.general_system.reorder_variables(['t', 'z1', 'z2'])
+        self.general_system.reorder_symbols(['t', 'z1', 'z2'])
         # Michaelis-Menten: the parameter scheme.
         self.parameter_system = ODESystem.from_equations(
             ['ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
-        self.parameter_system.reorder_variables(['e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+        self.parameter_system.reorder_symbols(['e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
     def names(self, system):
         return tuple(map(str, system.symbols))
@@ -1242,7 +1242,7 @@ class TestExplicitNamesAreTheCallersChoice(TestCase):
 
     def system(self):
         system = ODESystem.from_equations(self.EQUATIONS)
-        system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        system.reorder_symbols(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
         return system
 
     def test_explicitly_reusing_the_original_dependent_names_is_allowed(self):
@@ -1509,7 +1509,7 @@ class TestMurraySixTwenty(TestCase):
              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
         system.add_constraint('Km', '(k_m1 + k_2) / k_1')
         system.update_initial_conditions({'s': 's0'})
-        system.reorder_variables(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km',
+        system.reorder_symbols(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km',
                                   't', 'c', 's'])
         self.system = system
         # Dependents come in the order (c, s), so Murray's names go (v, u).
@@ -1618,7 +1618,7 @@ class TestAnInitialConditionThatIsAMonomial(TestCase):
              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
         system.add_constraint('Km', '(k_m1 + k_2) / k_1')
         system.update_initial_conditions({'s': 's0', 'c': 0})
-        system.reorder_variables(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0',
+        system.reorder_symbols(['s0', 'e_0', 'k_1', 'k_2', 'k_m1', 'Km', 'c_0',
                                   't', 'c', 's'])
         self.system = system
         self.translator = ODETranslator(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau',
@@ -1846,7 +1846,7 @@ class TestMurraySixThirteenAsThePageDoesIt(TestCase):
              'dc/dt = k_1*e_0*s - k_1*c*s - k_m1*c - k_2*c'])
         system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
         system.update_initial_conditions({'s': 's_0', 'c': 0})
-        system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0',
+        system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0',
                                   't', 's', 'c'])
         self.system = system
         self.translator = ODETranslator(system, naming_scheme={'parameters': 'kappa', 'independent': 'tau',
@@ -2576,7 +2576,7 @@ class TestTheClockIsNotAlsoAnAuxiliary(TestCase):
 
         reduced = translator.translate()
         self.assertEqual((), reduced.auxiliary_names)
-        self.assertEqual(translator.expected_variable_count(),
+        self.assertEqual(translator.expected_symbol_count(),
                          len(reduced.symbols))
 
     def test_the_recovery_no_longer_has_a_free_variable_that_is_not_free(self):
