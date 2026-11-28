@@ -253,7 +253,7 @@ Reading it off a figure
 :meth:`~desr.ode_translation.ODETranslator.symbol_graph` carries both axes as separate
 node attributes -- ``kind`` for the first and ``auxiliary`` for the second -- and
 :func:`~desr.symbol_graph.draw_symbol_graph` gives each its own visual channel, so a
-hatched square is an auxiliary that is a constant and a hatched circle is one that must be
+hatched square is an auxiliary that is a parameter and a hatched circle is one that must be
 integrated.  There is a worked figure in :doc:`examples/mm_init_cond`.
 
     >>> graph = transl.symbol_graph()

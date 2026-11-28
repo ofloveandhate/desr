@@ -11,7 +11,7 @@ This module needs :mod:`numpy`.  It is deliberately not imported by ``desr/__ini
 so :mod:`desr` itself keeps no numerical dependencies.
 
 All three reduction schemes are supported, and they differ in what you must supply to come
-back.  The reduction hides :math:`r` scaling symmetries in :math:`r` *auxiliary* variables.
+back.  The reduction hides :math:`r` scaling symmetries in :math:`r` *auxiliaries*.
 
 - Under the general and dependent-variable schemes the auxiliaries are variables of the
   reduced system, so a solution of it already carries them and nothing else is needed.
@@ -213,7 +213,7 @@ class NumericTranslator(object):
     @property
     def r(self):
         '''
-        int: The number of scaling symmetries, and so the number of auxiliary variables the
+        int: The number of scaling symmetries, and so the number of auxiliaries the
         reduction hides.  When the reduced system does not carry them, this is how many
         values :meth:`reverse` needs in ``known_values``.
         '''
@@ -222,7 +222,7 @@ class NumericTranslator(object):
     @property
     def carries_auxiliaries(self):
         '''
-        bool: Whether the reduced system carries the auxiliary variables itself.  When it
+        bool: Whether the reduced system carries the auxiliaries itself.  When it
         does, :meth:`reverse` needs no ``known_values``.
 
         A reduction may carry some of its auxiliaries and *normalise* the rest, which
@@ -244,9 +244,10 @@ class NumericTranslator(object):
         So this can be shorter than :attr:`r`, and it agrees with the reduced system's own
         :attr:`~desr.ode_system.ODESystem.auxiliary_names`.
 
-        *symbols*, not *variables*: an auxiliary is a normalised direction and may be a
-        parameter of the reduced system rather than something that varies -- under the
-        general scheme they usually are, being monomials in the original parameters.
+        *symbols*, not *variables*: an auxiliary may be a parameter of the reduced system
+        rather than something that varies.  With ``normalise_parameters=False`` the general
+        scheme keeps the auxiliaries that are monomials in the original parameters, and
+        those are parameters.
         '''
         clock = self.reduced.independent_variable
         return tuple(x for x in self._auxiliaries
@@ -258,7 +259,7 @@ class NumericTranslator(object):
         tuple: The symbols of the reduced system that are invariants.
 
         *symbols* for the same reason: under the parameter scheme the invariants include
-        the reduced constants, which are parameters and do not vary.
+        the reduced parameters, which do not vary.
         '''
         return tuple(self._invariants)
 
@@ -267,15 +268,15 @@ class NumericTranslator(object):
         Translate values of the original system into values of the reduced system.
 
         Args:
-            values (dict): Values of variables of the original system.  Anything the given
+            values (dict): Values of symbols of the original system.  Anything the given
                 values determine is returned, so a partial dictionary is fine -- passing
-                only the constants and the independent variable translates the time axis.
+                only the parameters and the independent variable translates the time axis.
 
         Returns:
-            dict: Keyed by the variables of the reduced system.
+            dict: Keyed by the symbols of the reduced system.
 
         Raises:
-            ValueError: If ``values`` names something that is not a variable of the original
+            ValueError: If ``values`` names something that is not a symbol of the original
                 system, or determines nothing at all.
         '''
         values = self._check(values, self.system.symbols, 'the original system')
@@ -300,26 +301,26 @@ class NumericTranslator(object):
 
         There are two situations, told apart by the shape of ``values``.
 
-        **A single point** -- every value a scalar.  Any variable of the original system may
+        **A single point** -- every value a scalar.  Any symbol of the original system may
         be given in ``known_values``, since at one point a dependent variable is just a
         number.  Purely arithmetic.
 
         **A series** -- some value an array, such as a solution over time.  Then
-        ``known_values`` may name only *constants* of the original system.  A dependent
+        ``known_values`` may name only *parameters* of the original system.  A dependent
         variable is a function of time, not a number, and the series already says how it
         varies; giving it a single value would mix point translation with series
-        translation.  If the reduced system does not carry its auxiliary variables and
+        translation.  If the reduced system does not carry its auxiliaries and
         they vary along the solution, they are recovered by integrating their equations
         -- see :meth:`recover_auxiliaries` -- which needs :mod:`scipy`.
 
         Args:
-            values (dict): Values of variables of the reduced system.  A partial dictionary
+            values (dict): Values of symbols of the reduced system.  A partial dictionary
                 is fine; anything it determines is returned.
-            known_values (dict, optional): Values of variables of the original system that
+            known_values (dict, optional): Values of symbols of the original system that
                 you already know.  Needed when the reduced system does not carry the
-                auxiliary variables -- see :attr:`carries_auxiliaries` -- and rejected when
+                auxiliaries -- see :attr:`carries_auxiliaries` -- and rejected when
                 it does, since then the original system is already determined.  In a series,
-                constants only.
+                parameters only.
             auxiliaries (iter, optional): The :attr:`r` auxiliary values themselves, in the
                 order of :attr:`auxiliary_names`, as an alternative to ``known_values``.
                 Obtain them from :meth:`auxiliaries_from` at a single point.  This is how a
@@ -333,7 +334,7 @@ class NumericTranslator(object):
                 the auxiliaries have to be integrated.
 
         Returns:
-            dict: Keyed by the variables of the original system.
+            dict: Keyed by the symbols of the original system.
 
         Raises:
             InsufficientKnownValues: If the auxiliaries are needed and neither
@@ -379,14 +380,14 @@ class NumericTranslator(object):
         if known_values or auxiliaries is not None:
             raise ValueError(
                 'Neither known_values nor auxiliaries is needed here: the reduced system '
-                'carries the auxiliary variables {} itself, so the original system is '
+                'carries the auxiliaries {} itself, so the original system is '
                 'already determined.'.format(', '.join(map(str, self._auxiliaries))))
         missing = [x for x in self._auxiliaries if values.get(x) is None]
         if missing:
             raise InsufficientKnownValues(
-                'No value given for the auxiliary variable{} {}, which the original system '
+                'No value given for the auxiliar{} {}, which the original system '
                 'cannot be recovered without.'.format(
-                    '' if len(missing) == 1 else 's', # pluralization, lol
+                    'y' if len(missing) == 1 else 'ies', # pluralization, lol
                     ', '.join(map(str, missing)))) # the vars to report
         return [values[x] for x in self._auxiliaries]
 
@@ -403,7 +404,7 @@ class NumericTranslator(object):
     def _reverse_point(self, values, known_values, auxiliaries, tolerance):
         '''
         One point.  The auxiliaries need not be constant along a solution to have a value
-        here, so this works under every scheme, and any variable may be a known value.
+        here, so this works under every scheme, and any symbol may be a known value.
         '''
         if self.carries_auxiliaries:
             return self._carried_auxiliaries(values, known_values, auxiliaries)
@@ -414,7 +415,7 @@ class NumericTranslator(object):
     def _reverse_series(self, values, known_values, auxiliaries, invariants_at, tolerance,
                         solver_options):
         '''
-        A series.  Known values must be constants; a dependent variable given a single
+        A series.  Known values must be parameters; a dependent variable given a single
         value is the caller mixing the two situations up.
         '''
         if self.carries_auxiliaries:
@@ -444,9 +445,9 @@ class NumericTranslator(object):
     def auxiliaries_from(self, values, known_values, tolerance=CONSISTENCY_TOLERANCE,
                          allowed=None):
         '''
-        Solve for the auxiliary variables at one point, from values you already know there.
+        Solve for the auxiliaries at one point, from values you already know there.
 
-        Each original variable is a monomial in the auxiliaries and the invariants, so every
+        Each original symbol is a monomial in the auxiliaries and the invariants, so every
         known value gives one equation in the :attr:`r` auxiliaries.  Any number of known
         values may be supplied: too few, or a set that happens to constrain the same scale
         twice, raises :class:`InsufficientKnownValues` with a message saying what would
@@ -454,18 +455,18 @@ class NumericTranslator(object):
         :class:`ConflictingKnownValues` is raised if they do not.
 
         This is the point situation of :meth:`reverse`: ``values`` should be scalars, the
-        reduced values at the one point where the known values hold, and any variable of the
+        reduced values at the one point where the known values hold, and any symbol of the
         original system may be known there.  The result can then be handed to
         :meth:`reverse` as ``auxiliaries=`` to translate a whole series.
 
         Args:
-            values (dict): Values of variables of the reduced system at one point.
-            known_values (dict): Values of variables of the original system at that point,
+            values (dict): Values of symbols of the reduced system at one point.
+            known_values (dict): Values of symbols of the original system at that point,
                 each a single number.
             tolerance (float): Relative tolerance for the known values to agree with each
                 other and with the reduced values.
-            allowed (iter, optional): Restrict which variables may be known.  Used by the
-                series situation, where only constants may.
+            allowed (iter, optional): Restrict which symbols may be known.  Used by the
+                series situation, where only parameters may.
 
         Returns:
             list: The auxiliary values, in the order of the columns of
@@ -507,16 +508,16 @@ class NumericTranslator(object):
             if known == 0:
                 raise ValueError(
                     'The known value of {} is zero, and a zero cannot determine a scale.  '
-                    'Every variable of the original system is a product of powers of the '
+                    'Every symbol of the original system is a product of powers of the '
                     'reduced ones, so no rescaling turns a nonzero value into zero or back.  '
-                    'Supply the value of a variable that is nonzero here.'.format(variable))
+                    'Supply the value of a symbol that is nonzero here.'.format(variable))
             invariant_part = _eval_monomial(invariants, W[self.r:, :], i)
             if invariant_part == 0:
                 zero = [y for y in needed if _first(values[y]) == 0]
                 raise ValueError(
                     'The known value of {} cannot be used: at this point the reduced '
                     'value{} of {} {} zero, and a zero cannot determine a scale.  Supply the '
-                    'value of a variable that is nonzero here instead.'.format(
+                    'value of a symbol that is nonzero here instead.'.format(
                         variable, '' if len(zero) == 1 else 's', ', '.join(map(str, zero)),
                         'is' if len(zero) == 1 else 'are'))
             residuals.append(known / invariant_part)
@@ -547,16 +548,16 @@ class NumericTranslator(object):
         square = coefficients.extract(independent, range(self.r))
         exponents = square.inv()
         if not all(entry.is_integer for entry in exponents):
-            # The scaling acts on the chosen variables only through powers sharing a common
+            # The scaling acts on the chosen symbols only through powers sharing a common
             # factor, so they fix the scale only up to a root of unity: unique over the
             # reals for odd degree, a sign choice for even.  Resolving that is not implemented.
             index = abs(square.det())
             raise NotImplementedError(
                 'Recovering the original system from the known values {} would need roots '
                 'of degree {}, which is not yet supported.  The scaling acts on these '
-                'variables only through powers with a common factor of {}, so between them '
+                'symbols only through powers with a common factor of {}, so between them '
                 'they fix the scale of the original system only up to such a root{}.  Supply '
-                'instead a known value of a variable that the scaling acts on with power '
+                'instead a known value of a symbol that the scaling acts on with power '
                 '1.'.format(', '.join(map(str, known_values)), index, index,
                             ', whose sign would be undetermined' if index % 2 == 0 else ''))
         auxiliaries = [_eval_monomial([residuals[row] for row in independent], exponents.T, j)
@@ -575,7 +576,7 @@ class NumericTranslator(object):
     @property
     def auxiliaries_are_constant(self):
         '''
-        bool: Whether the auxiliary variables are constant along a solution.
+        bool: Whether the auxiliaries are constant along a solution.
 
         When they are, recovering the original system is arithmetic.  When they are not,
         they satisfy :math:`dx_j/dt = x_j H_j`, which :meth:`recover_auxiliaries` integrates
@@ -589,7 +590,7 @@ class NumericTranslator(object):
 
     def auxiliary_growth_rates(self):
         '''
-        The relative growth rates of the auxiliary variables.
+        The relative growth rates of the auxiliaries.
 
         The reduction gives each auxiliary an equation of the form
         :math:`dx_j / dt = x_j H_j`, where :math:`H_j` involves the invariants and the
@@ -639,7 +640,7 @@ class NumericTranslator(object):
         '''
         if self._growth_rates is None:
             if self.scheme == ReductionScheme.PARAMETER:
-                # The parameter scheme normalises only constants, so its auxiliaries never
+                # The parameter scheme normalises only parameters, so its auxiliaries never
                 # move, and the reduced system does not carry them to ask.
                 self._growth_rates = [sympy.Integer(0)] * self.r
             else:
@@ -682,7 +683,7 @@ class NumericTranslator(object):
                 for rate, name in zip(rates, self._auxiliaries):
                     if named and rate.has(*named):
                         raise ValueError(
-                            'The equation for {} depends on an auxiliary variable, so the '
+                            'The equation for {} depends on an auxiliary, so the '
                             'auxiliaries are not a quadrature.'.format(name))
                 self._growth_rates = rates
         return list(self._growth_rates)
@@ -718,7 +719,7 @@ class NumericTranslator(object):
                             invariants_at=None, tolerance=CONSISTENCY_TOLERANCE,
                             **solver_options):
         '''
-        Recover the auxiliary variables along a series, when the reduced system does not
+        Recover the auxiliaries along a series, when the reduced system does not
         carry them.
 
         This is what :meth:`reverse` does for a series; call it directly to see the
@@ -732,10 +733,10 @@ class NumericTranslator(object):
         turn out to be constant no integration happens at all.
 
         The values at the first sample come from one of two places: from ``known_values``,
-        which in a series may name only *constants* of the original system; or from
+        which in a series may name only *parameters* of the original system; or from
         ``auxiliaries`` directly, as computed by :meth:`auxiliaries_from` at a point -- the
         way to use a point value of a dependent variable, such as an initial condition for
-        a system that has no constant standing for it.
+        a system that has no parameter standing for it.
 
         **An auxiliary the reduced system still carries is read from the series.**  A
         reduction that normalised its constant auxiliaries and kept one that moves has
@@ -752,10 +753,10 @@ class NumericTranslator(object):
         everywhere.  That quotient is replaced by its constant.
 
         Args:
-            values (dict): Values of variables of the reduced system: the independent
+            values (dict): Values of symbols of the reduced system: the independent
                 variable as an array of times, and every invariant as an array of the same
                 length or a scalar.
-            known_values (dict, optional): Values of constants of the original system.
+            known_values (dict, optional): Values of parameters of the original system.
             auxiliaries (iter, optional): The :attr:`r` auxiliary values at the first
                 sample, as an alternative to ``known_values``.
             invariants_at (callable, optional): ``f(t)`` returning the invariants at time
@@ -775,7 +776,7 @@ class NumericTranslator(object):
         values = self._check(values, self.reduced.symbols, 'the reduced system')
         if self.carries_auxiliaries:
             raise ValueError(
-                'The reduced system carries the auxiliary variables {} itself, so there is '
+                'The reduced system carries the auxiliaries {} itself, so there is '
                 'nothing to recover.  Read them from the solution.'.format(
                     ', '.join(map(str, self._auxiliaries))))
         if known_values is not None and auxiliaries is not None:
@@ -840,7 +841,7 @@ class NumericTranslator(object):
             from scipy.integrate import solve_ivp
         except ImportError:  # pragma: no cover
             raise ImportError(
-                'Recovering auxiliary variables that vary along the solution needs scipy.  '
+                'Recovering auxiliaries that vary along the solution needs scipy.  '
                 'Install it with `pip install scipy`.')
 
         if invariants_at is None:
@@ -858,14 +859,14 @@ class NumericTranslator(object):
         signs = [np.sign(float(x)) for x in start]
         if any(sign == 0 for sign in signs):
             raise ValueError(
-                'An auxiliary variable is zero at the first time point, where the change of '
+                'An auxiliary is zero at the first time point, where the change of '
                 'variables is singular, so the solution cannot be translated back.')
 
         at_start = np.asarray(rate_of(times[0], np.asarray(invariants_at(times[0]))),
                               dtype=float)
         if not np.all(np.isfinite(at_start)):
             raise ValueError(
-                'The rate of an auxiliary variable is not finite at {} = {}, the first '
+                'The rate of an auxiliary is not finite at {} = {}, the first '
                 'point of the series, so it cannot be integrated from there.'.format(
                     self.reduced.independent_variable, times[0]))
 
@@ -874,7 +875,7 @@ class NumericTranslator(object):
             (times[0], times[-1]), np.log(np.abs([float(x) for x in start])),
             t_eval=times, **dict({'rtol': 1e-10, 'atol': 1e-12}, **options))
         if not integrated.success:  # pragma: no cover
-            raise RuntimeError('Could not integrate the auxiliary variables: {}'.format(
+            raise RuntimeError('Could not integrate the auxiliaries: {}'.format(
                 integrated.message))
         return [sign * np.exp(row) for sign, row in zip(signs, integrated.y)]
 
@@ -949,7 +950,7 @@ class NumericTranslator(object):
             zeros = np.flatnonzero(along == 0)
             if len(zeros):
                 raise ValueError(
-                    'The auxiliary variables cannot be recovered along this series.  '
+                    'The auxiliaries cannot be recovered along this series.  '
                     'Their rate {} divides by {}, which is zero at {} = {}.  The system '
                     'is singular there in these variables, so a series has to stay away '
                     'from that point.'.format(
@@ -960,7 +961,7 @@ class NumericTranslator(object):
         for j, out in enumerate(outputs):
             if not isinstance(out, sympy.Symbol):
                 # A column the reduction normalised away: its value is the 1 recorded
-                # here, so there is no variable to report it against.
+                # here, so there is no symbol to report it against.
                 continue
             required = [i for i in range(exponents.rows) if exponents[i, j] != 0]
             if all(ordered[i] is not None for i in required):
@@ -972,7 +973,7 @@ class NumericTranslator(object):
         unknown = set(values) - set(variables)
         if unknown:
             raise ValueError(
-                'Not variables of {}: {}.  Expected some of: {}.'.format(
+                'Not symbols of {}: {}.  Expected some of: {}.'.format(
                     description, ', '.join(sorted(map(str, unknown))),
                     ', '.join(map(str, variables))))
         return values
@@ -1012,9 +1013,9 @@ class NumericTranslator(object):
 
         The kernel of the coefficient matrix is the set of rescalings of the auxiliaries that
         leave every known value unchanged.  Mapped through W, each kernel direction is a
-        rescaling of the original system; the variables it moves are exactly the ones whose
+        rescaling of the original system; the symbols it moves are exactly the ones whose
         values would help -- provided they may be known here, and can be used, which a
-        variable whose reduced value is zero at this point cannot.
+        symbol whose reduced value is zero at this point cannot.
         '''
         W = self._inv_herm_mult
         kernel = coefficients.nullspace() if coefficients.rows else [
@@ -1053,7 +1054,7 @@ class NumericTranslator(object):
                          missing))
         if len(candidates) < missing:
             # Nothing that may be known here can pin what is left.  In a series that
-            # means the remaining freedom moves only things that vary, and a constant
+            # means the remaining freedom moves only things that vary, and a parameter
             # cannot fix those; a list of candidates would be empty or too short, and
             # offering it would send the caller looking for a value that does not exist.
             restricted = set(allowed) != set(self._acted)
@@ -1064,9 +1065,9 @@ class NumericTranslator(object):
                     'fixes' if not candidates else 'can help fix'))
             if restricted:
                 lines.append(
-                    'A series accepts only constants, and what is still free rescales '
+                    'A series accepts only parameters, and what is still free rescales '
                     'only quantities that vary.  Compute the auxiliaries at one point '
-                    'with auxiliaries_from(), where a value of any variable may be given, '
+                    'with auxiliaries_from(), where a value of any symbol may be given, '
                     'and pass them as auxiliaries=.')
         elif missing == 1:
             lines.append('Supply the value of one of: {}.'.format(
@@ -1078,7 +1079,7 @@ class NumericTranslator(object):
         return '\n'.join(lines)
 
     def _describe_rescaling(self, direction):
-        '''Render one kernel direction as the rescaling of original variables it induces.'''
+        '''Render one kernel direction as the rescaling of original symbols it induces.'''
         W = self._inv_herm_mult
         by_power = {}
         for i, variable in enumerate(self._acted):

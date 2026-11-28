@@ -40,7 +40,7 @@ The model as written
     >>> system.parameters
     (a_1, a_12, a_2, u_2)
 
-The reduction uses as units the parameters at the front of the variable order; see
+The reduction uses as units the parameters at the front of the symbol order; see
 :meth:`~desr.ode_system.ODESystem.reorder_variables`.  The input :math:`u_2` and the
 loss rate :math:`a_2` of compartment 2 go first:
 
@@ -96,7 +96,7 @@ Given to the reduction in that form:
     >>> substituted.dimensions_of()
     {u_2: [z_2]/[t], b_22: 1/[t], a_12: [z_1]/([t]*[z_2]), a_1: 1/[t], t: [t], z_1: [z_1], z_2: [z_2]}
 
-The variable order is the same, with :math:`b_{22}` in the place of :math:`a_2`, and
+The symbol order is the same, with :math:`b_{22}` in the place of :math:`a_2`, and
 :math:`a_{12}` third.  There now appear to be three symmetries, and so the first three parameters
 are used as units.  The two compartments have separate units, and
 :math:`a_{12}` has become a conversion factor between them.  Nothing in these two

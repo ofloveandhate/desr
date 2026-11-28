@@ -63,13 +63,13 @@ carries the units into the scaling.  The name is inferred from the variable:
 
 Reading the two together: the name for :math:`c(0)` is :math:`c_0`, and :math:`c_0` has value zero.
 
-Choose the variable order.  :math:`c_0` goes towards the back, which is the end that is
+Choose the symbol order.  :math:`c_0` goes towards the back, which is the end that is
 *kept*: the front is the end that gets scaled by, and a quantity known to be zero must not
 be scaled by, lest we are required to divide by zero.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
-Now the exponent matrix can be read against that order: one row per variable, in the order
+Now the exponent matrix can be read against that order: one row per symbol, in the order
 just chosen; one column per monomial appearing in the system.
 
     >>> system.exponent_matrix()

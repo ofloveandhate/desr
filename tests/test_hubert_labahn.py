@@ -88,7 +88,7 @@ class TestExample66(TestCase):
     reproduce, which makes it the test that matters most.
 
     The paper prints the scaling matrix [3 -1 5] over (t, z1, z2), the invariants
-    y1 = t*z1**3 and y2 = z1**2*z2/t, and the auxiliary variable x = t*z1**2.
+    y1 = t*z1**3 and y2 = z1**2*z2/t, and the auxiliary x = t*z1**2.
     '''
 
     EQUATIONS = ['dz1/dt = z1/t * (-2/3 + 1/3 *z1**5 *z2 )',

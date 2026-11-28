@@ -54,7 +54,7 @@ the Michaelis constant
 
     >>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
+Choose a symbol order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
@@ -126,7 +126,7 @@ The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), an
 
     >>> system.add_constraint('epsilon = e_0 / (s_0 + K_m)')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
+Choose a symbol order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
 
@@ -253,7 +253,7 @@ After the pre-steady state
 ***********************************
 
 Computing equations :cite:`Segel1989` (24a-b).  Note that we start from a copy of the translator
-above, rather than a fresh one: :cite:`Segel1989` (24a-b) uses the same state variables as (21a-d),
+above, rather than a fresh one: :cite:`Segel1989` (24a-b) uses the same dependent variables as (21a-d),
 and only the clock changes.  The three column operations act on the time column alone.
 
     >>> # Scale t correctly to t/t_S = k_2 epsilon t
@@ -312,7 +312,7 @@ Fast transient time scale
 
 Let's first work in the fast transient time scale (:cite:`murray` eqn 6.15).  We have :math:`t_c = \frac{1}{k_1 (s_0 + K_m)}`.  Our time variable is :math:`\tau = \frac{t}{t_c} = k_1 (s_0 + K_m) \, t`.
 
-We can work with the expression :math:`s_0 + K_m` systematically by adding a new variable :math:`L = s_0 + K_m` via a constraint.
+We can work with the expression :math:`s_0 + K_m` systematically by adding a new parameter :math:`L = s_0 + K_m` via a constraint.
 
     >>> system_l.add_constraint('L', 's_0 + K_m')
 
@@ -367,7 +367,7 @@ Putting :math:`K_m` at the front, we have
 
 
 In the invariants, first come the scale-invariant coefficients, then the time variable, then the two
-"space" variables.  The coefficients are:
+dependent variables.  The coefficients are:
 
 .. math::
     :nowrap:
@@ -462,7 +462,7 @@ Translate and reduce the system
 These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.
 
 
-First, the time and state variables:
+First, the time and dependent variables:
 
 .. math::
     :nowrap:

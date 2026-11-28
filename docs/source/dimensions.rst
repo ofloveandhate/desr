@@ -151,7 +151,7 @@ The two auxiliaries are the units, and the table already knows one measures what
 value — a quantity divided by the unit it is measured in — and every value's dimension
 is 1, which is what makes the reduced system dimensionless.
 Aside from Silviana: this is SUPER cool.  We never had to name the dimensions or units of any symbol,
-just sensibly name our variables, and the system itself contains the structure that
+just sensibly name our symbols, and the system itself contains the structure that
 time and concentration are the two dimensions in this system.  Amazing.
 
 Now the **same table with two declarations**:

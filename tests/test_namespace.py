@@ -103,8 +103,8 @@ class TestWhatImportDesrLoads(TestCase):
     for the tests, so whether `import desr` loads them has to be asked of a fresh
     interpreter.  It must not: they are loaded by the parts that use them.
 
-    `desr.numerics` needs numpy at import; scipy is needed only for recovering auxiliary
-    variables that vary along the solution, and is imported where it is used.
+    `desr.numerics` needs numpy at import; scipy is needed only for recovering
+    auxiliaries that vary along the solution, and is imported where it is used.
     '''
 
     @staticmethod
@@ -154,6 +154,6 @@ class TestWhatImportDesrLoads(TestCase):
 
     def test_scipy_stays_unimported_until_a_solver_is_needed(self):
         # desr.numerics needs numpy to exist at all, but scipy only for recovering
-        # auxiliary variables that vary along the solution, so it is imported at the point
+        # auxiliaries that vary along the solution, so it is imported at the point
         # of use with its own ImportError message.
         self.assertNotIn('scipy', self.modules_after('import desr.numerics'))

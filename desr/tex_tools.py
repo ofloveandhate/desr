@@ -60,10 +60,10 @@ def _var_repler(var):
 
 def var_to_tex(var):
     """
-    Given a sympy variable, write out the TeX.
+    Given a sympy symbol, write out the TeX.
 
     Args:
-        var (sympy.Symbol): Variable to turn into TeX
+        var (sympy.Symbol): Symbol to turn into TeX
     Returns:
         str
 
@@ -262,7 +262,7 @@ def _as_name(text, source):
     name = re.sub(r'\s+', '', text.strip())
     if not name or not _NAME.match(name):
         raise TexParseError(
-            '{!r} does not name a variable, so {!r} cannot be read.  A name starts with a '
+            '{!r} does not name a symbol, so {!r} cannot be read.  A name starts with a '
             'letter or underscore and continues with letters, digits or '
             'underscores.'.format(name, source.strip()))
     return name
@@ -273,7 +273,7 @@ def _resolve_text_mode(tex):
     Replace every text-mode group by the name it holds.
 
     Concentration brackets inside the group are part of the notation, not the name, so
-    ``\textrm{[total Cdc25]}`` is the variable ``totalCdc25``.  Runs to a fixed point, so a
+    ``\textrm{[total Cdc25]}`` is the symbol ``totalCdc25``.  Runs to a fixed point, so a
     text-mode group inside a subscript -- ``k_{\textrm{wee}}`` -- is resolved too.
     '''
     def replace(match):
@@ -372,7 +372,7 @@ def tex_to_sympy(tex, primes='name'):
 
     Args:
         tex (str): LaTeX
-        primes (str): ``'name'`` (the default) reads a prime as part of the variable's
+        primes (str): ``'name'`` (the default) reads a prime as part of the symbol's
             name; ``'derivative'`` reads one on the left of an equation as a derivative.
             See :func:`tex_to_sympy_one_line`.
 
@@ -409,7 +409,7 @@ def tex_to_sympy_one_line(tex, primes='name'):
         tex (str): LaTeX, just ONE line of it
         primes (str): How to read a prime.
 
-            ``'name'``, the default, makes it part of the variable's name, so ``V_{25}'``
+            ``'name'``, the default, makes it part of the symbol's name, so ``V_{25}'``
             is the symbol ``V_25prime``.  Papers use primes this way for two forms of the
             same quantity, and it is the reading that cannot be wrong by accident.
 
@@ -468,7 +468,7 @@ def _as_initial_condition(lhs, rhs, primes, tex):
     ``C(0) = C_0`` is how a paper writes one, and how
     :meth:`desr.ode_system.ODESystem.to_tex` writes one, but it cannot go through
     :func:`_parse_side`: a name against a parenthesis is multiplication there -- desr has
-    no function-valued variables -- so ``C(0)`` would become ``C*0`` and the line would
+    no function-valued symbols -- so ``C(0)`` would become ``C*0`` and the line would
     collapse.  So the side is recognised before that, and only when it is *entirely*
     ``name(0)``, which leaves `k_3(x - y)` a product and `C(t)` not an initial condition.
 
@@ -520,7 +520,7 @@ def _equation(lhs, rhs, tex):
                  'is false whatever the symbols stand for, so no system satisfies it')
     raise TexParseError(
         '{!r} was read as `{} = {}`, which {}.  A name against a parenthesis is '
-        'multiplication -- desr has no function-valued variables -- so `x(0)` reads as '
+        'multiplication -- desr has no function-valued symbols -- so `x(0)` reads as '
         '`x*0`.  An initial condition is set with '
         'ODESystem.update_initial_conditions.'.format(tex.strip(), lhs, rhs, complaint))
 
@@ -530,7 +530,7 @@ def _parse_prime_equation(lhs, rhs):
     if "'" in rhs:
         raise TexParseError(
             "primes='derivative' found a prime on the right of {!r}, where there is no "
-            "way to represent it.  Use primes='name' if the prime is part of a variable's "
+            "way to represent it.  Use primes='name' if the prime is part of a symbol's "
             "name.".format('='.join((lhs, rhs)).strip()))
 
     match = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*('+)\s*\Z", lhs)
@@ -546,7 +546,7 @@ def _parse_prime_equation(lhs, rhs):
     if len(marks) > 1:
         raise TexParseError(
             "{}{} is a second derivative, and desr describes first-order systems only.  "
-            "If the primes are part of the variable's name, parse with "
+            "If the primes are part of the symbol's name, parse with "
             "primes='name'.".format(name, marks))
 
     return _equation(sympy.Derivative(to_symbol(name), to_symbol(PRIME_INDEP_VAR)),
@@ -574,16 +574,16 @@ def _parse_side(tex, primes):
     # Turn \frac into ratios. Consume the shortest amount possible
     tex = re.sub(r'[\\f\ff]?rac{(.*?)}{(.*?)}', '((\\1) / (\\2))', tex)
 
-    # Turn spaces between variables into *. Do this by matching anything that isn't an operation
+    # Turn spaces between symbols into *. Do this by matching anything that isn't an operation
     # Use a lookahead assertion to get overlapping instances.
     tex = re.sub(r'([^+\-*\s/(]+)\s+(?=[^+\-*\s/)]+)', '\\1 * ', tex)
 
     # A name butted against a parenthesis is multiplication: desr has no function-valued
-    # variables, so `k_3(x - y)` can only be a product.
+    # symbols, so `k_3(x - y)` can only be a product.
     tex = re.sub(r'([A-Za-z0-9_]+)\s*\(', '\\1*(', tex)
 
     # Read every name as a symbol: a species called S, E, I, beta or pi is an ordinary
-    # variable, not one of sympy's own objects.
+    # symbol, not one of sympy's own objects.
     return sympify_expression(tex)
 
 if __name__ == '__main__':

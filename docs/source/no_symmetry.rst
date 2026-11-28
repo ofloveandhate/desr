@@ -95,7 +95,7 @@ provide their own scaling matrix...
 
 A matrix with no rows is not the same as a row of zeros.  A row of the scaling matrix is
 one scaling parameter :math:`\lambda_i`, and its entries are the powers of
-:math:`\lambda_i` that multiply each symbol.  A zero row is a parameter that multiplies
+:math:`\lambda_i` that multiply each symbol.  A zero row is a scaling parameter that multiplies
 nothing.  It adds no scaling, but it would be counted as a symmetry, and a reduction
 that quotients by a symmetry which is not there returns equations that are not true.
 

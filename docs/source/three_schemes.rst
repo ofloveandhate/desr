@@ -90,7 +90,7 @@ is easy to miss.
 The general scheme
 --------------------
 
-Always applicable, and the fallback.  It carries the auxiliaries as variables of their
+Always applicable, and the fallback.  It carries the auxiliaries it does not normalise as variables of their
 own — they are the quadratures you integrate afterwards to get back — and keeps the
 original system's own independent variable to integrate against.
 

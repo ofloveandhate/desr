@@ -70,10 +70,10 @@ name, so :math:`V_{25}'` and :math:`V_{25}''` are two parameters.
     >>> len(system.dependents), len(system.parameters)
     (7, 30)
 
-The order of the variables
+The order of the symbols
 ----------------------------
 
-The reduction uses as units the parameters at the front of the variable order; see
+The reduction uses as units the parameters at the front of the symbol order; see
 :meth:`~desr.ode_system.ODESystem.reorder_variables`.  The order is parameters, then
 the independent variable, then the dependent variables.
 
@@ -143,10 +143,10 @@ the comment "These parameters are arbitrarily set to 1": the four totals
 :math:`[\mathrm{total\ Cdc25}]`, :math:`[\mathrm{total\ Wee1}]`,
 :math:`[\mathrm{total\ IE}]`, :math:`[\mathrm{total\ APC}]`, and the phosphatase.
 Those are five of the seven symmetries: a unit for each of the four
-species, and the phosphatase's amount.  The variable order chosen above in this example
+species, and the phosphatase's amount.  The symbol order chosen above in this example
 makes the same choice for the four species.
 For the phosphatase's symmetry it sets :math:`k_h` to 1 whereas
-the table sets the phosphatase.  Changing the variable order produces different normalisations.
+the table sets the phosphatase.  Changing the symbol order produces different normalisations.
 
 Reduction
 ---------------
@@ -212,11 +212,11 @@ Typesetting it here, we can see the system:
 .. math-from-doctest:: reduced.to_tex()
 
 
-Reduction using a different variable order
+Reduction using a different symbol order
 -------------------------------------------
 
 The number of symmetries, and so the number of parameters removed, does not depend on
-the order.  The choice of units does.  Left in desr's default variable order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
+the order.  The choice of units does.  Left in desr's default symbol order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
 
     >>> default = ODESystem.from_tex(tex, sub_defns=True)
     >>> other = ODETranslator(default, new_indices_start_at=1)

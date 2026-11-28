@@ -1,7 +1,7 @@
 Numerical solution and reverse translation
 ========================================================
 
-The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original systems.
+The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of symbols, either as single points or time series, between the reduced and original systems.
 That is, having solved a nondimensionalised system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalisation.  
 
 Let's demonstrate using the Michaelis-Menten equations: we solve the *reduced* system
@@ -26,7 +26,7 @@ For self-containedness we include this here.  Take the two-variable Michaelis-Me
     \end{align}
 
 We build the system in Python from its TeX, and add the initial condition. 
-The variable order matters: the reduction algorithm tends to reduce away the variables that come last.
+The symbol order matters: the reduction tends to normalise away the parameters that come first.
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
@@ -58,7 +58,7 @@ Five parameters have become three -- revealing that there are :math:`r = 2` scal
 
 The number of scaling symmetries is also the number of parameters we must provide later, when reverse translating from nondimensionalised to the original symbols. 
 
-For programming convenience, let's give the variables names we can use below.
+For programming convenience, let's give the symbols names we can use below.
 
     >>> s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
     >>> c0, c1, c2, tau, u, v = reduced_system.symbols
@@ -89,7 +89,7 @@ Let's translate the values of our original parameters into the dimensionless par
 
     >>> numeric_translation = reduced_system.numeric_translator()
 
-The :meth:`~desr.numerics.NumericTranslator.forward`  function takes values of the original variables and
+The :meth:`~desr.numerics.NumericTranslator.forward`  function takes values of the original symbols and
 returns values of the reduced ones.  Here it converts the starting state and the parameters.
 
     >>> translated_values = numeric_translation.forward({t: 0.0, s: 2.0, c: 0.0, **parameters})
@@ -210,7 +210,7 @@ circles are the recovered solution sitting on the directly computed one.
 The right-hand panel is worth dwelling on.  The disagreement between the two routes
 never exceeds :math:`10^{-11}`, two orders of magnitude below the tolerance the integrator
 was asked for.  Each original
-variable is a product of integer powers of the reduced ones -- so translation in either direction introduces practically no error of
+symbol is a product of integer powers of the reduced ones -- so translation in either direction introduces practically no error of
 its own.  Thus, the right hand panel is the solver's noise, not that of the translation.
 
 
@@ -219,7 +219,7 @@ Without enough known parameter values, reverse-translation is impossible
 
 Asking for the original system without enough known parameter values supplied raises an exception.
 The message says what is still undetermined -- the rescaling that the values given do not
-rule out -- and which variables would settle it.
+rule out -- and which symbols would settle it.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5})
     Traceback (most recent call last):
@@ -232,7 +232,7 @@ rule out -- and which variables would settle it.
 Even though :math:`r = 2`, two values are not always sufficient.  For example, knowing :math:`k_{-1}` and :math:`k_2` tells us
 only about :math:`c_1` and :math:`c_2`, which between them pin down the single combination
 :math:`k_1 s_0` rather than both factors.  The message names the rescaling that both values
-are blind to, and offers only variables that would actually break it -- :math:`c` is not
+are blind to, and offers only symbols that would actually break it -- :math:`c` is not
 among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_m1: 0.9, k_2: 0.4})

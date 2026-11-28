@@ -58,10 +58,10 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
 
 
 
-Changing the variable order
----------------------------
+Changing the symbol order
+-------------------------
 
-Parameters come first in the variable order, and the leading ones are the ones the algorithm normalises.
+Parameters come first in the symbol order, and the leading ones are the ones the algorithm normalises.
 In our previous example the parameter order was :math:`k_1, k_2, k_{-1}`, so :math:`k_1` and :math:`k_2` were
 normalised and the one surviving parameter was the ratio :math:`k_{-1}/k_2`.
 Instead, we can normalise by :math:`k_{-1}` and leave :math:`k_2` in the ratio, by swapping the last two parameters.
@@ -89,7 +89,7 @@ Now we can reduce to find another, equivalent system.
 Extending a choice of invariants
 --------------------------------
 
-We return to our original variable order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
+We return to our original symbol order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
 
 Suppose we wish to study the invariants :math:`\frac{k_1}{k_{2}}C` and :math:`\frac{k_1}{k_{-1}}P`.
 We say so by writing them down:
@@ -97,14 +97,14 @@ We say so by writing them down:
     >>> invariant_choice = ['C*k_1/k_2', 'P*k_1/k_m1']
 
 Internally these become a matrix of exponents, one invariant per column, read against the
-variable order:
+symbol order:
 
 .. math::
 
     P = \left[\begin{matrix}1 & 1\\-1 & 0\\0 & -1\\0 & 0\\1 & 0\\0 & 0\\0 & 1\\0 & 0\end{matrix}\right].
 
 That matrix may be passed instead, but it is not the thing to type: its *rows* are
-positions in the variable order, so reordering the variables leaves the same matrix meaning
+positions in the symbol order, so reordering the symbols leaves the same matrix meaning
 different monomials, and nothing in it records which invariants were intended.  Writing the
 monomials says what is meant and survives a reordering.
 
@@ -166,7 +166,7 @@ which applies only when the clock is left alone, does not fit either.
 The reduced system is autonomous and has no parameters at all.  Two things got it there,
 and both can be turned off.
 
-Both auxiliary variables are monomials in the original parameters alone, so each is
+Both auxiliaries are monomials in the original parameters alone, so each is
 constant and can be *normalised* -- set to 1, which is a choice of units rather than an
 assumption, since an auxiliary is a unit and a unit measured in itself is 1.  The choice is
 recorded in the caller's own symbols:

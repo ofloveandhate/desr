@@ -88,6 +88,32 @@ class TestODETranslatorTraps(TestCase):
         self.assertIsNotNone(section)
         self.assertEqual(section.shape, (1, translator.r))
 
+    def test_reverse_translate_parameter_reads_values_in_column_order(self):
+        # Hubert & Labahn's predator-prey, ordered as the paper normalises it.  The reverse
+        # map is the inverse multiplier, so it takes values in the multiplier's column
+        # order: the auxiliaries, then the invariants as forward_monomials lists them.
+        system = ODESystem.from_equations(['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )',
+                                           'dp/dt = s*p*(1 - h*p / n)'])
+        system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        translator = ODETranslator(system, naming_scheme={
+            'parameters': 'c', 'independent': 't', 'dependents': ['n', 'p']})
+        self.assertEqual(translator.scheme(), ReductionScheme.PARAMETER)
+
+        # Fed the forward monomials, it gives back the original symbols: V times V^-1.
+        recovered = translator.reverse_translate_parameter(translator.forward_monomials())
+        self.assertEqual([sympy.simplify(value) for value in recovered],
+                         list(system.symbols))
+
+        # With every auxiliary 1, it is what substitutions() says each symbol is.
+        auxiliaries = sympy.symbols('x1:{}'.format(translator.r + 1))
+        reduced = list(auxiliaries) + list(sympy.symbols('c0 c1 c2 t n p'))
+        values = translator.reverse_translate_parameter(reduced)
+        ones = {x: 1 for x in auxiliaries}
+        substitutions = translator.substitutions()
+        for symbol, value in zip(system.symbols, values):
+            with self.subTest(symbol=symbol):
+                self.assertEqual(sympy.simplify(value.subs(ones) - substitutions[symbol]), 0)
+
     def test_reverse_translate_dispatches_by_count(self):
         hl_6_4 = ODESystem.from_equations(['dz1/dt = z1*(1+z1*z2)',
                                            'dz2/dt = z2*(1/t - z1*z2)'])

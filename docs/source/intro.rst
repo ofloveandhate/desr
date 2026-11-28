@@ -6,7 +6,7 @@ Introduction
 
 *desr* implements and extends algorithms originally outlined by Evelyne Hubert and George Labahn :cite:`Hubert2013c`.  It further implements reduction on systems with equality constraints and initial conditions.
 
-The preprint :cite:`Tanburn2025` describes an earlier form of this work.  It pre-dates the corrected variable ordering and the Hermite multiplier normal form that arrived in version 2.0, so the reductions it reports are not the ones this version produces; a revision is in preparation.
+The preprint :cite:`Tanburn2025` describes an earlier form of this work.  It pre-dates the corrected symbol ordering and the Hermite multiplier normal form that arrived in version 2.0, so the reductions it reports are not the ones this version produces; a revision is in preparation.
 
 
 The Master's dissertation `Differential Algebra and Applications <http://tanbur.github.io/desr/dissertation/differential_algebra_and_applications.pdf>`_ that inspired this project places the algorithms into the theoretical framework of *differential algebraic geometry*.  The dissertation further shows how to extend them to parameter reduction of arbitrary systems of partial differential equations, though this is not yet implemented in this software.

@@ -1,10 +1,10 @@
-Recovering auxiliary variables by quadrature
-============================================
+Recovering auxiliaries by quadrature
+====================================
 
 One reason to do a scaling symmetry reduction is to produce a system with fewer symbols.  An application that solves a system thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
 :meth:`~desr.ode_translation.ODETranslator.translate_general` offers
 ``include_aux_vars=False`` for exactly that: it returns the invariants and reduced equations, and throws
-auxiliary variables away.
+auxiliaries away.
 
 This page discusses this reduction, and how to get the original system back afterwards.
 
@@ -17,7 +17,7 @@ what the reduction is for, and the auxiliaries :math:`x` (we're using notation c
 
 Dropping the :math:`x` block is only legitimate if
 the :math:`y` block does not depend on it.
-Fortunately, it does not.  Every auxiliary variable satisfies an equation of the form
+Fortunately, it does not.  Every auxiliary satisfies an equation of the form
 
 .. math::
     :nowrap:
@@ -282,8 +282,8 @@ Plotting the numerical results:
 
 .. plot:: examples/scripts/quadrature_recovery.py
 
-The left panel depicts the numerical solution of the nondimensionalised system, sans auxiliary variables.
-The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what
+The left panel depicts the numerical solution of the nondimensionalised system, sans auxiliaries.
+The middle panel depicts the auxiliary, obtained by quadrature.  This curve is what
 :meth:`~desr.numerics.NumericTranslator.recover_auxiliaries` produces by integrating their
 equations along the invariants.  The circles are this example's exact values.
 
