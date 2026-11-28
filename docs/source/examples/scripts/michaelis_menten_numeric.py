@@ -34,7 +34,7 @@ SYSTEM_TEX = r'''\frac{ds}{dt} &= - k_1 e_0 s + k_1 c s + k_{-1} c \\
 
 system = ODESystem.from_tex(SYSTEM_TEX)
 system.update_initial_conditions({'s': 's_0'})
-system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
 translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
 reduced_system = translator.translate()

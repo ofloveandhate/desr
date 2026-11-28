@@ -40,7 +40,7 @@ def michaelis_menten_with_initial_conditions():
     system = ODESystem.from_equations(MICHAELIS_MENTEN)
     system.add_constraint('K_m', '(k_m1 + k_2) / k_1')
     system.update_initial_conditions(['s(0) = s_0', 'c(0) = 0'])
-    system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0',
+    system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0',
                               't', 's', 'c'])
     return system
 

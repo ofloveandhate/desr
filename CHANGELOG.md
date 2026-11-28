@@ -58,7 +58,7 @@ each can be turned off.
     other than the independent variable, as the same scaling with a zero
     column there.  This raised `IndexError` before.  A matrix of any other
     width is refused with a message that says so.
-  - `expected_variable_count` is right for the dependent-variable scheme
+  - `expected_symbol_count` is right for the dependent-variable scheme
     when an auxiliary is a monomial in the parameters alone and is
     normalised away.  It returned `n` whatever the reduction did.
   - `ODESystem.from_dict` and `from_equations` accept `initial_conditions`.
@@ -103,7 +103,7 @@ each can be turned off.
     built from a bare matrix.
   - No method takes a system.  `translate`, `translate_parameter`,
     `translate_dep_var`, `translate_general`, `isolate_clock` and
-    `expected_variable_count` lost their `system` argument, as the methods
+    `expected_symbol_count` lost their `system` argument, as the methods
     that report on a reduction had already: `scheme`, `invariant_names`,
     `auxiliary_names`, `column_names`, `column_of`, `named_symbols`,
     `symbol_kinds`, `variable_map`, `parameter_invariants` and
@@ -179,7 +179,7 @@ each can be turned off.
 ### Renames
 
   - The option `identify_indep_var` is `rescale_clock`, on `translate`,
-    `translate_general`, `translate_dep_var` and `expected_variable_count`.
+    `translate_general`, `translate_dep_var` and `expected_symbol_count`.
     The step takes an invariant `k*t` as the clock; it no longer identifies
     an invariant with `t`.  There is no alias.
   - `NumericTranslation` is `NumericTranslator`, and is built from a reduced
@@ -197,6 +197,11 @@ each can be turned off.
     holds under every scheme, where the old method refused all but one.  It
     takes no system: it reports on the one the translator was built from.
     There is no alias.
+  - `reorder_variables`, `default_order_variables`, `expected_variable_count`
+    and `equation_variables` are `reorder_symbols`, `default_order_symbols`,
+    `expected_symbol_count` and `constraint_symbols`.  Each orders, counts or
+    collects symbols, parameters included, and a variable is a symbol that
+    varies.  There are no aliases.
   - `column_monomials` is `forward_monomials`, beside `reverse_monomials`.
   - `indep_var_invariant` is `indep_var_invariants`, and returns all of them.
   - `units_and_dimensions` is `num_units_and_dimensions`, because it counts.

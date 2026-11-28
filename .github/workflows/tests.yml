@@ -94,7 +94,7 @@ jobs:
           translator = ODETranslator(system)
           assert translator.scheme() == ReductionScheme.PARAMETER
           reduced = translator.translate()
-          assert len(reduced.symbols) == translator.expected_variable_count()
+          assert len(reduced.symbols) == translator.expected_symbol_count()
           assert reduced.scheme == ReductionScheme.PARAMETER
           print(reduced)
           PY

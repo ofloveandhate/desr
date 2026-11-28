@@ -82,12 +82,12 @@ class TestSystemRefusals(TestCase):
     def test_reordering_with_the_wrong_symbols(self):
         system = ODESystem.from_equations(HL_6_4)
         with self.assertRaises(ValueError) as caught:
-            system.reorder_variables(['t', 'z1', 'w'])
-        self.assertIn('Mismatching variables', str(caught.exception))
+            system.reorder_symbols(['t', 'z1', 'w'])
+        self.assertIn('Mismatching symbols', str(caught.exception))
 
     def test_reordering_accepts_a_string(self):
         system = ODESystem.from_equations(HL_6_4)
-        system.reorder_variables('t z2 z1')
+        system.reorder_symbols('t z2 z1')
         self.assertEqual(('t', 'z2', 'z1'), tuple(map(str, system.symbols)))
 
 

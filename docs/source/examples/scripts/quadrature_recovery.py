@@ -31,7 +31,7 @@ EQUATIONS = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
 
 system = ODESystem.from_equations(EQUATIONS)
-system.reorder_variables(['t', 'z1', 'z2'])
+system.reorder_symbols(['t', 'z1', 'z2'])
 translator = ODETranslator(system)
 # desr computes the basis Hubert & Labahn use on p. 504 directly, so the figure matches the
 # paper with no column operations.

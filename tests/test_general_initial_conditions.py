@@ -224,11 +224,11 @@ class TestWhatDoesNotCarryOver(TestCase):
         # dx/dt = x**2 with t ahead of x_0: the invariants are t x and t x_0.
         system = ODESystem.from_equations(['dx/dt = x**2'])
         system.update_initial_conditions({'x': 'x_0'})
-        system.reorder_variables(['t', 'x', 'x_0'])
+        system.reorder_symbols(['t', 'x', 'x_0'])
         with self.assertRaises(ValueError) as caught:
             ODETranslator(system).translate_general()
         self.assertIn('put x_0 ahead of t', str(caught.exception))
-        system.reorder_variables(['x_0', 't', 'x'])
+        system.reorder_symbols(['x_0', 't', 'x'])
         reduced = ODETranslator(system).translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(1, len(reduced.initial_conditions))
@@ -253,7 +253,7 @@ class TestWhatDoesNotCarryOver(TestCase):
         self.assertTrue(any(monomial.free_symbols & set(system.dependents)
                             for monomial in bare.auxiliary_monomials()))
         system.update_initial_conditions({'z1': 'a', 'z2': 'b'})
-        system.reorder_variables(['t', 'z1', 'z2', 'a', 'b'])
+        system.reorder_symbols(['t', 'z1', 'z2', 'a', 'b'])
         translator = ODETranslator(system)
         self.assertTrue(any(monomial.free_symbols & set(system.dependents)
                             for monomial in translator.auxiliary_monomials()))
@@ -262,7 +262,7 @@ class TestWhatDoesNotCarryOver(TestCase):
         self.assertIn('uses z1 as a unit', str(caught.exception))
         self.assertIn('Put a ahead of it', str(caught.exception))
         # The fix the message names.
-        system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
+        system.reorder_symbols(['a', 'b', 't', 'z1', 'z2'])
         reduced = ODETranslator(system).translate_general()
         self.assertEqual([], wrong_initial_values(system, reduced))
         self.assertEqual(2, len(reduced.initial_conditions))
@@ -280,7 +280,7 @@ class TestTheDependentVariableScheme(TestCase):
         system = ODESystem.from_equations(self.EQUATIONS)
         system.update_initial_conditions(initial_conditions)
         if order:
-            system.reorder_variables(order)
+            system.reorder_symbols(order)
         return system
 
     def test_every_stated_initial_value_is_the_one_the_definition_gives(self):
@@ -330,6 +330,6 @@ class TestTheDependentVariableScheme(TestCase):
         with self.assertRaises(ValueError) as caught:
             ODETranslator(system).translate_dep_var()
         self.assertIn('uses z1 as a unit', str(caught.exception))
-        system.reorder_variables(['a', 'b', 't', 'z1', 'z2'])
+        system.reorder_symbols(['a', 'b', 't', 'z1', 'z2'])
         reduced = ODETranslator(system).translate_dep_var()
         self.assertEqual([], wrong_initial_values(system, reduced))

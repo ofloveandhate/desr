@@ -26,10 +26,10 @@ class TestNumericTranslator(TestCase):
         self.system = ODESystem.from_tex(system_tex)
         self.system.update_initial_conditions({'s': 's_0'})
         # Parameters first, then the independent variable, then the dependents -- Hubert &
-        # Labahn's (c, t, z); see ODESystem.default_order_variables.  Within the parameters
+        # Labahn's (c, t, z); see ODESystem.default_order_symbols.  Within the parameters
         # the order decides which are normalised to 1: the leading ones are, so s_0 and e_0
         # go first and k_2, k_m1 survive as the reduced constants.
-        self.system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+        self.system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
         self.translator = ODETranslator(self.system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
         self.numeric = NumericTranslator(self.translator.translate())
 
@@ -246,7 +246,7 @@ class TestNumericTranslator(TestCase):
         system.update_initial_conditions({'z': 'z0'})
         # update_initial_conditions appends z0 at the end, which leaves the system out of
         # canonical order now that the parameters come first, so put it back.
-        system.reorder_variables(['a', 'b', 'z0', 't', 'z'])
+        system.reorder_symbols(['a', 'b', 'z0', 't', 'z'])
         numeric = NumericTranslator(ODETranslator(system).translate())
         a, b, z0, t, z = system.symbols
         point = numeric.forward({t: 0.0, z: 1.5, a: 2.0, b: 0.5, z0: 1.5})
@@ -260,7 +260,7 @@ class TestNumericTranslator(TestCase):
     def test_known_values_refused_when_reduced_system_carries_auxiliaries(self):
         equations = ['dz1/dt = z1*(1+z1*z2)', 'dz2/dt = z2*(1/t - z1*z2)']
         system = ODESystem.from_equations(equations)
-        system.reorder_variables(['t', 'z1', 'z2'])
+        system.reorder_symbols(['t', 'z1', 'z2'])
         translator = ODETranslator(system)
         numeric = NumericTranslator(translator.translate())
         self.assertTrue(numeric.carries_auxiliaries)
