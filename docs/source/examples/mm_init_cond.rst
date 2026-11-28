@@ -108,9 +108,9 @@ The corresponding scaling invariants:
 These don't match those from Murray, but they are very close.   We'll recover it next.
 
 The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
-among them.  (the forward part of this function's name indicates this is for those that
+among them.  (The forward part of this function's name indicates this is for those that
 must not be 0 when translating in the forward direction -- the reverse has another
-set of symbols that must not be 0)
+set of symbols that must not be 0.)
 
     >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, k_1)

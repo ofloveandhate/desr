@@ -180,8 +180,8 @@ class ODESystem(object):
 
     **The vocabulary**, since it is a thing that trips people up:
 
-    - :attr:`~desr.ode_system.ODESystem.symbols` is the abstract: every name the system
-      declares.  It is what :math:`n` counts.
+    - :attr:`~desr.ode_system.ODESystem.symbols` is every name the system declares.  It
+      is what :math:`n` counts.
     - :attr:`~desr.ode_system.ODESystem.parameters` are the :math:`p` symbols with no
       equation of their own.
     - the *variables* are the rest -- the ones that actually vary -- namely

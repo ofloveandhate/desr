@@ -90,7 +90,7 @@ before a reduction if it matters whether anything will be removed.
 A scaling matrix of your own must have full row rank
 ------------------------------------------------------
 
-This subsection is a very particular note, the casual user is not likely to
+This subsection is a very particular note; the casual user is not likely to
 provide their own scaling matrix...
 
 A matrix with no rows is not the same as a row of zeros.  A row of the scaling matrix is

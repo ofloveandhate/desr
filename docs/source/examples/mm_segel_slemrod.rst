@@ -163,7 +163,7 @@ The scaling invariants:
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), epsilon, k_1*s_0*t, s/s_0, c/s_0]])
 
-This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.
+This is not the desired form of the system.  We need to do column operations on the Hermite multiplier of the translator.
 
 To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :math:`V_8' = V_8 + V_3 - V_7`
 

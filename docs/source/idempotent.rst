@@ -11,7 +11,7 @@ This page demonstrates idempotency on two examples.
 In both, the reduced system is rebuilt from its symbols and equations alone before it
 is reduced again.  A system that `translate` returns carries a record of the reduction
 that made it; rebuilding it sets that record aside, so the second reduction sees only
-the equations.  The point is, reducing a reduced system, gives the same system back.
+the equations.  The point is, reducing a reduced system gives the same system back.
 Reduced systems must be fixed points in the space of ODE systems
 under the action of scaling symmetry reduction.
 
@@ -107,7 +107,7 @@ Reducing a second time sees that one symmetry, with :math:`x_3` as its auxiliary
     dy4/dtau = y4*(y1 - y2*y4 - y2 + y3/y4)
 
 The clock and the four invariants are unchanged and keep their names.  The auxiliary is
-given a new name, as an auxiliary always is: the second_result_enzyme reduction has one, so it is
+given a new name, as an auxiliary always is: the second reduction has one, so it is
 :math:`x_0`, and it denotes the :math:`x_3` of the first.  The equations are the same.
 
 A third reduction changes absolutely nothing.  The one auxiliary is named :math:`x_0` already:

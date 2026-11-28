@@ -49,7 +49,7 @@ Another basis of the same invariants
 ---------------------------------------
 
 By choosing a different set of invariants, one might obtain an autonomous system.
-Observe first, the product of two invariants is an invariant.  For example
+Observe first that the product of two invariants is an invariant.  For example
 
 .. math::
 
