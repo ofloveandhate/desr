@@ -26,7 +26,7 @@ It is represented using a dictionary, where the keys represent the chemical spec
     >>> complexes = (complex0, complex1, complex2, complex3)
 
 
-The final step is to make reactions, which simply take two complexes (two sides of an equation) and form an arrow from the first side to the second.
+The next step is to make reactions, which simply take two complexes (two sides of an equation) and form an arrow from the first side to the second.
 For example, :code:`r1` represents the chemical reaction :code:`x1 + x2 -> 2*x2`.
 
     >>> r1 = Reaction(complex0, complex1)

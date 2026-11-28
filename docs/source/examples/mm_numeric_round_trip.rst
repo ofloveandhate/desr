@@ -37,7 +37,7 @@ The variable order matters: the reduction algorithm tends to reduce away the var
     >>> system.update_initial_conditions({'s': 's_0'})
     >>> system.reorder_variables(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
+Reduce it, naming the new variables :math:`\tau, u, v` and the new parameters :math:`c_i`.
 
     >>> translator = ODETranslator(system,
     ...                                              naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
@@ -51,7 +51,7 @@ Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :ma
     u(0) = 1
     parameters: c0, c1, c2
 
-Five constants have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
+Five parameters have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
 
     >>> translator.r
     2
@@ -105,7 +105,7 @@ a dict containing only parameters and time converts the time axis, since :math:`
     >>> [float(x) for x in reduced_times[:3]]
     [0.0, 3.0, 6.0]
 
-Do note, however, that if a dict does NOT contain enough values to do the reduction, then an error occurs.  So if I only supply the value of ``k_1``, then the reduction is missing both ``s_0`` and ``t``:
+Do note, however, that if a dict does NOT contain enough values to do the reduction, then an error occurs.  So if I supply only ``t`` and ``k_1``, the reduction is missing ``s_0``, since :math:`\tau = k_1 s_0 t`:
     
     >>> numeric_translation.forward({t: times, k_1: 1.5})
     Traceback (most recent call last):
@@ -190,7 +190,7 @@ And the trajectories agree with the direct solve.
     >>> bool(np.max(np.abs(recovered_soln[c] - reference_soln.y[1])) < 1e-8)
     True
 
-Neat fact: Constants come back reverse-translated, too, which is what a fitting workflow might be after.  So if you fit
+Neat fact: Parameters come back reverse-translated, too, which is what a fitting workflow might be after.  So if you fit
 :math:`c_0, c_1, c_2` in the reduced system, then un-translate, 
 you read off the original rates.
 
@@ -243,10 +243,10 @@ among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
     The reduced system is shared by an entire 2-parameter family of original systems, and this does not choose between them.
     Supply the value of one of: s, k_1, e_0, s_0.
 
-Only *constants* may be known values when a series is translated.  :math:`s` is a function
+Only *parameters* may be known values when a series is translated.  :math:`s` is a function
 of time, and the series -- :math:`u(\tau)`, which is :math:`s/s_0` -- already says how it
 varies; a single number for it is a different kind of statement, and mixing the two is
-refused rather than resolved by some convention.  The constant that stands for its initial
+refused rather than resolved by some convention.  The parameter that stands for its initial
 value is :math:`s_0`, and the message says so.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5, s: 2.0})

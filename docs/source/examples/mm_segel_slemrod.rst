@@ -425,7 +425,7 @@ This is the second route on this page to :cite:`Segel1989` (23) and (24a-b); the
 and :math:`\epsilon` constraint system.
 
 To get the equations on the long/slow timescale :math:`t_s` from Murray, multiply :math:`\tau = Lk_1t` by the factors
-:math:`\frac{e_0}{L} \frac{k_2}{K_m*k_1}\frac{K_m}{L} = \frac{c_2}{c_3c_0}`
+:math:`\frac{e_0}{L} \frac{k_2}{K_m k_1}\frac{K_m}{L} = \frac{c_2}{c_3c_0}`
 
     >>> translator.herm_mult.shape
     (9, 9)
@@ -468,9 +468,9 @@ First, the time and state variables:
     :nowrap:
 
     \begin{align}
-    e_0*k_2*t/L &= T & & \textnormal{ Segel (23)}\\
+    e_0 k_2 t/L &= T & & \textnormal{ Segel (23)}\\
     s/s_0 &= \frac{S}{\bar{S_0}} & & \textnormal{ Segel (20a)}\\
-    L*c/(e_0*s_0) &= \frac{C}{\bar{C}} & & \textnormal{ Segel (20b)}
+    L c/(e_0 s_0) &= \frac{C}{\bar{C}} & & \textnormal{ Segel (20b)}
     \end{align}
 
 Then, the coefficients
@@ -482,14 +482,13 @@ Then, the coefficients
     c_0 &= L/K_m & &= \sigma+1 \\
     c_1 &= s_0/K_m & &= \sigma \\
     c_2 &= e_0/L & &= \epsilon \\
-    c_3 &= K_m*k_1/k_2 & &=  \kappa+1
+    c_3 &= K_m k_1/k_2 & &=  \kappa+1
     \end{align}
 
 
-Doing a few substitutions, we get (6.23) from Murray.
+Doing a few substitutions brings in Segel's parameters :math:`\sigma`, :math:`\epsilon` and :math:`\kappa`:
 
-    >>> system_murray = reduced_system.subs({#     ...                         'c':'v', 's':'u',
-    ...                         'c0':'sigma+1', 'c1':'sigma',
+    >>> system_murray = reduced_system.subs({'c0':'sigma+1', 'c1':'sigma',
     ...                         'c2':'epsilon', 'c3':'kappa+1'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,

@@ -104,7 +104,7 @@ Construct a ``NumericTranslator``
 ------------------------------------
 
 :class:`~desr.numerics.NumericTranslator` is happy to work with a reduction with its auxiliaries
-dropped.  We do need to pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
+dropped.
 
     >>> numeric_translation = reduced_system.numeric_translator()
     >>> numeric_translation.scheme
