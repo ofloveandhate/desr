@@ -4,7 +4,7 @@ Extending invariants in four-variable Michaelis-Menten
 Raw Michaelis-Menten Equation Analysis
 ---------------------------------------
 
-We perform an example analysis of the Michael-Mentis equations :cite:`Segel1989`:
+We perform an example analysis of the Michaelis-Menten equations :cite:`Segel1989`:
 
 .. math::
     :nowrap:
@@ -18,7 +18,7 @@ We perform an example analysis of the Michael-Mentis equations :cite:`Segel1989`
 
 First we initiate the system from LaTeX and find the maximal scaling matrix such that the system is invariant.
 Note that negative subscripts are turned into 'm' so that they comply with :py:mod:`sympy`. The 'm's are turned back into
-negatives when printint to LaTeX using :func:`desr.tex_tools`.
+negatives when printing to LaTeX using :mod:`desr.tex_tools`.
 
     >>> import sympy
     >>> from desr import ODESystem, ODETranslator, scale_action
@@ -58,10 +58,10 @@ Since the Hermite multiplier and inverse are compatible with the simplest parame
 
 
 
-Changing the variable order
----------------------------
+Changing the symbol order
+-------------------------
 
-Parameters come first in the variable order, and the leading ones are the ones the algorithm normalises.
+Parameters come first in the symbol order, and the leading ones are the ones the algorithm normalises.
 In our previous example the parameter order was :math:`k_1, k_2, k_{-1}`, so :math:`k_1` and :math:`k_2` were
 normalised and the one surviving parameter was the ratio :math:`k_{-1}/k_2`.
 Instead, we can normalise by :math:`k_{-1}` and leave :math:`k_2` in the ratio, by swapping the last two parameters.
@@ -89,7 +89,7 @@ Now we can reduce to find another, equivalent system.
 Extending a choice of invariants
 --------------------------------
 
-We return to our original variable order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
+We return to our original symbol order: :math:`k_1, k_2, k_{-1}, t, C, E, P, S`.
 
 Suppose we wish to study the invariants :math:`\frac{k_1}{k_{2}}C` and :math:`\frac{k_1}{k_{-1}}P`.
 We say so by writing them down:
@@ -97,14 +97,14 @@ We say so by writing them down:
     >>> invariant_choice = ['C*k_1/k_2', 'P*k_1/k_m1']
 
 Internally these become a matrix of exponents, one invariant per column, read against the
-variable order:
+symbol order:
 
 .. math::
 
     P = \left[\begin{matrix}1 & 1\\-1 & 0\\0 & -1\\0 & 0\\1 & 0\\0 & 0\\0 & 1\\0 & 0\end{matrix}\right].
 
 That matrix may be passed instead, but it is not the thing to type: its *rows* are
-positions in the variable order, so reordering the variables leaves the same matrix meaning
+positions in the symbol order, so reordering the symbols leaves the same matrix meaning
 different monomials, and nothing in it records which invariants were intended.  Writing the
 monomials says what is meant and survives a reordering.
 
@@ -147,8 +147,6 @@ reduction will have more, so the copy takes the default names:
     [ 0,  0,  1, 0, 0, 0, 1, 0],
     [ 0,  0,  0, 0, 0, 0, 0, 1]])
 
-For Python code that steps through this procedure, see :py:mod:`desr.examples.michaelis_menten`.
-
 Now, this transformation doesn't satisfy the conditions of the parameter reduction scheme, so if we try to reduce it
 :meth:`~desr.ode_translation.ODETranslator.translate` will fall through to the general reduction scheme implemented in
 :meth:`~desr.ode_translation.ODETranslator.translate_general`.  The scaling moves :math:`t`
@@ -168,7 +166,7 @@ which applies only when the clock is left alone, does not fit either.
 The reduced system is autonomous and has no parameters at all.  Two things got it there,
 and both can be turned off.
 
-Both auxiliary variables are monomials in the original parameters alone, so each is
+Both auxiliaries are monomials in the original parameters alone, so each is
 constant and can be *normalised* -- set to 1, which is a choice of units rather than an
 assumption, since an auxiliary is a unit and a unit measured in itself is 1.  The choice is
 recorded in the caller's own symbols:
@@ -195,7 +193,7 @@ are our new dependent invariants; the first two are exactly the invariants we ch
 They come after :math:`k_2 t` because the columns are in the order the schemes read: the
 invariant with the clock before those with a dependent variable.
 
-To reproduce :cite:`Hubert2013c`: exactly, ask for neither step.  The auxiliaries are then
+To reproduce :cite:`Hubert2013c` exactly, ask for neither step.  The auxiliaries are then
 carried, and reported as *parameters* because each is a monomial in the original parameters
 alone and so cannot vary -- being auxiliaries is a separate fact, recorded in
 :attr:`~desr.ode_system.ODESystem.auxiliary_names`.
@@ -246,7 +244,7 @@ Named for the paper, and reduced:
     dS/dt = C/alpha - E*S
     parameters: alpha
 
-So we have found a third different reparametrization of the Michaelis-Menten equations.
+So we have found a third different reparametrisation of the Michaelis-Menten equations.
 
 
 Initial conditions, two of them zero

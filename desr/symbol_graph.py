@@ -94,7 +94,7 @@ def _reduced_kinds(translator, system):
     system -- not the structure of their monomial, because the two differ and the role is
     what a reader of the figure is after.  Under the general and dependent-variable schemes
     the reduction keeps the system's own independent variable, so an invariant that is a
-    rescaled one -- the enzyme chain's :math:`k_{23} t`, :cite:`Hubert2013c`: 6.4's :math:`t` --
+    rescaled one -- the enzyme chain's :math:`k_{23} t`, :cite:`Hubert2013c` 6.4's :math:`t` --
     is a variable with an equation rather than the thing being integrated against.  Calling
     it independent would say the reduced system has two independent variables.
 
@@ -149,7 +149,7 @@ def symbol_graph(translator, direction=FORWARD):
         ``symbol``
             the :class:`sympy.Symbol` itself, the node key's other half.
         ``index``
-            its position within its layer: the variable order on the original side, the
+            its position within its layer: the symbol order on the original side, the
             column order on the reduced side.  What a deterministic layout is drawn from.
         ``kind``
             ``'independent'``, ``'dependent'`` or ``'parameter'`` on the original side; the
@@ -164,9 +164,9 @@ def symbol_graph(translator, direction=FORWARD):
             auxiliary with ``kind`` ``'parameter'`` yields a constant of integration where
             one with ``kind`` ``'dependent'`` yields a quadrature.
         ``normalised``
-            whether the reduction sets this one to 1 and discards it.  True only for the
-            auxiliary columns, and only under the parameter scheme -- the general and
-            dependent-variable schemes keep their auxiliaries as variables.
+            whether the reduction sets this one to 1 and discards it.  True for an
+            auxiliary column whose monomial is in the original parameters alone, under
+            every scheme; under the parameter scheme that is every auxiliary column.
         ``must_be_supplied``
             whether this is one of the :math:`r` values the **reverse** direction has to be
             told.  A discarded auxiliary is an unknown coming back, and recovering the
@@ -428,7 +428,7 @@ def _positions(graph, width=1.0, height=1.0):
     Deliberately not a force-directed layout.  Two of these get drawn to be compared --
     the pair above, or before a column operation against after -- and a layout that moves
     a vertex between the panels destroys exactly that.  Here a symbol's place depends only
-    on the variable and column orders.
+    on the symbol and column orders.
     '''
     by_layer = {ORIGINAL: [], REDUCED: []}
     for node, data in graph.nodes(data=True):

@@ -6,7 +6,7 @@ A cell cycle control network
 This example uses a model of the cell cycle machinery regulating mitosis in frog egg extracts,
 from :cite:`sible-tyson`.  The equations are their
 Figure 2.  With seven species and thirty parameters, it is the largest model among the
-examples; it is read directly from its LaTeX (initially transcribed from the paper by hand, later checked with an AI). Its nondimensionalization removes seven parameters, whereas the source paper "normalises" five parameters in their simulation code; desr's nondimensionalisation achieves a greater reduction.
+examples; it is read directly from its LaTeX (initially transcribed from the paper by hand, later checked with an AI). Its nondimensionalisation removes seven parameters, whereas the source paper "normalises" five parameters in their simulation code; desr's nondimensionalisation achieves a greater reduction.
 
 The model
 -----------
@@ -70,10 +70,10 @@ name, so :math:`V_{25}'` and :math:`V_{25}''` are two parameters.
     >>> len(system.dependents), len(system.parameters)
     (7, 30)
 
-The order of the variables
+The order of the symbols
 ----------------------------
 
-The reduction uses as units the parameters at the front of the variable order; see
+The reduction uses as units the parameters at the front of the symbol order; see
 :meth:`~desr.ode_system.ODESystem.reorder_symbols`.  The order is parameters, then
 the independent variable, then the dependent variables.
 
@@ -143,10 +143,10 @@ the comment "These parameters are arbitrarily set to 1": the four totals
 :math:`[\mathrm{total\ Cdc25}]`, :math:`[\mathrm{total\ Wee1}]`,
 :math:`[\mathrm{total\ IE}]`, :math:`[\mathrm{total\ APC}]`, and the phosphatase.
 Those are five of the seven symmetries: a unit for each of the four
-species, and the phosphatase's amount.  The variable order chosen above in this example
+species, and the phosphatase's amount.  The symbol order chosen above in this example
 makes the same choice for the four species.
 For the phosphatase's symmetry it sets :math:`k_h` to 1 whereas
-the table sets the phosphatase.  Changing the variable order produces different normalizations.
+the table sets the phosphatase.  Changing the symbol order produces different normalisations.
 
 Reduction
 ---------------
@@ -159,7 +159,7 @@ Reduction
 
 Seven symmetries, and seven parameters fewer: 23 in the reduced system, rather than 30 in the original.
 The clock in the reduced system
-clock is rescaled time, and each species is measured in its total:
+is rescaled time, and each species is measured in its total:
 
     >>> names = reduced.named_symbols
     >>> names[reduced.independent_variable]
@@ -207,30 +207,16 @@ reduced system can be printed with ``reduced`` or typeset with
 :meth:`~desr.ode_system.ODESystem.to_tex`.
 
 
-    >>> reduced.to_tex()
-    '\\frac{d\\tau}{d\\tau} &= 1 \\\\\n\\frac{d\\nu_{1}}{d\\tau} &= \\kappa_{10} + \\kappa_{11} \\nu_{1} \\nu_{2} + \\kappa_{11} \\nu_{1} \\nu_{3} - \\kappa_{11} \\nu_{1} + \\kappa_{23} \\nu_{1} \\nu_{7} - \\kappa_{23} \\nu_{1} - \\nu_{1} \\nu_{7} \\\\\n\\frac{d\\nu_{2}}{d\\tau} &= - \\kappa_{11} \\nu_{1} \\nu_{2} - \\kappa_{11} \\nu_{1} \\nu_{3} + \\kappa_{11} \\nu_{1} - \\kappa_{19} \\nu_{3} \\nu_{4} + \\kappa_{19} \\nu_{3} + \\kappa_{20} \\nu_{3} \\nu_{4} - \\kappa_{21} \\nu_{2} \\nu_{5} + \\kappa_{22} \\nu_{2} \\nu_{5} - \\kappa_{22} \\nu_{2} + \\kappa_{23} \\nu_{2} \\nu_{7} - \\kappa_{23} \\nu_{2} - \\nu_{2} \\nu_{7} \\\\\n\\frac{d\\nu_{3}}{d\\tau} &= \\kappa_{19} \\nu_{3} \\nu_{4} - \\kappa_{19} \\nu_{3} - \\kappa_{20} \\nu_{3} \\nu_{4} + \\kappa_{21} \\nu_{2} \\nu_{5} - \\kappa_{22} \\nu_{2} \\nu_{5} + \\kappa_{22} \\nu_{2} + \\kappa_{23} \\nu_{3} \\nu_{7} - \\kappa_{23} \\nu_{3} - \\nu_{3} \\nu_{7} \\\\\n\\frac{d\\nu_{4}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{13} \\nu_{4}}{\\kappa_{3} + \\nu_{4}} - \\frac{\\kappa_{12} \\nu_{2} \\nu_{4}}{\\kappa_{2} - \\nu_{4} + 1} + \\frac{\\kappa_{12} \\nu_{2}}{\\kappa_{2} - \\nu_{4} + 1} \\\\\n\\frac{d\\nu_{5}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{17} \\nu_{5}}{\\kappa_{7} + \\nu_{5}} - \\frac{\\kappa_{16} \\nu_{2} \\nu_{5}}{\\kappa_{6} - \\nu_{5} + 1} + \\frac{\\kappa_{16} \\nu_{2}}{\\kappa_{6} - \\nu_{5} + 1} \\\\\n\\frac{d\\nu_{6}}{d\\tau} &= - \\frac{\\kappa_{1} \\nu_{6}}{\\kappa_{9} + \\nu_{6}} - \\frac{\\kappa_{18} \\nu_{2} \\nu_{6}}{\\kappa_{8} - \\nu_{6} + 1} + \\frac{\\kappa_{18} \\nu_{2}}{\\kappa_{8} - \\nu_{6} + 1} \\\\\n\\frac{d\\nu_{7}}{d\\tau} &= - \\frac{\\kappa_{1} \\kappa_{15} \\nu_{7}}{\\kappa_{5} + \\nu_{7}} - \\frac{\\kappa_{14} \\nu_{6} \\nu_{7}}{\\kappa_{4} - \\nu_{7} + 1} + \\frac{\\kappa_{14} \\nu_{6}}{\\kappa_{4} - \\nu_{7} + 1}'
-
 Typesetting it here, we can see the system:
 
-.. math::
-    :nowrap:
-
-    \begin{align}
-    \frac{d\tau}{d\tau} &= 1 \\
-    \frac{d\nu_{1}}{d\tau} &= \kappa_{10} + \kappa_{11} \nu_{1} \nu_{2} + \kappa_{11} \nu_{1} \nu_{3} - \kappa_{11} \nu_{1} + \kappa_{23} \nu_{1} \nu_{7} - \kappa_{23} \nu_{1} - \nu_{1} \nu_{7} \\
-    \frac{d\nu_{2}}{d\tau} &= - \kappa_{11} \nu_{1} \nu_{2} - \kappa_{11} \nu_{1} \nu_{3} + \kappa_{11} \nu_{1} - \kappa_{19} \nu_{3} \nu_{4} + \kappa_{19} \nu_{3} + \kappa_{20} \nu_{3} \nu_{4} - \kappa_{21} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} + \kappa_{23} \nu_{2} \nu_{7} - \kappa_{23} \nu_{2} - \nu_{2} \nu_{7} \\
-    \frac{d\nu_{3}}{d\tau} &= \kappa_{19} \nu_{3} \nu_{4} - \kappa_{19} \nu_{3} - \kappa_{20} \nu_{3} \nu_{4} + \kappa_{21} \nu_{2} \nu_{5} - \kappa_{22} \nu_{2} \nu_{5} + \kappa_{22} \nu_{2} + \kappa_{23} \nu_{3} \nu_{7} - \kappa_{23} \nu_{3} - \nu_{3} \nu_{7} \\
-    \frac{d\nu_{4}}{d\tau} &= - \frac{\kappa_{1} \kappa_{13} \nu_{4}}{\kappa_{3} + \nu_{4}} - \frac{\kappa_{12} \nu_{2} \nu_{4}}{\kappa_{2} - \nu_{4} + 1} + \frac{\kappa_{12} \nu_{2}}{\kappa_{2} - \nu_{4} + 1} \\
-    \frac{d\nu_{5}}{d\tau} &= - \frac{\kappa_{1} \kappa_{17} \nu_{5}}{\kappa_{7} + \nu_{5}} - \frac{\kappa_{16} \nu_{2} \nu_{5}}{\kappa_{6} - \nu_{5} + 1} + \frac{\kappa_{16} \nu_{2}}{\kappa_{6} - \nu_{5} + 1} \\
-    \frac{d\nu_{6}}{d\tau} &= - \frac{\kappa_{1} \nu_{6}}{\kappa_{9} + \nu_{6}} - \frac{\kappa_{18} \nu_{2} \nu_{6}}{\kappa_{8} - \nu_{6} + 1} + \frac{\kappa_{18} \nu_{2}}{\kappa_{8} - \nu_{6} + 1} \\\frac{d\nu_{7}}{d\tau} &= - \frac{\kappa_{1} \kappa_{15} \nu_{7}}{\kappa_{5} + \nu_{7}} - \frac{\kappa_{14} \nu_{6} \nu_{7}}{\kappa_{4} - \nu_{7} + 1} + \frac{\kappa_{14} \nu_{6}}{\kappa_{4} - \nu_{7} + 1}
-    \end{align}
+.. math-from-doctest:: reduced.to_tex()
 
 
-Reduction using a different variable order
+Reduction using a different symbol order
 -------------------------------------------
 
 The number of symmetries, and so the number of parameters removed, does not depend on
-the order.  The choice of units does.  Left in desr's default variable order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
+the order.  The choice of units does.  Left in desr's default symbol order (alphabetical, sorted as: params, time, dependents), the system reduces to twenty-three parameters as well:
 
     >>> default = ODESystem.from_tex(tex, sub_defns=True)
     >>> other = ODETranslator(default, new_indices_start_at=1)

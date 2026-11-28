@@ -2,7 +2,7 @@ Multiple timescales: Segel-Slemrod analysis
 ============================================
 
 
-This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to matching Segel and Slemrod's timescale analysis :cite:`Segel1989`, and Murray's in Chapter 6 of :cite:`murray`.
+This is our third example using the two-variable formulation of the Michaelis-Menten system.  In this example, our goal is to match Segel and Slemrod's timescale analysis :cite:`Segel1989`, and Murray's in Chapter 6 of :cite:`murray`.
 
 
 The model
@@ -40,7 +40,7 @@ Primary method
 "Outer" equations from Segel 1989
 ***********************************
 
-Let's recover :cite:`Segel1989` "outer" equations (8a-b).
+Let's recover the "outer" equations (8a-b) of :cite:`Segel1989`.
 
 Start with a fresh system.
 
@@ -54,7 +54,7 @@ the Michaelis constant
 
     >>> system.add_constraint('K_m', '(k_2 + k_m1) / k_1')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
+Choose a symbol order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_symbols(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
@@ -126,7 +126,7 @@ The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), an
 
     >>> system.add_constraint('epsilon = e_0 / (s_0 + K_m)')
 
-Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
+Choose a symbol order, with initial conditions at the front so the algorithm will normalise by them.
 
     >>> system.reorder_symbols(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
 
@@ -135,7 +135,7 @@ A sanity check
     >>> system.symbols
     (s_0, e_0, K_m, k_1, k_2, k_m1, epsilon, t, s, c)
 
-Now we can construct the `ODETranslator`
+Now we can construct the ``ODETranslator``
 
     >>> translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
@@ -163,9 +163,9 @@ The scaling invariants:
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, K_m/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), epsilon, k_1*s_0*t, s/s_0, c/s_0]])
 
-This is not the desired form of the system, we need to do column operations on the Hermite multiplier of the translator.
+This is not the desired form of the system.  We need to do column operations on the Hermite multiplier of the translator.
 
-To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify Hermite multiplier as :math:`V_8' = V_8 + V_3 - V_7`
+To get :math:`\tau = \frac{e_0 k_1 t}{\epsilon}`, modify the Hermite multiplier as :math:`V_8' = V_8 + V_3 - V_7`
 
 
 
@@ -253,7 +253,7 @@ After the pre-steady state
 ***********************************
 
 Computing equations :cite:`Segel1989` (24a-b).  Note that we start from a copy of the translator
-above, rather than a fresh one: :cite:`Segel1989` (24a-b) uses the same state variables as (21a-d),
+above, rather than a fresh one: :cite:`Segel1989` (24a-b) uses the same dependent variables as (21a-d),
 and only the clock changes.  The three column operations act on the time column alone.
 
     >>> # Scale t correctly to t/t_S = k_2 epsilon t
@@ -310,9 +310,9 @@ Starting from the same system, Michaelis-Menten, with :math:`K_m = \frac{k_{-1} 
 Fast transient time scale
 ****************************
 
-Let's first work in the fast transient time scale (:cite:`murray` eqn 6.15), we have :math:`t_c = \frac{1}{k_1 (s_0 + K_m)}`.  Our time variable is :math:`\tau = \frac{t}{t_c} = k_1 (s_0 + K_m) \, t`.
+Let's first work in the fast transient time scale (:cite:`murray` eqn 6.15).  We have :math:`t_c = \frac{1}{k_1 (s_0 + K_m)}`.  Our time variable is :math:`\tau = \frac{t}{t_c} = k_1 (s_0 + K_m) \, t`.
 
-We can work with the expression :math:`s_0 + K_m` systematically by adding a new variable :math:`L = s_0 + K_m` via a constraint.
+We can work with the expression :math:`s_0 + K_m` systematically by adding a new parameter :math:`L = s_0 + K_m` via a constraint.
 
     >>> system_l.add_constraint('L', 's_0 + K_m')
 
@@ -367,7 +367,7 @@ Putting :math:`K_m` at the front, we have
 
 
 In the invariants, first come the scale-invariant coefficients, then the time variable, then the two
-"space" variables.  The coefficients are:
+dependent variables.  The coefficients are:
 
 .. math::
     :nowrap:
@@ -395,7 +395,7 @@ Here's the reduced system at this point:
     c0 == c1 + 1
     parameters: c0, c1, c2, c3
 
-To get the system in (21a-d) Segel, let's do the substitutions into known symbol names
+To get the system in Segel (21a-d), let's do the substitutions into known symbol names
 
     >>> system_segel = reduced_system.subs({'c0':'sigma+1', 'c1':'sigma', 'c2':'epsilon', 'c3':'kappa+1'},expand_after=True, factor_after=False)
     >>> system_segel
@@ -424,8 +424,8 @@ This is the second route on this page to :cite:`Segel1989` (23) and (24a-b); the
 "After the pre-steady state" above, which reached the same timescale from the :math:`K_m`
 and :math:`\epsilon` constraint system.
 
-To get the equations on the long/slow timescale :math:`t_c` from Murray, multiply :math:`\tau = Lk_1t` by the factors
-:math:`\frac{e_0}{L} \frac{k_2}{K_m*k_1}\frac{K_m}{L} = \frac{c_2}{c_3c_0}`
+To get the equations on the long/slow timescale :math:`t_s` from Murray, multiply :math:`\tau = Lk_1t` by the factors
+:math:`\frac{e_0}{L} \frac{k_2}{K_m k_1}\frac{K_m}{L} = \frac{c_2}{c_3c_0}`
 
     >>> translator.herm_mult.shape
     (9, 9)
@@ -462,15 +462,15 @@ Translate and reduce the system
 These are not the symbols we are looking for 🤖.  Looking at the invariants suggests a path forward.
 
 
-First, the time and state variables:
+First, the time and dependent variables:
 
 .. math::
     :nowrap:
 
     \begin{align}
-    e_0*k_2*t/L &= T & & \textnormal{ Segel (23)}\\
+    e_0 k_2 t/L &= T & & \textnormal{ Segel (23)}\\
     s/s_0 &= \frac{S}{\bar{S_0}} & & \textnormal{ Segel (20a)}\\
-    L*c/(e_0*s_0) &= \frac{C}{\bar{C}} & & \textnormal{ Segel (20b)}
+    L c/(e_0 s_0) &= \frac{C}{\bar{C}} & & \textnormal{ Segel (20b)}
     \end{align}
 
 Then, the coefficients
@@ -482,14 +482,13 @@ Then, the coefficients
     c_0 &= L/K_m & &= \sigma+1 \\
     c_1 &= s_0/K_m & &= \sigma \\
     c_2 &= e_0/L & &= \epsilon \\
-    c_3 &= K_m*k_1/k_2 & &=  \kappa+1
+    c_3 &= K_m k_1/k_2 & &=  \kappa+1
     \end{align}
 
 
-we do a few substitutions, we get (6.23) from Murray.
+Doing a few substitutions brings in Segel's parameters :math:`\sigma`, :math:`\epsilon` and :math:`\kappa`:
 
-    >>> system_murray = reduced_system.subs({#     ...                         'c':'v', 's':'u',
-    ...                         'c0':'sigma+1', 'c1':'sigma',
+    >>> system_murray = reduced_system.subs({'c0':'sigma+1', 'c1':'sigma',
     ...                         'c2':'epsilon', 'c3':'kappa+1'},
     ...                         subs_constraints=True,
     ...                         expand_after=True,
@@ -503,7 +502,7 @@ we do a few substitutions, we get (6.23) from Murray.
 
 
 The equation for :math:`\frac{dc}{dT}` is exactly the same as Segel (24b), after some minor algebra.
-The equation for :math:`\frac{ds}{dT}` also requires a bit of basic algebra, and is equal to Segal (24a).
+The equation for :math:`\frac{ds}{dT}` also requires a bit of basic algebra, and is equal to Segel (24a).
 
 We recover Murray (6.23) with a bit more algebra, not shown here.
 

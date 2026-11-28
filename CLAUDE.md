@@ -120,6 +120,9 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   which is how a parameter-ordering bug survived until one of them tripped over it. In
   an `.rst` page, put a sentence between a `.. math::` block and a doctest block; an
   indented doctest directly after the math is taken as part of it and never runs.
+  To typeset what a page computes, do not copy a doctest's TeX output into a math block:
+  `.. math-from-doctest:: reduced.to_tex()` (`docs/source/_ext/`) runs the page's
+  examples above it and sets the string as an `align` block, so it cannot go stale.
 - The figures are library code, in `desr/figures/`, and need matplotlib:
   `flowchart_figure` draws a reduction as nine boxes of matrices, `symbol_map_figure`
   draws it as a chain of systems. Neither computes anything — every matrix, monomial,
@@ -132,7 +135,7 @@ Utilities: SymPy expression manipulation, LaTeX parsing/rendering.
   for the parameter scheme, Hubert & Labahn's `x` and `y` for the general and
   dependent-variable schemes, which also keep the system's own clock unless `independent` says
   otherwise. Whatever is set is honoured by all of them. The positional 3-tuple was removed in
-  2.0: its order followed the variable order, which changed, so re-reading it would have
+  2.0: its order followed the symbol order, which changed, so re-reading it would have
   silently re-pointed every entry.
 - `exponent_matrix` was previously called `power_matrix` — watch for stale references in docs/comments.
 

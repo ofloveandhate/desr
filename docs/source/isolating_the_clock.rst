@@ -20,7 +20,7 @@ Consider the autonomous ordinary differential equation
     \frac{du}{dt} = 2 b^2 u + \frac{1}{a^2}.
 
 
-In desr, the way the user orders their symbols determines the form of the reduce
+In desr, the way the user orders their symbols determines the form of the reduced
 system.  With symbols in the order
 :math:`(t, u, a, b)` the scaling has two symmetries, and the normal Hermite multiplier
 gives these invariants:
@@ -49,7 +49,7 @@ Another basis of the same invariants
 ---------------------------------------
 
 By choosing a different set of invariants, one might obtain an autonomous system.
-Observe first, the product of two invariants is an invariant.  For example
+Observe first that the product of two invariants is an invariant.  For example
 
 .. math::
 
@@ -79,7 +79,7 @@ names it gives them, a reduction, a figure.  There is one multiplier, and it is 
 the reduction uses.
 
 Isolating the clock is something you have to ask for.
-A translator on which `isolate_clock` has not been called simply uses the normal
+A translator on which ``isolate_clock`` has not been called simply uses the normal
 Hermite multiplier:
 
     >>> translator.invariant_monomials()
@@ -89,7 +89,7 @@ How isolating the clock works
 ------------------------------
 
 This part is pretty mathy, and gets into notation details and names of things.  I do
-apologize for the technical details here.  Just if you're curious, read on.
+apologise for the technical details here.  Just if you're curious, read on.
 Each column of the multiplier :math:`V` is the exponent vector of one monomial, and the
 row belonging to :math:`t` holds the power of :math:`t` in each.  For the example:
 
@@ -168,8 +168,8 @@ Clock isolation works with the invariants the multiplier lists.  It does not loo
 It does not change which scalings the system has, the auxiliaries' scaling, or the
 number of symbols in the reduced system.
 
-The invariants it produces are not the same as the normal Hermite multiplier gives, and so
-not the same Hubert & Labahn print for their examples.  A translator as-built uses the
+The invariants it produces are not the same as those the normal Hermite multiplier gives,
+and so not the same as those Hubert & Labahn print for their examples.  A translator as-built uses the
 normal multiplier, and what
 :meth:`~desr.ode_translation.ODETranslator.invariant_monomials` reports is always what
 a reduction is written in.

@@ -1,14 +1,14 @@
 Numerical solution and reverse translation
 ========================================================
 
-The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original.
+The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of symbols, either as single points or time series, between the reduced and original systems.
 That is, having solved a nondimensionalised system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalisation.  
 
 Let's demonstrate using the Michaelis-Menten equations: we solve the *reduced* system
 numerically, and recover the solution of the *original* one, then check the two agree.
 
-:mod:`desr` provides some tools in :mod:`desr.numerics`, which needs :mod:`numpy`.  Due to this dependence, is not imported by
-``desr``.  The numerics submodule optional, so users who only work symbolically are free of this dependency.  This example 
+:mod:`desr` provides some tools in :mod:`desr.numerics`, which needs :mod:`numpy`.  Due to this dependence, it is not imported by
+``desr``.  The numerics submodule is optional, so users who only work symbolically are free of this dependency.  This example 
 uses :mod:`scipy` to do the integrating, but a user is, of course, free to use any solver, or provide numeric data from any source.
 
 The system and its reduction
@@ -26,7 +26,7 @@ For self-containedness we include this here.  Take the two-variable Michaelis-Me
     \end{align}
 
 We build the system in Python from its TeX, and add the initial condition. 
-The variable order matters: the reduction algorithm tends to reduce away the variables that come last.
+The symbol order matters: the reduction tends to normalise away the parameters that come first.
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
@@ -37,7 +37,7 @@ The variable order matters: the reduction algorithm tends to reduce away the var
     >>> system.update_initial_conditions({'s': 's_0'})
     >>> system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
-Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :math:`c_i`.
+Reduce it, naming the new variables :math:`\tau, u, v` and the new parameters :math:`c_i`.
 
     >>> translator = ODETranslator(system,
     ...                                              naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['u', 'v']})
@@ -51,14 +51,14 @@ Reduce it, naming the new variables :math:`\tau, u, v` and the new constants :ma
     u(0) = 1
     parameters: c0, c1, c2
 
-Five constants have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
+Five parameters have become three -- revealing that there are :math:`r = 2` scaling symmetries in this system:
 
     >>> translator.r
     2
 
 The number of scaling symmetries is also the number of parameters we must provide later, when reverse translating from nondimensionalised to the original symbols. 
 
-For programming convenience, let's give the variables names we can use below.
+For programming convenience, let's give the symbols names we can use below.
 
     >>> s_0, e_0, k_1, k_2, k_m1, t, s, c = system.symbols
     >>> c0, c1, c2, tau, u, v = reduced_system.symbols
@@ -83,13 +83,13 @@ Choose some arbitrary parameter values and solve directly.  This is the answer w
 Translate parameter values
 ---------------------------
 
-Let's translate the values of our original parameters, into the dimensionless parameters.  To this end,  
+Let's translate the values of our original parameters into the dimensionless parameters.  To this end,  
 :class:`~desr.numerics.NumericTranslator` translates numeric values for parameters and variables across the same reduction that
 :class:`~desr.ode_translation.ODETranslator` applies to symbols.
 
     >>> numeric_translation = reduced_system.numeric_translator()
 
-The :meth:`~desr.numerics.NumericTranslator.forward`  function takes values of the original variables and
+The :meth:`~desr.numerics.NumericTranslator.forward`  function takes values of the original symbols and
 returns values of the reduced ones.  Here it converts the starting state and the parameters.
 
     >>> translated_values = numeric_translation.forward({t: 0.0, s: 2.0, c: 0.0, **parameters})
@@ -98,14 +98,14 @@ returns values of the reduced ones.  Here it converts the starting state and the
     >>> [float(translated_values[x]) for x in (c0, c1, c2)]
     [0.15, 0.13333333333333333, 0.3]
 
-You don't have to translate all the values at once, the function accepts a partial dictionary. For example, passing
+You don't have to translate all the values at once; the function accepts a partial dictionary. For example, passing
 a dict containing only parameters and time converts the time axis, since :math:`\tau = k_1 s_0 t`.
 
     >>> reduced_times = numeric_translation.forward({t: times, **parameters})[tau]
     >>> [float(x) for x in reduced_times[:3]]
     [0.0, 3.0, 6.0]
 
-Do note, however, that if a dict does NOT contain enough values to do the reduction, then an error occurs.  So if I only supply the value of ``k_1``, then the reduction is missing both ``s_0`` and ``t``:
+Do note, however, that if a dict does NOT contain enough values to do the reduction, then an error occurs.  So if I supply only ``t`` and ``k_1``, the reduction is missing ``s_0``, since :math:`\tau = k_1 s_0 t`:
     
     >>> numeric_translation.forward({t: times, k_1: 1.5})
     Traceback (most recent call last):
@@ -190,7 +190,7 @@ And the trajectories agree with the direct solve.
     >>> bool(np.max(np.abs(recovered_soln[c] - reference_soln.y[1])) < 1e-8)
     True
 
-Neat fact: Constants come back reverse-translated, too, which is what a fitting workflow might be after.  So if you fit
+Neat fact: Parameters come back reverse-translated, too, which is what a fitting workflow might be after.  So if you fit
 :math:`c_0, c_1, c_2` in the reduced system, then un-translate, 
 you read off the original rates.
 
@@ -198,7 +198,7 @@ you read off the original rates.
     [0.9, 0.4, 0.3]
 
 
-Visualization
+Visualisation
 -------------------------
 
 The reduced system on the left and the original on the right are the same
@@ -210,7 +210,7 @@ circles are the recovered solution sitting on the directly computed one.
 The right-hand panel is worth dwelling on.  The disagreement between the two routes
 never exceeds :math:`10^{-11}`, two orders of magnitude below the tolerance the integrator
 was asked for.  Each original
-variable is a product of integer powers of the reduced ones -- so translation in either direction introduces practically no error of
+symbol is a product of integer powers of the reduced ones -- so translation in either direction introduces practically no error of
 its own.  Thus, the right hand panel is the solver's noise, not that of the translation.
 
 
@@ -219,7 +219,7 @@ Without enough known parameter values, reverse-translation is impossible
 
 Asking for the original system without enough known parameter values supplied raises an exception.
 The message says what is still undetermined -- the rescaling that the values given do not
-rule out -- and which variables would settle it.
+rule out -- and which symbols would settle it.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5})
     Traceback (most recent call last):
@@ -230,9 +230,9 @@ rule out -- and which variables would settle it.
     Supply the value of one of: s, k_m1, k_2, e_0, s_0.
 
 Even though :math:`r = 2`, two values are not always sufficient.  For example, knowing :math:`k_{-1}` and :math:`k_2` tells us
-only about :math:`c_0` and :math:`c_1`, which between them pin down the single combination
+only about :math:`c_1` and :math:`c_2`, which between them pin down the single combination
 :math:`k_1 s_0` rather than both factors.  The message names the rescaling that both values
-are blind to, and offers only variables that would actually break it -- :math:`c` is not
+are blind to, and offers only symbols that would actually break it -- :math:`c` is not
 among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_m1: 0.9, k_2: 0.4})
@@ -243,10 +243,10 @@ among them, since :math:`c(0) = 0` and a zero cannot fix a scale.
     The reduced system is shared by an entire 2-parameter family of original systems, and this does not choose between them.
     Supply the value of one of: s, k_1, e_0, s_0.
 
-Only *constants* may be known values when a series is translated.  :math:`s` is a function
+Only *parameters* may be known values when a series is translated.  :math:`s` is a function
 of time, and the series -- :math:`u(\tau)`, which is :math:`s/s_0` -- already says how it
 varies; a single number for it is a different kind of statement, and mixing the two is
-refused rather than resolved by some convention.  The constant that stands for its initial
+refused rather than resolved by some convention.  The parameter that stands for its initial
 value is :math:`s_0`, and the message says so.
 
     >>> numeric_translation.reverse(reduced_soln_as_dict, known_values={k_1: 1.5, s: 2.0})

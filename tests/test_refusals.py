@@ -166,7 +166,7 @@ class TestMoreTranslatorRefusals(TestCase):
                         lambda: translator.reverse_translate_dep_var(one, 0)):
             with self.assertRaises(ValueError) as caught:
                 reverse()
-            self.assertIn('Incorrect number of variables', str(caught.exception))
+            self.assertIn('Incorrect number of values', str(caught.exception))
 
 class TestMoreNumericRefusals(TestCase):
 

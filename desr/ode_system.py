@@ -132,7 +132,7 @@ class ConflictingParameterValues(ValueError):
     :class:`desr.numerics.ConflictingKnownValues` for the neighbouring case: values of
     the original symbols *at a point* on a solution that do not agree with each other.
     Two exceptions, because `parameter_values` and `known_values` are two different
-    things -- the first holds constants of the model, true everywhere, and the second
+    things -- the first holds the values of the parameters, true everywhere, and the second
     holds measurements at one time.
     '''
     pass
@@ -180,8 +180,8 @@ class ODESystem(object):
 
     **The vocabulary**, since it is a thing that trips people up:
 
-    - :attr:`~desr.ode_system.ODESystem.symbols` is the abstract: every name the system
-      declares.  It is what :math:`n` counts.
+    - :attr:`~desr.ode_system.ODESystem.symbols` is every name the system declares.  It
+      is what :math:`n` counts.
     - :attr:`~desr.ode_system.ODESystem.parameters` are the :math:`p` symbols with no
       equation of their own.
     - the *variables* are the rest -- the ones that actually vary -- namely
@@ -240,9 +240,9 @@ class ODESystem(object):
                 'ODESystem(equations=[...]).')
         if refused or isinstance(derivative_dict, (list, tuple)):
             raise TypeError(
-                'An ODESystem is not built from parallel lists of variables and '
+                'An ODESystem is not built from parallel lists of symbols and '
                 'derivatives, which do not say which derivative belongs to which '
-                'variable.  Pass a dict, ODESystem({x: rate_of_x, ...}), or the '
+                'symbol.  Pass a dict, ODESystem({x: rate_of_x, ...}), or the '
                 'equations themselves, ODESystem(equations=[\'dx/dt = ...\']) or '
                 'ODESystem(tex=r\'\\frac{dx}{dt} = ...\').')
         if isinstance(derivative_dict, str):
@@ -279,7 +279,7 @@ class ODESystem(object):
             indep_var (sympy.Symbol, optional): Independent variable we are differentiating with respect to.
             initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
             same_units (dict of sympy.Symbol : sympy.Expression): lists of things that must have the same units.
-            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+            parameters (iter of str or sympy.Symbol, optional): Symbols to treat as parameters,
                 discarding the zero equations they were given.
             scheme (desr.ode_translation.ReductionScheme, optional): For a reduced system, which reduction produced
                 it.  **Stored, not inferred**: a reduced system handed on by itself cannot work
@@ -394,7 +394,7 @@ class ODESystem(object):
         if type(self) is not type(other):
             return False
 
-        # Compare variables
+        # Compare symbols
         self_var = sorted(self.symbols, key=str)
         other_var = sorted(other.symbols, key=str)
         if self_var != other_var:
@@ -588,9 +588,8 @@ class ODESystem(object):
         The dependents: the symbols with an equation of their own, excluding the independent
         variable.
 
-        Hubert & Labahn's "state variables", and the right name for them in prose -- the
-        state is what a solver integrates.  The accessor is the short form so that it pairs
-        with :attr:`~parameters` without either needing a noun bolted on.
+        ``dependents`` is short for the dependent variables, so that it pairs with
+        :attr:`~parameters` without either needing a noun bolted on.
 
         A conserved symbol, whose equation says zero, is a dependent.
 
@@ -661,10 +660,9 @@ class ODESystem(object):
 
         *Conserved* is the right word only for a dependent: a quantity that does not change
         along the trajectory.  A parameter does not change either, but it is not conserved
-        *along* anything -- it has no equation at all.  The umbrella word for both is
-        "constant", which is useful in prose and deliberately has no accessor: it would be
-        implied for every parameter, impossible for the independent variable, and
-        informative only here, where it is this.
+        *along* anything -- it has no equation at all, and is fixed by the model.  A
+        conserved dependent is constant along each solution, with a value that can differ
+        from one solution to the next.
 
         A conserved dependent and a parameter both print as `0` or are absent from the
         equations, so nothing in the printed system tells them apart.  What does is the
@@ -886,7 +884,7 @@ class ODESystem(object):
         with which column the result is a plausible wrong answer rather than an error.
 
         Returns:
-            dict or None: ``{symbol: kind}``, in this system's variable order.
+            dict or None: ``{symbol: kind}``, in this system's symbol order.
         '''
         return None if self._symbol_kinds is None else dict(self._symbol_kinds)
 
@@ -981,7 +979,7 @@ class ODESystem(object):
     @property
     def derivative_dict(self):
         '''
-        Return a variable: expr mapping, over the variables that have an equation.
+        Return a symbol: expr mapping, over the symbols that have an equation.
 
         Returns:
             dict: Keys are the independent and dependent variables, value is the derivative with respect to the independent variable.
@@ -990,22 +988,22 @@ class ODESystem(object):
 
     def make_parameter(self, variable):
         '''
-        Declare a variable to be a parameter, discarding the equation it was given.
+        Declare a symbol to be a parameter, discarding the equation it was given.
 
-        Only a variable that does not move can become a parameter: one that is already a
+        Only a symbol that does not move can become a parameter: one that is already a
         parameter, in which case this does nothing, or one whose equation says zero.  An
         explicit :math:`dw/dt = 0` says :math:`w` is conserved, which is a statement about
-        a dependent variable; this is how to say instead that it is a constant of the model.
+        a dependent variable; this is how to say instead that it is fixed by the model.
 
-        The variable keeps its place in the ordering.  Only
+        The symbol keeps its place in the ordering.  Only
         :meth:`~desr.ode_system.ODESystem.default_order_symbols` moves it to sit with the
         other parameters, because the ordering decides which parameters are normalised away.
 
         Args:
-            variable (str, sympy.Symbol): The variable to reclassify.
+            variable (str, sympy.Symbol): The symbol to reclassify.
 
         Raises:
-            ValueError: If the variable is unknown to the system, is the independent
+            ValueError: If the symbol is unknown to the system, is the independent
                 variable, has an equation saying it moves, or has an initial condition.
 
         >>> system = ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
@@ -1024,7 +1022,7 @@ class ODESystem(object):
             variable = to_symbol(variable)
 
         if variable not in self.symbols:
-            raise ValueError('Cannot make a parameter of {}, which is not a variable of the '
+            raise ValueError('Cannot make a parameter of {}, which is not a symbol of the '
                              'system.'.format(variable))
 
         if variable == self.independent_variable:
@@ -1054,10 +1052,10 @@ class ODESystem(object):
     @property
     def initial_conditions(self):
         '''
-        Return a variable: initial-value mapping.
+        Return a dependent: initial-value mapping.
 
         Returns:
-            dict: Keys are non-constant variables, value is the constant representing their initial condition.
+            dict: Keys are dependents, value is the expression for their initial condition.
         '''
         return self._initial_conditions.copy()
 
@@ -1176,7 +1174,7 @@ class ODESystem(object):
         >>> system.update_initial_conditions({'x': 'c_0 + c_1'})
         Traceback (most recent call last):
             ...
-        ValueError: an initial condition for a non-reduced system should just be a single variable.  you have c_0, c_1
+        ValueError: an initial condition for a non-reduced system should just be a single symbol.  you have c_0, c_1
         '''
         for variable, init_cond in _as_initial_condition_pairs(initial_conditions):
 
@@ -1219,10 +1217,10 @@ class ODESystem(object):
                     # Sorted, because a set's repr varies between runs and an error whose
                     # text moves cannot be matched on.
                     named = ', '.join(sorted(map(str, ics_vars))) or 'none'
-                    raise ValueError(f'an initial condition for a non-reduced system should just be a single variable.  you have {named}')
+                    raise ValueError(f'an initial condition for a non-reduced system should just be a single symbol.  you have {named}')
 
                 if init_cond.is_constant():
-                    raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a variable expression.  Non-reduced systems can only have variables as initial conditions.")
+                    raise ValueError(f"initial condition `{init_cond}` doesn't appear to be a symbol.  Non-reduced systems can only have symbols as initial conditions.")
 
             # Whatever symbols the initial condition names and the system does not yet
             # have become parameters -- the *symbols*, never the expression itself.
@@ -1231,7 +1229,7 @@ class ODESystem(object):
             # condition need not be a single symbol: once a column operation changes what
             # a dependent is measured in, `v(0)` comes out as a monomial in two reduced
             # parameters, such as `kappa4/kappa0`.  Adding that to the symbol list made it
-            # a "parameter" that is not a variable at all, and the next `subs` died in
+            # a "parameter" that is not a symbol at all, and the next `subs` died in
             # `_variable_sanity_check` saying so.
             new_symbols = sorted(init_cond.free_symbols - set(self.symbols), key=str)
             if new_symbols:
@@ -1288,7 +1286,7 @@ class ODESystem(object):
         Returns:
             dict: {sympy.Symbol: sympy.Expr} for each parameter whose value has been set.
 
-        A parameter is a constant of the model, so its value is true everywhere, which is
+        A parameter is fixed by the model, so its value is true everywhere, which is
         what makes it a fact the *system* can carry.  That is a different thing from
         :mod:`desr.numerics`' ``known_values``, which are values of the original symbols
         at one point on a solution and may name a dependent variable; see
@@ -1396,7 +1394,7 @@ class ODESystem(object):
         >>> system.update_parameter_values({'x': 2})
         Traceback (most recent call last):
             ...
-        ValueError: x is a dependent variable, so it has no one value to record; parameter_values holds constants of the model.  For its value at a point on a solution, pass known_values= to desr.numerics.NumericTranslator.reverse.
+        ValueError: x is a dependent variable, so it has no one value to record; parameter_values holds the values of the parameters.  For its value at a point on a solution, pass known_values= to desr.numerics.NumericTranslator.reverse.
 
         A value is a number.  A relation among parameters is a constraint:
 
@@ -1445,7 +1443,7 @@ class ODESystem(object):
                         else 'a dependent variable')
                 raise ValueError(
                     '{} is {}, so it has no one value to record; parameter_values holds '
-                    'constants of the model.  For its value at a point on a solution, '
+                    'the values of the parameters.  For its value at a point on a solution, '
                     'pass known_values= to '
                     'desr.numerics.NumericTranslator.reverse.'.format(parameter, role))
 
@@ -1503,13 +1501,13 @@ class ODESystem(object):
 
     def require_same_unit(self,requirements):
         """
-        Add requirements to the system that some variables have the same units as some corresponding expressions
+        Add requirements to the system that some symbols have the same units as some corresponding expressions
 
         Args:
             requirements (dict of sympy.Symbol:sympy.Expression):
 
-        Keys: var (sympy.Symbol): a variable to require to have the same unit as the expression expr
-        Values: expr (sympy.Expression): an expression that must have the same net unit as the variable var
+        Keys: var (sympy.Symbol): a symbol to require to have the same unit as the expression expr
+        Values: expr (sympy.Expression): an expression that must have the same net unit as the symbol var
 
         This has the effect of adding columns to the Power Matrix / Exponent Matrix.
         """
@@ -1529,11 +1527,11 @@ class ODESystem(object):
             expr_vars = expressions_to_variables([expr])
 
             if var not in self._variables:
-                raise ValueError(f'The variable {var} for a same-dimension requirement is not already a variable in this system.')
+                raise ValueError(f'The symbol {var} for a same-dimension requirement is not already a symbol of this system.')
 
             for e in expr_vars:
                 if e not in self._variables:
-                    raise ValueError(f'The symbol {e} used in expression {expr} for a same-dimension requirement is not already a variable in this system.')
+                    raise ValueError(f'The symbol {e} used in expression {expr} for a same-dimension requirement is not already a symbol of this system.')
 
             result[var] = expr
 
@@ -1607,7 +1605,7 @@ class ODESystem(object):
         if (lhs == 0) or (rhs == 0):
             raise ValueError(f'Cannot express equality constraint with 0. ({lhs} == {rhs})')
 
-        # get the variables from the constraint
+        # get the symbols from the constraint
         all_constraint_vars, dependent_vars, new_vars = self.constraint_symbols(lhs, rhs)
 
         # A constraint may only relate parameters.  One involving a dependent variable is a
@@ -1630,11 +1628,11 @@ class ODESystem(object):
         Record `new_vars` as parameters of the system, at the end of the parameter block.
 
         New parameters must land *before* the independent variable, not at the end of the
-        variable list.  The canonical order is parameters, independent variable, dependents,
+        symbol list.  The canonical order is parameters, independent variable, dependents,
         and a parameter sitting after the dependents breaks it: the parameter reduction
         scheme needs the independent variable at index `num_parameters`, so appending to the
         end silently costs the scheme.  It is easy to miss, because :meth:`__repr__` groups
-        the variables by classification and so prints a sane-looking `parameters:` line
+        the symbols by classification and so prints a sane-looking `parameters:` line
         either way.
 
         The insertion point is the independent variable's index rather than
@@ -1749,7 +1747,7 @@ class ODESystem(object):
             if lhs_dependent_vars:
                 # in this conditional, we're trying to substitute away a dependent variable.  can only do, if the substitution is just a renaming.  anything else must be done by the user
 
-                # if the right hand side is just the only variable on the right hand side, then we CAN do it.  check by getting the first variable and see if equal.
+                # if the right hand side is just the only symbol on the right hand side, then we CAN do it.  check by getting the first symbol and see if equal.
                 if (rhs!=list(rhs_vars)[0] or lhs != list(lhs_vars)[0]) and not self.is_reduced:
                     # this is not a parameter substitution, nor is it a simple variable renaming.
                     raise ValueError(f'unable to make substitution {lhs} -> {rhs}.')
@@ -1776,7 +1774,7 @@ class ODESystem(object):
         # do the substitutions!
         new_derivs = [d.subs(to_sub) if d is not None else None for d in new_derivs]
 
-        # Now need to substitute in the variable order and initial conditions
+        # Now need to substitute in the symbol order and initial conditions
 
 
         # An initial condition's *value* is an expression in the system's symbols, so a
@@ -1819,7 +1817,7 @@ class ODESystem(object):
 
 
 
-        # next, we add the new variables from the substitution
+        # next, we add the new symbols from the substitution
         known_vars = set(expressions_to_variables(variables + new_derivs + constraints + list(initial_conditions.values())))
         missing_vars = sorted(list(set(known_vars) - set(variables)),key=str)
 
@@ -1830,14 +1828,14 @@ class ODESystem(object):
         # belongs at the end of the parameter block -- before the independent variable, not at
         # the end of the list, which would put it after the dependents and cost the parameter
         # reduction scheme.  None rather than 0: giving it `0` would declare it a conserved
-        # dependent.  The derivatives are stored in the variable order, so both lists are cut
+        # dependent.  The derivatives are stored in the symbol order, so both lists are cut
         # at the same point.
         at = variables.index(self.independent_variable)
         new_vars = variables[:at] + missing_vars + variables[at:]
         new_derivs = new_derivs[:at] + [None] * len(missing_vars) + new_derivs[at:]
 
 
-        # remove variables that don't appear in any expressions
+        # remove symbols that don't appear in any expressions
 
         variables_to_inspect = new_vars # because we're about to modify `new_vars` in the loop below
         extant_vars = set(expressions_to_variables( [d for d in new_derivs if d is not None] + constraints + list(initial_conditions.values()) + [self.independent_variable] + list(self.dependents)))
@@ -1859,7 +1857,7 @@ class ODESystem(object):
             if v not in extant_vars:
                 var_loc = new_vars.index(v)
 
-                # omit using list slicing.  must omit from both the variable ordering and from the derivatives (which are stored impilictly in the order of the variables)
+                # omit using list slicing.  must omit from both the symbol ordering and from the derivatives (which are stored implicitly in the order of the symbols)
                 new_vars = new_vars[:var_loc] + new_vars[var_loc+1:]
                 new_derivs = new_derivs[:var_loc] + new_derivs[var_loc+1:]
 
@@ -1954,10 +1952,10 @@ class ODESystem(object):
         Instantiate from multiple equations.
 
         Args:
-            equations (str, iter of str): Equations of the form "dx/dt = expr", optionally seperated by :code:`\\n`.
+            equations (str, iter of str): Equations of the form "dx/dt = expr", optionally separated by :code:`\\n`.
             indep_var (sympy.Symbol): The independent variable, usually :code:`t`.
             initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
-            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+            parameters (iter of str or sympy.Symbol, optional): Symbols to treat as parameters,
                 discarding the zero equations they were given.
 
         Returns:
@@ -1977,7 +1975,7 @@ class ODESystem(object):
         parameters: c_0, c_1
 
         A variable written down with a zero equation is conserved, and stays a dependent
-        variable; `parameters` is how to ask for it to be a constant of the model instead.
+        variable; `parameters` is how to ask for it to be a parameter instead.
 
         >>> ODESystem.from_equations(['dz/dt = a*z', 'dw/dt = 0'])
         dt/dt = 1
@@ -2003,14 +2001,15 @@ class ODESystem(object):
     @classmethod
     def from_dict(cls, deriv_dict, indep_var=sympy.Symbol('t'), initial_conditions=None, is_reduced=False, parameters=None):
         '''
-        Instantiate from a text of equations.
+        Instantiate from a dict of derivatives, ``{symbol: its derivative}``.
 
         Args:
-            deriv_dict (dict): {variable: derivative} mapping.  A variable absent from the
-                mapping, but appearing in the expressions, is a parameter.
+            deriv_dict (dict): {symbol: derivative} mapping; keys and values may be sympy
+                objects or strings.  A symbol absent from the mapping, but appearing in the
+                expressions, is a parameter.
             indep_var (sympy.Symbol): Independent variable, that the derivatives are with respect to.
             initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
-            parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,
+            parameters (iter of str or sympy.Symbol, optional): Symbols to treat as parameters,
                 discarding the zero equations they were given.
 
 
@@ -2041,7 +2040,7 @@ class ODESystem(object):
                       (sympify_expression(rate) if isinstance(rate, str) else sympy.sympify(rate))
                       for symbol, rate in deriv_dict.items()}
 
-        # Make a tuple of all variables.  A symbol that appears only in an initial
+        # Make a tuple of all symbols.  A symbol that appears only in an initial
         # condition is added by `update_initial_conditions`, which the constructor calls
         # and which reads every way an initial condition may be written.
         variables = set(expressions_to_variables(deriv_dict.values())).union(set(deriv_dict.keys()))
@@ -2178,7 +2177,7 @@ class ODESystem(object):
 
         Args:
             tex (str): LaTeX
-            parameters (iter of str or sympy.Symbol, optional): Variables to treat as
+            parameters (iter of str or sympy.Symbol, optional): Symbols to treat as
                 parameters, discarding the zero equations they were given.
             primes (str): ``'name'`` (the default) or ``'derivative'``; see
                 :func:`desr.tex_tools.tex_to_sympy_one_line`.
@@ -2233,15 +2232,15 @@ class ODESystem(object):
 
         for eqn in sympification:
             if isinstance(eqn.lhs, sympy.core.function.AppliedUndef):
-                # `C(0) = ...`.  A variable evaluated at zero is an initial condition, and
-                # it cannot be applied until the system exists and knows which variables
+                # `C(0) = ...`.  A symbol evaluated at zero is an initial condition, and
+                # it cannot be applied until the system exists and knows which symbols
                 # are dependent.
                 initial_conditions[to_symbol(eqn.lhs.func.__name__)] = eqn.rhs
 
             elif not isinstance(eqn.lhs, sympy.Derivative):
                 # Not a derivative, so it relates existing quantities.  Which kind of
                 # relation it is cannot be known until every derivative line has been
-                # read, because that is what says which variables are dependent.
+                # read, because that is what says which symbols are dependent.
                 relations.append((eqn.lhs, eqn.rhs))
 
             else:
@@ -2292,14 +2291,14 @@ class ODESystem(object):
 
         A symbol given a number is a **value** -- `k_1 = 2` means what a paper means by
         it.  Otherwise, a relation mentioning only parameters is a **constraint**: it says
-        something true of the constants of the model, and the system can carry it as one.
+        something true of the parameters, and the system can carry it as one.
         A relation mentioning a dependent variable is a **definition** -- it gives a
         quantity in terms of things that move -- and :meth:`add_constraint` rightly refuses
         those, so it is either substituted away or reported.
 
         Args:
             system (ODESystem): The system built from the derivative lines, which is what
-                knows which variables are dependent.
+                knows which symbols are dependent.
             relations (list): `(lhs, rhs)` for each non-derivative line, in the order the
                 lines were written.  A list, because two lines may share a left-hand side
                 and mean different things -- `K_m = (k_2 + k_m1)/k_1` is a constraint and
@@ -2397,7 +2396,7 @@ class ODESystem(object):
         # next, initial conditions
         exprs.extend([var / init_cond for var, init_cond in self.initial_conditions.items()])
 
-        # then, the constraints on constant variables
+        # then, the constraints on the parameters
         exprs.extend([eq.lhs / eq.rhs for eq in self.constraints])
 
         # finally, the things that are required to have the same unit
@@ -2407,7 +2406,7 @@ class ODESystem(object):
 
     def _variable_sanity_check(self):
         """
-        Makes sure that all the variables in the system are accounted for
+        Makes sure that all the symbols in the system are accounted for
         """
 
         exprs = self._expressions()
@@ -2418,16 +2417,16 @@ class ODESystem(object):
 
 
         if unlisted_vars:
-            raise RuntimeError(f"there are variables in the expressions that are not in the list of variables: {unlisted_vars}")
+            raise RuntimeError(f"there are symbols in the expressions that are not in the list of symbols: {unlisted_vars}")
 
         for v in self.symbols:
-            found_vars = expressions_to_variables([v]) # convert.  constants don't make it through.
+            found_vars = expressions_to_variables([v]) # convert.  numbers don't make it through.
 
             if not found_vars:
-                raise RuntimeError(f"variable `{v}` doesn't appear to be a variable")
+                raise RuntimeError(f"symbol `{v}` doesn't appear to be a symbol")
 
             if list(found_vars)[0] != sympy.sympify(v):
-                raise RuntimeError(f'variable `{v}` appears to not actually be a single variable.  have {found_vars}')
+                raise RuntimeError(f'symbol `{v}` appears to not actually be a single symbol.  have {found_vars}')
 
 
     def exponent_matrix(self):
@@ -2435,7 +2434,7 @@ class ODESystem(object):
         Determine the 'exponent' or 'power' matrix of the system, denoted by :math:`K` in the literature,
         by gluing together the power matrices of each derivative, initial condition, constraint, and require-same-variable.
 
-        In particular, it concatenates :math:`K_{\\left(\\frac{t}{x} \\cdot \\frac{dx}{dt}\\right)}` for :math:`x` in :attr:`~variables`,
+        In particular, it concatenates :math:`K_{\\left(\\frac{t}{x} \\cdot \\frac{dx}{dt}\\right)}` for each :math:`x` in :attr:`~dependents`,
         where :math:`t` is the independent variable.
 
         >>> eqns = '\\n'.join(['ds/dt = -k_1*e_0*s + (k_1*s + k_m1)*c',
@@ -2458,7 +2457,7 @@ class ODESystem(object):
         Todo:
             * Change the code to agree with the paper.
 
-        The initial-condition constant is appended, so it lands after the dependent
+        The initial-condition parameter is appended, so it lands after the dependent
         variables rather than among the parameters where it belongs; see
         :meth:`~desr.ode_system.ODESystem.default_order_symbols`.
 
@@ -3265,7 +3264,7 @@ class ODESystem(object):
 
         The order within the parameters is the one that changes the answer: the parameters
         placed **first** tend to be the ones normalised to 1, and the rest become the
-        reduced constants.  "Tend to" rather than "are": :math:`r` of them are normalised,
+        reduced parameters.  "Tend to" rather than "are": :math:`r` of them are normalised,
         the leading ones are the natural candidates, but the Hermite structure decides which
         set actually can be, so a parameter that cannot participate is skipped over.  Put
         the ones you would rather see disappear at the front, then check
@@ -3509,12 +3508,12 @@ def parse_de(diff_eq, indep_var='t'):
     if match.group(2) != indep_var:
         raise ValueError('We only work in ordinary DEs in {}'.format(indep_var))
     # Read every name as a symbol, so that a species called S, E, I, beta or pi is an
-    # ordinary variable rather than one of sympy's own objects.
+    # ordinary symbol rather than one of sympy's own objects.
     return to_symbol(match.group(1)), sympify_expression(match.group(3))
 
 def rational_expr_to_exponent_matrix(expr, variables):
     '''
-    Take a rational expression and determine the power matrix wrt an ordering on the variables, as on page 497 of
+    Take a rational expression and determine the power matrix wrt an ordering on the symbols, as on page 497 of
     Hubert-Labahn.
 
     >>> exprs = list(map(sympy.sympify, "n*( r*(1 - n/K) - k*p/(n+d) );s*p*(1 - h*p / n)".split(';')))
@@ -3545,7 +3544,7 @@ def rational_expr_to_exponent_matrix(expr, variables):
 
     A zero expression -- the equation of a conserved variable, such as a catalyst in a
     reaction network -- has no monomials, and so constrains no scaling.  It contributes a
-    column of zeros, one entry per variable, rather than nothing at all:
+    column of zeros, one entry per symbol, rather than nothing at all:
 
     >>> rational_expr_to_exponent_matrix(sympy.sympify(0), variables).T
     Matrix([[0, 0, 0, 0, 0, 0, 0, 0]])
@@ -3595,7 +3594,7 @@ def maximal_scaling_matrix(exprs, variables=None):
 
     Args:
         exprs (iter): Iterable of sympy.Expressions.
-        variables: An ordering on the variables. If None, sort according to the string representation.
+        variables: An ordering on the symbols. If None, sort according to the string representation.
     Returns:
         sympy.Matrix
 
@@ -3611,7 +3610,7 @@ def maximal_scaling_matrix(exprs, variables=None):
 
     The matrix always has full row rank, by Hubert & Labahn's Proposition 5.1.  When no
     scaling leaves the expressions invariant it has no rows, and still one column per
-    variable:
+    symbol:
 
     >>> maximal_scaling_matrix([sympy.sympify('z_1 + z_2 + 1')])
     Matrix(0, 2, [])

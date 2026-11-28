@@ -82,8 +82,8 @@ reason it was dimensionless to begin with.  Most models have no such symbol, and
 every original symbol is moved by the scaling.
 
 
-Thinking of as a table
-------------------------
+Thinking of it as a table
+---------------------------
 
 A symbol is a point in the product of the two, not a value of a single attribute.  Laying
 the reduced symbols out on both axes shows which combinations actually occur.
@@ -194,7 +194,7 @@ not in the reduced system.
     k_2_3*t
 
 
-Parameter auxiliaries can be normalized
+Parameter auxiliaries can be normalised
 ----------------------------------------------------------
 
 The table is not only bookkeeping.  The three auxiliaries in the **parameter** row are
@@ -213,10 +213,9 @@ parameter row of the table is always empty in a default reduction -- not because
 auxiliaries do not arise, but because they are exactly the ones that are normalised away.
 Both kinds exist; only one is kept.  To see the other, ask as above.
 
-What that buys is a reduced system whose parameters its equations use.  Compare
-:math:`x_3`'s equation with the one above: every :math:`1/t` has gone, because normalising
-:math:`k_{23}` makes the invariant :math:`y_0 = k_{23} t` into :math:`t` itself, which the
-reduced system already carries.
+What that buys is a smaller reduced system.  :math:`x_3`'s equation is the same as the
+one above, and the three constant auxiliaries have left the parameters, which are now
+none at all:
 
     >>> reduced.derivative_dict[sympy.Symbol('x3')]
     -x3*y1 + x3*y2*y4
@@ -228,7 +227,7 @@ Constant, or quadrature?
 ---------------------------
 
 A major difference between the two examples above is between recovering the original
-system with constants (mere substitution or evalution), or having to recover it with integrals.
+system with constants (mere substitution or evaluation) and having to recover it with integrals.
 
 :cite:`Hubert2013c` writes the auxiliary system as :math:`\frac{dx}{dt} = x \star
 F(y^{W_d}) \cdot V_i` and calls it a quadrature: once the reduced system is solved,
@@ -240,10 +239,10 @@ So an auxiliary that is a monomial in the parameters alone has :math:`d(\log x)/
 It is constant, and it supplies a constant of integration rather than an integral.  When
 every auxiliary is of that kind -- the two empty cells above -- the whole recovery needs
 only :math:`r` constants, and the reduction can normalise the auxiliaries to 1 and forget
-them.  When an auxiliary is not a parameter, as with :math:`x_3`, is has to be integrated and the reduced
+them.  When an auxiliary is not a parameter, as with :math:`x_3`, it has to be integrated and the reduced
 system has to carry it.
 
-This is why the distinction is worth emphasizing: it decides whether a
+This is why the distinction is worth emphasising: it decides whether a
 reduction gives back the original system for the price of :math:`r` arbitrary constants,
 or for the price of some integrals.
 
@@ -254,7 +253,7 @@ Reading it off a figure
 :meth:`~desr.ode_translation.ODETranslator.symbol_graph` carries both axes as separate
 node attributes -- ``kind`` for the first and ``auxiliary`` for the second -- and
 :func:`~desr.symbol_graph.draw_symbol_graph` gives each its own visual channel, so a
-hatched square is an auxiliary that is a constant and a hatched circle is one that must be
+hatched square is an auxiliary that is a parameter and a hatched circle is one that must be
 integrated.  There is a worked figure in :doc:`examples/mm_init_cond`.
 
     >>> graph = transl.symbol_graph()

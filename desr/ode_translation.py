@@ -15,8 +15,8 @@ class ReductionScheme(str, enum.Enum):
     '''
     Which of the three reductions a system was put through.
 
-    The scheme decides how many variables the reduced system has, whether it carries
-    auxiliary variables, and therefore what has to be known to translate values back.  It
+    The scheme decides how many symbols the reduced system has, whether it carries
+    auxiliaries, and therefore what has to be known to translate values back.  It
     is recorded rather than inferred: inferring it is only correct when
     :meth:`~desr.ode_translation.ODETranslator.translate` did the choosing, and calling
     :meth:`~desr.ode_translation.ODETranslator.translate_general` on a system that
@@ -33,7 +33,7 @@ class ReductionScheme(str, enum.Enum):
     general
     '''
 
-    #: The parameter scheme: the reduced system has :math:`n - r` variables and no
+    #: The parameter scheme: the reduced system has :math:`n - r` symbols and no
     #: auxiliaries.  Every initial condition carries over to it.
     PARAMETER = 'parameter'
 
@@ -55,7 +55,7 @@ class ReductionScheme(str, enum.Enum):
         # in error messages, which is where this mostly appears.
         return '{}.{}'.format(type(self).__name__, self.name)
 
-#: The names a reduction may be asked to give the variables it creates.  A naming scheme is a
+#: The names a reduction may be asked to give the symbols it creates.  A naming scheme is a
 #: dict over these keys; every key is optional, and an absent one takes the default for
 #: whichever reduction scheme runs.  The categories are the ones the invariants fall into:
 #: an invariant that is a monomial in the parameters alone, the one that carries the clock,
@@ -106,7 +106,7 @@ def _normalise_naming_scheme(naming_scheme):
         dict: The scheme, copied, with only the keys the caller actually set.
 
     A tuple is refused.  Until 2.0 the scheme was a positional triple whose order followed
-    the variable order; the variable order changed, which would have silently re-pointed
+    the symbol order; the symbol order changed, which would have silently re-pointed
     every entry, so the positional form is gone rather than quietly re-read:
 
     >>> _normalise_naming_scheme(('tau', 'nu', 'kappa'))
@@ -232,7 +232,7 @@ def _names_for(pattern, count, start_at, what):
             'The naming scheme gives {} names for the {}, but this reduction has {} of '
             'them: {}.'.format(len(names), what, count, names))
     # sympy.Symbol rather than sympify: sympifying a name like 'S' or 'E' would resolve to a
-    # sympy singleton instead of a variable of that name.
+    # sympy singleton instead of a symbol of that name.
     return [name if isinstance(name, sympy.Symbol) else sympy.Symbol(str(name))
             for name in names]
 
@@ -347,7 +347,7 @@ def _rename_indep_var(system, new_name):
 
 def _rates_of_change(system):
     '''
-    The rate of change of every variable of a system, in variable order, with a parameter's
+    The rate of change of every symbol of a system, in symbol order, with a parameter's
     absent equation read as zero.
 
     The scaling formulas want one entry per column of the scaling matrix, and a parameter
@@ -361,22 +361,22 @@ def _rates_of_change(system):
         system (ODESystem): The system being reduced.
 
     Returns:
-        list: One expression per variable of ``system``.
+        list: One expression per symbol of ``system``.
     '''
     return [sympy.sympify(0) if deriv is None else deriv for deriv in system.derivatives]
 
 
 def _scaled_rates(variables, factors, divide_by=None):
     '''
-    Multiply each new variable by its rate factor, elementwise.
+    Multiply each new symbol by its rate factor, elementwise.
 
     Args:
-        variables (list of sympy.Symbol): The new variables, one per column of ``factors``.
+        variables (list of sympy.Symbol): The new symbols, one per column of ``factors``.
         factors (sympy.Matrix): A row of rate factors.
         divide_by: Optional expression to divide the result through by.
 
     Returns:
-        list: One derivative per variable, empty when there are no variables.
+        list: One derivative per symbol, empty when there are no symbols.
 
     A reduction can legitimately produce no invariants, or no auxiliaries.  ``dz/dt = z``
     is the smallest example: it reduces completely, leaving only the independent variable
@@ -441,7 +441,7 @@ class ODETranslator(object):
     afterwards and build a new translator.  The key data are
     :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` and
     :attr:`~desr.ode_translation.ODETranslator.herm_mult`, which together with the
-    system's variable order contain everything the reduction needs.  No method takes a
+    system's symbol order contain everything the reduction needs.  No method takes a
     system: each one reports on, or reduces, the one this translator was built for.
 
     Args:
@@ -456,7 +456,7 @@ class ODETranslator(object):
             :attr:`~desr.ode_translation.ODETranslator.scaling_matrix` into
             column Hermite normal form.
             If not given, the normal Hermite multiplier will be calculated.
-        naming_scheme (dict): What to call the variables the reduction creates.  Every key is
+        naming_scheme (dict): What to call the symbols the reduction creates.  Every key is
             optional; one left out takes the default for whichever reduction scheme runs.
 
             - `'independent'`: the new name of the independent (time) variable.  The general
@@ -468,10 +468,10 @@ class ODETranslator(object):
               list of names.  A list must have exactly as many entries as the reduction
               produces, which is the number of dependent variables under the parameter
               scheme and the number of invariants under the general one.
-            - `'parameters'`: the pattern for the scaling-invariant constants the algorithm
+            - `'parameters'`: the pattern for the scaling-invariant parameters the algorithm
               computes.  How many there will be is not known until the reduction runs, so
               this must be a single string rather than a list.
-            - `'auxiliaries'`: the pattern for the auxiliary variables, likewise a single
+            - `'auxiliaries'`: the pattern for the auxiliaries, likewise a single
               string.  Only the general and dependent-variable schemes make any.
             - `'rename_unchanged_symbols'`: :const:`False` by default.  An invariant that is
               one of the original symbols -- a dimensionless parameter, a clock that is
@@ -485,8 +485,9 @@ class ODETranslator(object):
             scheme can be compared with Hubert & Labahn directly.  Anything set here is
             honoured by all of them.  A positional tuple is refused; see
             :func:`_normalise_naming_scheme`.
-        new_indices_start_at (int): Where the indices for the new variables should start at.  Default is 0.
-            Applies to independent variables if not using a user-supplied list, and always to the reduced constants.
+        new_indices_start_at (int): Where the indices for the new symbols should start at.  Default is 0.
+            Applies to every numbered name the reduction makes: the parameters, the
+            auxiliaries, and the dependents unless the naming scheme gives them as a list.
 
     A user-defined Hermite multiplier must be unimodular.  Then every invariant is a product
     of integer powers of its invariant columns, and the reduction and its reverse are
@@ -564,7 +565,7 @@ class ODETranslator(object):
         self.set_naming_scheme(naming_scheme)
 
         if (symbols_domain is not None) and (self.n != len(self.symbols_domain)):
-            raise ValueError('{} variables given but we have {} variables (columns) in the scaling matrix'.format(len(self.symbols_domain), self.n))
+            raise ValueError('{} symbols given but we have {} symbols (columns) in the scaling matrix'.format(len(self.symbols_domain), self.n))
 
         # Hubert & Labahn assume a scaling matrix of full row rank from section 2.1 on:
         # it is what gives a unimodular multiplier with A*V = [H, 0] and H of full rank,
@@ -811,7 +812,7 @@ class ODETranslator(object):
     def n(self):
         '''
         Returns:
-            int: The number of original variables that the scaling action is acting on: :math:`n`.  In particular, it is the number of columns of :attr:`~scaling_matrix`.
+            int: The number of original symbols that the scaling action is acting on: :math:`n`.  In particular, it is the number of columns of :attr:`~scaling_matrix`.
         '''
         return self._scaling_matrix.shape[1]
 
@@ -835,7 +836,7 @@ class ODETranslator(object):
     def herm_mult_i(self):
         '''
         Returns:
-            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`. The columns represent the auxiliary variables of the reduction.
+            sympy.Matrix: :math:`V_{\\mathfrak{i}}`: the first :math:`r` columns of :math:`V`. The columns represent the auxiliaries of the reduction.
         '''
         return self.herm_mult[:, :self.r]
 
@@ -1217,7 +1218,7 @@ class ODETranslator(object):
     def _dropped_columns(self, system, scheme, include_aux_vars=True,
                          normalise_parameters=True, rescale_clock=True):
         '''
-        Which multiplier columns a reduction does not keep as variables of its own.
+        Which multiplier columns a reduction does not keep as symbols of its own.
 
         Returns:
             tuple: ``(normalised auxiliary columns, identified invariant columns,
@@ -1318,8 +1319,7 @@ class ODETranslator(object):
     def symbols_domain(self):
         '''
         Returns:
-            tuple: The variables that the scaling action acts on, which are the
-            system's symbols.
+            tuple: The system's symbols, which the scaling action acts on.
         '''
         return self._symbols_domain
 
@@ -1498,7 +1498,7 @@ class ODETranslator(object):
         there.
 
         It holds for every scheme.  Under the parameter scheme these are the substitutions
-        :meth:`translate_parameter` makes.  They come back in the system's own variable
+        :meth:`translate_parameter` makes.  They come back in the system's own symbol
         order -- parameters, then the independent variable, then the dependents -- so they
         can be read straight down against :attr:`~desr.ode_system.ODESystem.symbols`.
 
@@ -2095,7 +2095,7 @@ class ODETranslator(object):
         >>> translator.invariant_monomials()
         Matrix([[t*z1**3, z1**5*z2]])
 
-        An autonomous system.  With its variables in this order the normal multiplier
+        An autonomous system.  With its symbols in this order the normal multiplier
         puts :math:`t` in both invariants:
 
         >>> system = ODESystem.from_equations(['du/dt = 2*b**2*u + 1/a**2'])
@@ -2356,7 +2356,7 @@ class ODETranslator(object):
         original one -- prey-predator keeps :math:`t` and also carries :math:`k t / h` as a
         variable with an equation.  It need not: in Hubert & Labahn 6.6 both invariants
         involve a dependent variable, so there is no second clock, and the :math:`+1` is
-        the retained :math:`t` all the same.  :meth:`indep_var_invariant` is what tells the
+        the retained :math:`t` all the same.  :meth:`indep_var_invariants` is what tells the
         two situations apart.
 
         Args:
@@ -2447,7 +2447,7 @@ class ODETranslator(object):
 
         Raises:
             ValueError: If the multiplier does not have the parameter scheme's block form
-                for this system's variable order.
+                for this system's symbol order.
         '''
         if self._is_translate_parameter_compatible(system):
             return
@@ -2481,12 +2481,12 @@ class ODETranslator(object):
 
             new_deriv_dict[Var] = (deriv.subs(to_sub) / derivative_factor).expand()
 
-        # Build the reduced system from the variables the reduction is known to produce,
+        # Build the reduced system from the symbols the reduction is known to produce,
         # rather than from the symbols that happen to survive into the right-hand sides.
-        # An invariant constant that cancels out of every equation is still a variable of
+        # An invariant parameter that cancels out of every equation is still a symbol of
         # the reduced system -- it is one of the n - r coordinates, and the substitutions
         # returned by substitutions() refer to it -- but inferring the
-        # variables from the expressions, as ODESystem.from_dict does, would lose it.
+        # symbols from the expressions, as ODESystem.from_dict does, would lose it.
         dependents = [variable_map[var] for var in system.dependents]
         new_constants = self._new_constants(system)
         new_variables = [new_indep] + dependents + new_constants
@@ -2598,7 +2598,7 @@ class ODETranslator(object):
                           rescale_clock=True):
         '''
         Given a system of ODEs, translate the system into a simplified version. Assume we are only working on
-        dependent variables, not the independent variable.
+        symbols other than the independent variable.
 
         Args:
             normalise_parameters (bool): Whether to set the parameter auxiliaries to 1, as
@@ -2731,17 +2731,18 @@ class ODETranslator(object):
                           normalise_parameters=True, rescale_clock=True):
         '''
         The most general reduction scheme.
-        If there are :math:`n` variables (including the independent variable) then there will be a system of
-        :math:`n-r+1` invariants and :math:`r` auxiliary variables.
+        If there are :math:`n` symbols (the independent variable included), the reduced
+        system has the :math:`n - r` invariants, the :math:`r` auxiliaries and the original
+        independent variable: :math:`n + 1` symbols before either step below.
 
         Two further steps run by default, each of which can be turned off.  Both are
-        departures from :cite:`Hubert2013c`:, who treat normalisation as all-or-nothing, so
+        departures from :cite:`Hubert2013c`, who treat normalisation as all-or-nothing, so
         turning both off reproduces their reduction exactly.
 
         **Normalising the parameter auxiliaries** (`normalise_parameters`).  An auxiliary
         that is a monomial in the original parameters alone is constant, so it can be set
         to 1 -- a choice of units, which :meth:`normalisations` records in the caller's own
-        symbols.  It appears in no equation, :cite:`Hubert2013c`: (16)-(17), so this cannot
+        symbols.  It appears in no equation, :cite:`Hubert2013c` (16)-(17), so this cannot
         change the dynamics; what it changes is that those symbols stop being reported as
         parameters of a system whose equations never mention them.
 
@@ -2772,12 +2773,12 @@ class ODETranslator(object):
         is a dependent variable used as a unit; an invariant that involves one dependent
         variable with an initial condition and another without; and an invariant that
         divides by a dependent variable whose initial value is 0.  Which invariants a
-        reduction has depends on the variable order and on
+        reduction has depends on the symbol order and on
         :meth:`multiplier_add_columns`, so another choice may carry over where one does
         not.
 
         Args:
-            include_aux_vars (bool): Whether to keep the auxiliary variables.  With
+            include_aux_vars (bool): Whether to keep the auxiliaries.  With
                 :const:`False` the reduction drops every auxiliary without claiming a
                 value for any, so the two steps below have nothing to spend and do not
                 run, and the count is :math:`n - r + 1` -- discussed in remark 3.2 of the
@@ -3072,7 +3073,7 @@ class ODETranslator(object):
                     raise ValueError(
                         'The initial condition for {} does not carry over: the '
                         'auxiliary {} = {} uses {} as a unit.  Put {} ahead of it in '
-                        'the variable order (`reorder_symbols`), so that the initial '
+                        'the symbol order (`reorder_symbols`), so that the initial '
                         'value is the unit.'.format(
                             listed(started), name, monomial, listed(started),
                             initial_values_of(started)))
@@ -3083,7 +3084,7 @@ class ODETranslator(object):
                         'The initial condition for {} does not carry over: the '
                         'invariant {} = {} involves {} as well, so its value at {} = 0 '
                         'does not depend on the initial condition.  Call '
-                        '`isolate_clock()`, or put {} ahead of {} in the variable '
+                        '`isolate_clock()`, or put {} ahead of {} in the symbol '
                         'order (`reorder_symbols`).'.format(
                             listed(started), name, monomial, clock, clock,
                             initial_values_of(started), clock))
@@ -3132,7 +3133,7 @@ class ODETranslator(object):
 
         The scheme needs each of the independent variable and the dependent variables to
         contribute exactly one invariant of its own, and the surplus parameters to become
-        the reduced constants.  That is what the block form below says, reading
+        the reduced parameters.  That is what the block form below says, reading
         :math:`V = [V_i, V_n]` with :math:`p` parameters and :math:`m = 1 + q` the rest::
 
                        r aux        p - r          m
@@ -3146,7 +3147,7 @@ class ODETranslator(object):
         independent and dependent variables unrescaled; the identity says each of them
         appears in exactly one invariant, with exponent one and in no other.
 
-        Those rows are the **last** :math:`m`, which is why the variables must be ordered
+        Those rows are the **last** :math:`m`, which is why the symbols must be ordered
         :math:`(c, t, z)` -- see
         :meth:`~desr.ode_system.ODESystem.default_order_symbols`.  The order is not a
         free choice beside the Hermite normal form convention but the other half of it:
@@ -3154,16 +3155,16 @@ class ODETranslator(object):
         :math:`(t, z, c)`.  Ordering the parameters last *here* would satisfy every block
         condition while putting the identity on parameters, so each parameter would get its
         own invariant and the independent variable would be smeared across several.  The
-        test therefore pins which variables occupy those rows, not merely the shape.
+        test therefore pins which symbols occupy those rows, not merely the shape.
         '''
         p = system.num_parameters
         m = len(system.symbols) - p
 
-        # First check our system's variables are in the required order:
+        # First check our system's symbols are in the required order:
         # parameters, then the independent variable, then the dependents.
         if system.independent_variable_index != p:
             return False
-        # Ask which variables are the parameters, rather than which derivatives are zero: a
+        # Ask which symbols are the parameters, rather than which derivatives are zero: a
         # conserved variable's derivative is also zero, so testing the derivative would call
         # a system eligible as soon as one was ordered among the parameters.
         if p and set(system.symbols[:p]) != set(system.parameters):
@@ -3229,9 +3230,9 @@ class ODETranslator(object):
 
     def _new_constants(self, system):
         '''
-        The invariant constants of the reduced system, named by the naming scheme.
+        The invariant parameters of the reduced system, named by the naming scheme.
 
-        There are :math:`k - r` of them, where :math:`k` is the number of constants of the
+        There are :math:`p - r` of them, where :math:`p` is the number of parameters of the
         original system: the reduction normalises :math:`r` of them away.  This is the one
         place the list is built, so that :meth:`translate_parameter` and
         :meth:`substitutions` cannot disagree about what exists.
@@ -3260,14 +3261,14 @@ class ODETranslator(object):
 
             It *only* guesses between :meth:`~desr.ode_translation.ODETranslator.reverse_translate_general`
             and :meth:`~desr.ode_translation.ODETranslator.reverse_translate_dep_var`,
-            by the number of variables given: :math:`n + 1` of them, the independent variable
+            by the number of values given: :math:`n + 1` of them, the independent variable
             first, means the general scheme; :math:`n` or :math:`n - 1` means the dependent
             variable scheme.
 
         Args:
-            variables (iter of sympy.Expression): The solution auxiliary variables :math:`x(t)` and solution invariants
+            variables (iter of sympy.Expression): The solution auxiliaries :math:`x(t)` and solution invariants
                 :math:`y(t)` of the reduced system.
-                Variables should be ordered auxiliary variables followed by invariants.
+                Ordered as auxiliaries followed by invariants.
             indep_var_index (int): The location of the independent variable.
 
         :rtype: tuple
@@ -3311,7 +3312,7 @@ class ODETranslator(object):
         elif len(variables) == self.scaling_matrix.shape[1] + 1:
             return self.reverse_translate_general(variables=variables, system_indep_var_index=indep_var_index)
         else:
-            raise ValueError('Incorrect number of variables for reverse translation')
+            raise ValueError('Incorrect number of values for reverse translation')
 
     def reverse_translate_parameter(self, variables):
         '''
@@ -3319,7 +3320,9 @@ class ODETranslator(object):
 
         Args:
             variables (iter of sympy.Expression):
-                :math:`r` constants (auxiliary variables) followed by the independent, dependent and invariant constants.
+                Values of the reduced symbols in the multiplier's column order: the
+                :math:`r` auxiliaries, then the parameter invariants, the clock, and the
+                dependents' invariants -- the order of :meth:`forward_monomials`.
 
         Section 7.5 (Predator-Prey Model) of :cite:`Hubert2013c`.  There is no numbered
         Example 7.5 in that paper; the model is the one its section 7.5 works through,
@@ -3331,7 +3334,7 @@ class ODETranslator(object):
             \\frac{dp}{dt} = s p \\left(1 - \\frac{h p}{n} \\right)
 
         The paper normalises :math:`K`, :math:`h` and :math:`r` away and keeps :math:`d`,
-        :math:`k` and :math:`s` as the reduced constants.  Ordering those three first is all
+        :math:`k` and :math:`s` as the reduced parameters.  Ordering those three first is all
         it takes to reach that choice, since the leading parameters are the ones normalised;
         this example used to hand-craft a nine by nine Hermite multiplier instead, because
         desr reported the mirror of the paper's normal form and no ordering could get there.
@@ -3350,9 +3353,14 @@ class ODETranslator(object):
         parameters: c0, c1, c2
         >>> translator.substitutions()
         {K: 1, h: 1, r: 1, d: c0, k: c1, s: c2, t: t, n: n, p: p}
-        >>> soln_reduced = sympy.var('x1, x2, x3, t, n, p, c0, c1, c2')
+
+        The reduced values go in the multiplier's column order -- auxiliaries, then the
+        parameter invariants, then the clock and the dependents -- and with every auxiliary
+        1 the result is :meth:`substitutions`:
+
+        >>> soln_reduced = sympy.var('x1, x2, x3, c0, c1, c2, t, n, p')
         >>> translator.reverse_translate_parameter(soln_reduced)
-        Matrix([[x2, x2/x3, 1/x1, t*x2, n*x2/(x1*x3), p/x1, c0*x1, c1*x2, c2*x3]])
+        Matrix([[x2, x2/x3, 1/x1, c0*x2, c1*x2/(x1*x3), c2/x1, t*x1, n*x2, p*x3]])
         '''
         return scale_action(variables, self.inv_herm_mult)
 
@@ -3361,9 +3369,9 @@ class ODETranslator(object):
         Given the solutions of a (dep_var) reduced system, reverse translate them into solutions of the original system.
 
         Args:
-            variables (iter of sympy.Expression): The solution auxiliary variables :math:`x(t)` and solution invariants
+            variables (iter of sympy.Expression): The solution auxiliaries :math:`x(t)` and solution invariants
                 :math:`y(t)` of the reduced system.
-                Variables should be ordered auxiliary variables followed by invariants.
+                Ordered as auxiliaries followed by invariants.
             indep_var_index (int): The location of the independent variable.
 
         :rtype: tuple
@@ -3413,18 +3421,18 @@ class ODETranslator(object):
         (t, x0, y0/x0)
         '''
         if len(variables) == self.scaling_matrix.shape[1]:
-            # All n reduced variables, the independent variable's invariant among them: the
+            # All n reduced symbols, the independent variable's invariant among them: the
             # full inverse multiplier rebuilds all n originals, independent variable included.
             return type(variables)(scale_action(variables, self.inv_herm_mult))
         elif len(variables) == self.scaling_matrix.shape[1] - 1:
             return type(variables)(scale_action(variables, self.dep_var_inv_herm_mult(indep_var_index=indep_var_index)))
         else:
-            raise ValueError('Incorrect number of variables for reverse translation')
+            raise ValueError('Incorrect number of values for reverse translation')
 
 
     def reverse_translate_general(self, variables, system_indep_var_index=0):
         '''
-        Given an iterable of variables, or exprs, reverse translate into the original variables.
+        Given an iterable of symbols, or exprs, reverse translate into the original symbols.
         Here we expect t as the first variable, since we need to divide by it and substitute
 
 
@@ -3432,9 +3440,9 @@ class ODETranslator(object):
 
         Args:
             variables (iter of sympy.Expression): The independent variable :math:`t`,
-                the solution auxiliary variables :math:`x(t)` and
+                the solution auxiliaries :math:`x(t)` and
                 the solution invariants :math:`y(t)` of the reduced system.
-                Variables should be ordered: independent variable, auxiliary variables then invariants.
+                Ordered as: independent variable, auxiliaries, then invariants.
             indep_var_index (int): The location of the independent variable.
 
         :rtype: tuple
@@ -3492,7 +3500,7 @@ class ODETranslator(object):
         c3**5*(c1**2*t/c3**3)**(10/3)*(c2 - log(c1**2*t/c3**3) + log(c1**2*t/c3**3 - c1))**(2/3)/(c1**4*(-c1**2*t/c3**3 + c1))
         '''
         if len(variables) != self.scaling_matrix.shape[1] + 1:
-            raise ValueError('Incorrect number of variables for reverse translation')
+            raise ValueError('Incorrect number of values for reverse translation')
 
         indep_var, variables = variables[0], variables[1:]  # Indep var is always first in reverse translation only
         raw_solutions = scale_action(variables, self.inv_herm_mult)
@@ -3503,7 +3511,7 @@ class ODETranslator(object):
         indep_const_atoms = indep_const.atoms(sympy.Symbol)
         if indep_var in indep_const_atoms:
             raise ValueError('{} is not independent of the independent variable'.format(indep_const))
-        # And if we can, the original variables
+        # And if we can, the original symbols
         if (self.symbols_domain is not None) and len(set(self.symbols_domain).intersection(indep_const_atoms)):
             raise ValueError('{} is not independent of {}'.format(indep_const,
                                                                   set(self.symbols_domain).intersection(indep_const_atoms)))
@@ -3515,8 +3523,8 @@ class ODETranslator(object):
 
     def _validate_variables(self, variables, num_var, stem, use_domain_var):
         '''
-        Make sure we have the right number of variables if given, else make them up.
-        If use_domain_var is True, then use the domain variables before making up new ones.
+        Make sure we have the right number of symbols if given, else make them up.
+        If use_domain_var is True, then use the domain symbols before making up new ones.
         '''
         if variables is None:
             if use_domain_var and (self.symbols_domain is not None):
@@ -3525,7 +3533,7 @@ class ODETranslator(object):
                 variables = tuple(to_symbol('{}{}'.format(stem, i)) for i in range(num_var))
 
         if len(variables) != num_var:
-            raise ValueError('Expecting {} variables not {}'.format(num_var, variables))
+            raise ValueError('Expecting {} symbols not {}'.format(num_var, variables))
         return variables
 
     def forward_symbols_that_must_not_be_zero(self):
@@ -3559,7 +3567,7 @@ class ODETranslator(object):
           zero initial condition survives a reduction.
 
         So a symbol is listed when it meets either of the first two.  Whether it does is
-        decided by the variable order, which is the caller's to set: the front of the order
+        decided by the symbol order, which is the caller's to set: the front of the order
         is the end that gets scaled by.
 
         Returns:
@@ -3863,7 +3871,7 @@ class ODETranslator(object):
         named = ', '.join(map(str, zero_valued))
         raise ValueError(
             'This reduction divides by {}, which {} known to be zero, so the reduced '
-            'system would be undefined.  The variable order decides what gets scaled by, '
+            'system would be undefined.  The symbol order decides what gets scaled by, '
             'and the front of the order is that end: move {} towards the back with '
             'reorder_parameters, and {} will appear in numerators instead, where a value '
             'of zero is harmless.  forward_symbols_that_must_not_be_zero() reports the whole '
@@ -4393,7 +4401,7 @@ class ODETranslator(object):
 
     def symbol_kinds(self, scheme=None, include_aux_vars=True):
         '''
-        What kind of symbol each variable of the reduction :meth:`translate` performs is.
+        The kind of each symbol of the reduction :meth:`translate` performs.
 
         Takes no normalisation options, for the reason :meth:`named_symbols` gives.  A
         reduction run with other options is asked directly:
@@ -4413,9 +4421,9 @@ class ODETranslator(object):
     def _symbol_kinds_for(self, system, scheme=None, include_aux_vars=True,
                           normalise_parameters=True, rescale_clock=True):
         '''
-        What kind of symbol each variable of the reduced system is.
+        The kind of each symbol of the reduced system.
 
-        A dict over **every** variable the reduction produces, mapping it to one of four
+        A dict over **every** symbol the reduction produces, mapping it to one of four
         kinds.  The keys are the same as :meth:`named_symbols`', so the two join: one
         says what a symbol *means*, the other says what it *is*.
 
@@ -4435,11 +4443,11 @@ class ODETranslator(object):
         The distinction the kinds exist for is between the first three: a parameter and a
         conserved dependent both have rate zero, and only the structure tells them apart.
 
-        A kind is the variable's **role in the reduced system**, which is not quite the same
+        A kind is the symbol's **role in the reduced system**, which is not quite the same
         as the structure of its monomial.  Under the general scheme an invariant can be a
         rescaled clock -- :math:`k t / h` -- and still be a ``'dependent'`` here, because
         it has an equation and evolves while :math:`t` is what the system is integrated
-        against.  :meth:`indep_var_invariant` answers the other question, whether any
+        against.  :meth:`indep_var_invariants` answers the other question, whether any
         invariant is a rescaled clock and nothing else, and returns :const:`None` when none
         is.
 
@@ -4451,7 +4459,7 @@ class ODETranslator(object):
             include_aux_vars (bool): Whether the auxiliaries will be kept.
 
         Returns:
-            dict: Reduced variable to its kind, in the reduced system's variable order.
+            dict: Reduced symbol to its kind, in the reduced system's symbol order.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
@@ -4499,7 +4507,7 @@ class ODETranslator(object):
     def _kind_by_variable(self, system, scheme=None, include_aux_vars=True,
                           normalise_parameters=True, rescale_clock=True):
         '''
-        The kind of each variable of the reduced system, in its variable order.
+        The kind of each symbol of the reduced system, in its symbol order.
         '''
         if scheme is None:
             scheme = self.scheme()
@@ -4605,7 +4613,7 @@ class ODETranslator(object):
 
         These become the reduced system's dependent variables.  There are :math:`q` of
         them, one per dependent variable of the original system -- the clock is reported
-        separately by :meth:`indep_var_invariant`, and the constants by
+        separately by :meth:`indep_var_invariants`, and the parameters by
         :meth:`parameter_invariants`.
 
         Args:
@@ -4791,7 +4799,7 @@ class ODETranslator(object):
 
     def named_symbols(self, scheme=None, include_aux_vars=True):
         '''
-        What each variable of the reduction :meth:`translate` performs stands for.
+        What each symbol of the reduction :meth:`translate` performs stands for.
 
         Takes no normalisation options: those belong to a reduction, and a report that
         restates them is a second place for them to be said and so a second place for
@@ -4812,9 +4820,9 @@ class ODETranslator(object):
     def _named_symbols_for(self, system, scheme=None, include_aux_vars=True,
                            normalise_parameters=True, rescale_clock=True):
         '''
-        What each variable of the reduced system stands for.
+        What each symbol of the reduced system stands for.
 
-        A dict from the reduced system's variable to the monomial in the original variables
+        A dict from the reduced system's symbol to the monomial in the original symbols
         that it denotes -- ``{kappa0: d/K, ..., tau: k*t/h, nu0: n/K, ...}``.  The keys are
         plain symbols, so this is the map to reach for when you have a reduced system in
         hand and want to know what one of its symbols means: an invariant is both a new
@@ -4831,8 +4839,8 @@ class ODETranslator(object):
             include_aux_vars (bool): Whether the auxiliaries will be kept.
 
         Returns:
-            dict: Reduced variable to the monomial it denotes, in the reduced system's
-                variable order.  Under the general and dependent-variable schemes the
+            dict: Reduced symbol to the monomial it denotes, in the reduced system's
+                symbol order.  Under the general and dependent-variable schemes the
                 original independent variable is kept, and maps to itself, unless an
                 invariant has been identified with it -- then the clock is
                 :data:`RESCALED_CLOCK_NAME` and maps to that invariant.
@@ -4930,17 +4938,17 @@ class ODETranslator(object):
 
     def rewrite_rules(self, variables=None):
         '''
-        Given a set of variables, print the rewrite rules.
+        Given a set of symbols, print the rewrite rules.
         These are the rules that allow you to write any rational invariant in terms of the
         :attr:`~desr.ode_translation.ODETranslator.invariants`.
 
         Args:
             variables (iter of sympy.Symbol):
-                The names of the variables appearing in the rational invariant.
+                The names of the symbols appearing in the rational invariant.
 
         Returns:
             dict:
-                A :code:`dict` whose keys are the given variables and whose values are the values to be substituted.
+                A :code:`dict` whose keys are the given symbols and whose values are the values to be substituted.
 
         >>> equations = ['dn/dt = n*( r*(1 - n/K) - k*p/(n+d) )','dp/dt = s*p*(1 - h*p / n)']
         >>> system = ODESystem.from_equations(equations)
@@ -5027,7 +5035,7 @@ class ODETranslator(object):
 
         Args:
             variables (iter of sympy.Symbol, optional):
-                Variables of the system.
+                Symbols of the system.
 
         Returns:
             sympy.Matrix:
@@ -5071,7 +5079,7 @@ class ODETranslator(object):
 
         Say which invariants you want by **writing them down**.  The exponent matrix is
         still accepted, but it is the wrong thing to type: its rows are positions in the
-        variable order, so reordering the variables silently changes what the same matrix
+        symbol order, so reordering the symbols silently changes what the same matrix
         means, and nothing in the matrix says which invariant it was meant to be.
 
         **What it does.**  Let :math:`P` be the :math:`n \\times k` matrix of exponents of
@@ -5109,7 +5117,7 @@ class ODETranslator(object):
                 to keep.  Each is a monomial in the original symbols, written as an
                 expression or a string -- ``'r*t'``, ``h*p/d`` -- and one on its own need
                 not be wrapped in a list.  Alternatively the :math:`n \\times k` matrix of
-                exponents, one invariant per column, in the variable order.
+                exponents, one invariant per column, in the symbol order.
 
         >>> translator = ODETranslator(ODESystem(equations=[
         ...     'ds/dt = -k_1*e_0*s + k_1*c*s + k_m1*c',
@@ -5276,7 +5284,7 @@ class ODETranslator(object):
         in a list.
 
         Every symbol of a monomial must be one of `variables`.  `monomial_to_powers` looks
-        up only the variables it is given, so a symbol that is not among them contributes
+        up only the symbols it is given, so a symbol that is not among them contributes
         nothing and is silently dropped -- which would turn a typo into a different
         invariant rather than an error.
 
@@ -5306,12 +5314,12 @@ class ODETranslator(object):
                     'symbols.  A sum of invariants is invariant, but it is written in '
                     'terms of these rather than chosen among them.'.format(monomial))
 
-            # Every base must be one of the variables and every exponent a whole number,
+            # Every base must be one of the symbols and every exponent a whole number,
             # which is what makes the choice a Laurent monomial and so a column of
-            # exponents.  Checked on the powers dict rather than per variable, because a
+            # exponents.  Checked on the powers dict rather than per symbol, because a
             # fractional power of a product keeps the product as one base -- `sqrt(h*p/d)`
             # is `(h*p/d)**(1/2)` -- and `monomial_to_powers`, looking up only the
-            # variables it is given, would find none of them and return all zeros.
+            # symbols it is given, would find none of them and return all zeros.
             for base, exponent in monomial.as_powers_dict().items():
                 if base.is_number and not base.is_Rational:
                     # A named constant: `E`, `I`, `pi`.  Almost always `sympy.sympify`

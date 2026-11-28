@@ -1,10 +1,10 @@
-Recovering auxiliary variables by quadrature
-============================================
+Recovering auxiliaries by quadrature
+====================================
 
 One reason to do a scaling symmetry reduction is to produce a system with fewer symbols.  An application that solves a system thousands of times -- fitting parameters, say -- wants the smallest system it can get, and
 :meth:`~desr.ode_translation.ODETranslator.translate_general` offers
 ``include_aux_vars=False`` for exactly that: it returns the invariants and reduced equations, and throws
-auxiliary variables away.
+auxiliaries away.
 
 This page discusses this reduction, and how to get the original system back afterwards.
 
@@ -17,7 +17,7 @@ what the reduction is for, and the auxiliaries :math:`x` (we're using notation c
 
 Dropping the :math:`x` block is only legitimate if
 the :math:`y` block does not depend on it.
-Fortunately, :math:`x` does not.  Every auxiliary variable satisfies an equation of the form
+Fortunately, it does not.  Every auxiliary satisfies an equation of the form
 
 .. math::
     :nowrap:
@@ -27,8 +27,8 @@ Fortunately, :math:`x` does not.  Every auxiliary variable satisfies an equation
     \end{align}
 
 where :math:`H_j` involves the invariants and the independent variable but never the
-auxiliaries themselves.  The auxiliaries are therefore a *quadrature* along side the
-invariant.  A reduced system can be written without them.
+auxiliaries themselves.  The auxiliaries are therefore a *quadrature* alongside the
+invariants.  A reduced system can be written without them.
 So, solving the :math:`y` equations without the :math:`x` loses nothing that
 cannot be recomputed.
 
@@ -36,7 +36,7 @@ cannot be recomputed.
 Example
 -----------------------------------------
 
-Check out Example 6.6 of :cite:`Hubert2013c` (starts very bottom of page 503).  The system is originally given as
+Check out Example 6.6 of :cite:`Hubert2013c` (starts at the very bottom of page 503).  The system is originally given as
 
 .. math::
     :nowrap:
@@ -56,7 +56,7 @@ But desr expects only the formal name of the derivative on the left hand side:
     \frac{dz_2}{dt} &= \frac{z_2}{t} \left( \frac{10}{3} - \frac{2}{3} z_1^5 z_2 + \frac{z_1^2 z_2}{t} \right)
     \end{align}
 
-Build the system in Python with desr.  I'll use the `from_equations` form, this time, which expects sympy-compatible strings.
+Build the system in Python with desr.  I'll use the ``from_equations`` form, this time, which expects sympy-compatible strings.
 
     >>> import numpy as np
     >>> from scipy.integrate import solve_ivp
@@ -82,7 +82,7 @@ and equally valid; :meth:`~desr.ode_translation.ODETranslator.multiplier_add_col
 one moves between such choices.
 
 Reducing the usual way keeps the auxiliary :math:`x_0` as a variable of the reduced system,
-and gives exactly the HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
+and gives exactly HL's equations (6.6) for :math:`x`, :math:`y_1` and :math:`y_2`:
 
     >>> translator.translate_general()
     dt/dt = 1
@@ -100,11 +100,11 @@ Asking for the invariants alone drops it, leaving one fewer equation to integrat
     dy1/dt = y1*(y1 + 1)/t
 
 
-Construct a `NumericTranslator`
-----------------------------------
+Construct a ``NumericTranslator``
+------------------------------------
 
 :class:`~desr.numerics.NumericTranslator` is happy to work with a reduction with its auxiliaries
-dropped.  We do need to pass the reduced system explicitly, since it was made with the option to drop auxiliaries.
+dropped.
 
     >>> numeric_translation = reduced_system.numeric_translator()
     >>> numeric_translation.scheme
@@ -275,15 +275,15 @@ since :math:`x_j = 0` is invariant, so it is read once from the starting value a
 magnitude is integrated.
 
 
-Visualization
+Visualisation
 -------------------------
 
 Plotting the numerical results:
 
 .. plot:: examples/scripts/quadrature_recovery.py
 
-The left depicts the numerical solution of the nondimensionalised system, sans auxiliary variables.
-The middle panel depicts the auxiliary variable, obtained by quadrature.  This curve is what
+The left panel depicts the numerical solution of the nondimensionalised system, sans auxiliaries.
+The middle panel depicts the auxiliary, obtained by quadrature.  This curve is what
 :meth:`~desr.numerics.NumericTranslator.recover_auxiliaries` produces by integrating their
 equations along the invariants.  The circles are this example's exact values.
 

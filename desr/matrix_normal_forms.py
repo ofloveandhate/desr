@@ -507,7 +507,7 @@ def normal_hnf_col(matrix_):
     # matrix in Hermite normal form is the identity -- so the construction would return
     # V = I and H = A.
     #
-    # Reversing the variable order first and undoing it afterwards gives the multiplier in
+    # Reversing the symbol order first and undoing it afterwards gives the multiplier in
     # the convention desr reports.  V_n's rows reverse, which turns a last nonzero entry
     # into a first and entries below a pivot into entries above; its columns reverse too, so
     # the pivot rows still ascend.  A V = [H, 0] survives untouched because the invariant

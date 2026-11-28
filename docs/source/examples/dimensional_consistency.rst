@@ -65,7 +65,7 @@ Now there are two symmetries!?!? :math:`x` has a unit of its own!?  How can this
 But no, there's not another. We lost a relation
 ------------------------------------------------
 
-Well, nothing in `substituted` adds :math:`b` to a rate, so nothing says :math:`b` is a rate.  So :math:`b` is free to
+Well, nothing in ``substituted`` adds :math:`b` to a rate, so nothing says :math:`b` is a rate.  So :math:`b` is free to
 carry the unit :math:`x/t` alone, and :math:`x` is free to be rescaled.
 
 Further, the reduction removes both parameters:

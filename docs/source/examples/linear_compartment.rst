@@ -26,9 +26,9 @@ The book describes the experiment in words and draws the model in its Fig. 13.7.
 Weissburg et al. give their own model as a diagram of compartments in
 Scheme 1.
 
-This page nondimensionalizes the model, and then shows what happens to the symmetry reduction when the
+This page nondimensionalises the model, and then shows what happens to the symmetry reduction when the
 total loss rate :math:`a_2 + a_{12}` is replaced by a single symbol.  It is the effect
-described in :ref:`dimensional_consistency`, but this time a model with physical meaning.
+described in :ref:`dimensional_consistency`, but this time in a model with physical meaning.
 
 The model as written
 ----------------------
@@ -40,7 +40,7 @@ The model as written
     >>> system.parameters
     (a_1, a_12, a_2, u_2)
 
-The reduction uses as units the parameters at the front of the variable order; see
+The reduction uses as units the parameters at the front of the symbol order; see
 :meth:`~desr.ode_system.ODESystem.reorder_symbols`.  The input :math:`u_2` and the
 loss rate :math:`a_2` of compartment 2 go first:
 
@@ -96,7 +96,7 @@ Given to the reduction in that form:
     >>> substituted.dimensions_of()
     {u_2: [z_2]/[t], b_22: 1/[t], a_12: [z_1]/([t]*[z_2]), a_1: 1/[t], t: [t], z_1: [z_1], z_2: [z_2]}
 
-The variable order is the the same, with :math:`b_{22}` in the place of :math:`a_2`, and
+The symbol order is the same, with :math:`b_{22}` in the place of :math:`a_2`, and
 :math:`a_{12}` third.  There now appear to be three symmetries, and so the first three parameters
 are used as units.  The two compartments have separate units, and
 :math:`a_{12}` has become a conversion factor between them.  Nothing in these two

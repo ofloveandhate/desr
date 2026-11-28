@@ -1,7 +1,7 @@
 Michaelis-Menten with initial conditions and a constant
 =============================================================
 
-We derive the analysis of the Michaelis-Menten equations found in :cite:`Segel1989`: in a systematic manner.
+We derive the analysis of the Michaelis-Menten equations found in :cite:`Segel1989` in a systematic manner.
 
 
 
@@ -43,7 +43,7 @@ First we must create the system in Python.  We start with the same system, repre
     ...          c(0) &= 0'''
     >>> system = ODESystem.from_tex(system_tex)
 
-Add the constraint with the Michaelis-Menten constant :math:`K_m = k_2 + k_{-1}`.
+Add the constraint with the Michaelis-Menten constant :math:`K_m = (k_{-1} + k_2)/k_1`, :cite:`murray` (6.58).
 
     >>> system.add_constraint('K_m = (k_m1 + k_2) / k_1')
 
@@ -63,13 +63,13 @@ carries the units into the scaling.  The name is inferred from the variable:
 
 Reading the two together: the name for :math:`c(0)` is :math:`c_0`, and :math:`c_0` has value zero.
 
-Choose the variable order.  :math:`c_0` goes towards the back, which is the end that is
+Choose the symbol order.  :math:`c_0` goes towards the back, which is the end that is
 *kept*: the front is the end that gets scaled by, and a quantity known to be zero must not
 be scaled by, lest we are required to divide by zero.
 
     >>> system.reorder_symbols(['s_0', 'e_0', 'k_1', 'k_2', 'k_m1', 'K_m', 'c_0', 't', 's', 'c'])
 
-Now the exponent matrix can be read against that order: one row per variable, in the order
+Now the exponent matrix can be read against that order: one row per symbol, in the order
 just chosen; one column per monomial appearing in the system.
 
     >>> system.exponent_matrix()
@@ -85,7 +85,7 @@ just chosen; one column per monomial appearing in the system.
     [0, 0, -1, 1, 0, 0,  1,  1,  0,  0,  0],
     [0, 1,  1, 0, 0, 0, -1,  0,  1,  0,  0]])
 
-Compute the reduced system by making an `ODETranslator` from the original system,
+Compute the reduced system by making an ``ODETranslator`` from the original system.
 
 Reduced parameters are named :math:`\kappa_i`.  Here :math:`c` is a dependent variable
 and its initial value is :math:`c_0`, which a parameter named :math:`c_0` would be hard to
@@ -105,12 +105,12 @@ The corresponding scaling invariants:
     >>> translator.invariant_monomials()
     Matrix([[e_0/s_0, k_2/(k_1*s_0), k_m1/(k_1*s_0), K_m/s_0, c_0/s_0, k_1*s_0*t, s/s_0, c/s_0]])
 
-These don't match those from Murray, but they are very close.   We'll recover it next.
+These don't match those from Murray, but they are very close.   We'll recover them next.
 
 The reduction divides by these symbols, so none of them may be zero.  :math:`c_0` is not
-among them.  (the forward part of this function's name indicates this is for those that
+among them.  (The forward part of this function's name indicates this is for those that
 must not be 0 when translating in the forward direction -- the reverse has another
-set of symbols that must not be 0)
+set of symbols that must not be 0.)
 
     >>> translator.forward_symbols_that_must_not_be_zero()
     (s_0, k_1)
@@ -204,7 +204,7 @@ well as printed, and the initial condition's value of zero can be followed throu
     (20, 22)
 
 :math:`c_0` has exactly one edge.  It is positive, and it runs to a (scale-) invariant symbol rather than
-to an auxiliary.  Nothing divides by :math:`c_0`, so the invariant it feeds into is simply zero.  (Note that desr reports division by zero via an exception, not demonstrated here)
+to an auxiliary.  Nothing divides by :math:`c_0`, so the invariant it feeds into is simply zero.  (Note that desr reports division by zero via an exception, not demonstrated here.)
 
     >>> list(graph.out_edges(('original', sympy.Symbol('c_0')), data='exponent'))
     [(('original', c_0), ('reduced', kappa4), 1)]
@@ -274,7 +274,7 @@ What the figure says about this system:
 
 - the reduction divides by :math:`s_0`, :math:`e_0` and :math:`k_1` -- the heavy
   borders -- and does not divide by :math:`c_0`, which is why a zero initial condition
-  is allowed in :math:`c_0` but not in `math:`s_0`;
+  is allowed in :math:`c_0` but not in :math:`s_0`;
 - :math:`c_0` has a single edge, positive, into an invariant rather than an auxiliary,
   so that invariant is simply zero: :math:`\kappa_4 = c_0/s_0 = 0`;
 - coming back, :math:`c_0 = \kappa_4 x_1`, so the zero returns the way it came;
@@ -282,13 +282,13 @@ What the figure says about this system:
   :math:`s_0` and :math:`k_1` are absorbed; coming back they are the two values a
   reverse translation has to be told.
 
-The source is is on the left in both panels, and the reduced column ends the first and
+The source is on the left in both panels, and the reduced column ends the first and
 begins the second at the same heights, so the round trip
 :math:`c_0 \rightarrow \kappa_4 \rightarrow c_0` reads as one path across the pair.  Shape
 says what a symbol is, and a heavy border marks what must not be zero.
 
 The hatched shapes are the auxiliaries, and they are the one thing the two panels
-disagree about.  In the forward translation they are normalized to 1, which is how :math:`s_0` and
+disagree about.  In the forward translation they are normalised to 1, which is how :math:`s_0` and
 :math:`k_1` are "absorbed".  Coming back they are unknowns: recovering the original values
 needs two of them supplied from somewhere, which is what
 :class:`desr.numerics.InsufficientKnownValues` is raised about, discussed elsewhere in the documentation.

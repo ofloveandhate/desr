@@ -185,7 +185,7 @@ class TestODESystemScaling(TestCase):
                                        [0, 0, 0, 1]])
         translator = ODETranslator(system, scaling_matrix=max_scal,
                                    hermite_multiplier=herm_mult_paper)
-        # The paper's answer carries auxiliary variables, so it is the general reduction and
+        # The paper's answer carries auxiliaries, so it is the general reduction and
         # is asked for by name.  `translate` would now choose the parameter scheme: the
         # variable order is canonical under this convention, which it was not before, so the
         # system is eligible for a scheme it used to be passed over for.
@@ -2113,7 +2113,7 @@ class TestConstructionEqualityAndSmallMethods(TestCase):
         t, x, k = sympy.symbols('t x k')
         with self.assertRaises(RuntimeError) as caught:
             ODESystem._from_variables([t, x], [1, -k * x], indep_var=t)
-        self.assertIn('not in the list of variables', str(caught.exception))
+        self.assertIn('not in the list of symbols', str(caught.exception))
 
     def test_a_parameter_against_a_conserved_variable_from_the_other_side(self):
         x, w, t = sympy.symbols('x w t')
@@ -2149,10 +2149,10 @@ class TestConstructionEqualityAndSmallMethods(TestCase):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)
         with self.assertRaises(ValueError) as caught:
             system.require_same_unit({'q': 'c'})
-        self.assertIn('The variable q', str(caught.exception))
+        self.assertIn('The symbol q for a same-dimension requirement', str(caught.exception))
         with self.assertRaises(ValueError) as caught:
             system.require_same_unit({'s': 'q'})
-        self.assertIn('The symbol q', str(caught.exception))
+        self.assertIn('The symbol q used in expression', str(caught.exception))
 
     def test_the_dimension_of_something_that_is_not_a_monomial(self):
         system = ODESystem.from_equations(MICHAELIS_MENTEN)

@@ -3,10 +3,10 @@
 The three reduction schemes
 =============================
 
-`desr` implements three reductions from Hubert & Labahn :cite:`Hubert2013c`:, and
+`desr` implements three reductions from Hubert & Labahn :cite:`Hubert2013c`, and
 :meth:`~desr.ode_translation.ODETranslator.translate` automatically picks between them.
 Each applies to a different shape of system, and
-they at disagree about what the reduced system's clock is.  That last point is the one
+they also disagree about what the reduced system's clock is.  That last point is the one
 worth reading carefully, because the same letter can mean two different quantities.
 
 ===================== ================ ============================================
@@ -90,7 +90,7 @@ is easy to miss.
 The general scheme
 --------------------
 
-Always applicable, and the fallback.  It carries the auxiliaries as variables of their
+Always applicable, and the fallback.  It carries the auxiliaries it does not normalise as variables of their
 own — they are the quadratures you integrate afterwards to get back — and keeps the
 original system's own independent variable to integrate against.
 
@@ -115,7 +115,7 @@ The clock, and when it is still ``t``
 ---------------------------------------
 
 The general scheme runs two further steps by default, and both can be turned off.
-Turning both off reproduces :cite:`Hubert2013c`: exactly.
+Turning both off reproduces :cite:`Hubert2013c` exactly.
 
 **Normalising** sets every constant auxiliary to 1, which is the choice of units
 described in :ref:`dimensions`.
@@ -173,8 +173,8 @@ So if you are moving numbers between a reduced system and the original, a questi
 ask is not which scheme ran but what the clock denotes.
 :attr:`~desr.ode_system.ODESystem.named_symbols` answers it for every symbol.
 
-Silviana notes, that while implementing between version 1 and 3 of desr, she spent a TON
+Silviana notes that while implementing between versions 1 and 3 of desr, she spent a TON
 of time thinking about these things, and only late in the process was able to
 help these steps be clearly delineated in the code.  With this clarity she was able
-to provide additional functionality beyond what HL specify, and was was originally
+to provide additional functionality beyond what HL specify, and what was originally
 implemented in desr.
