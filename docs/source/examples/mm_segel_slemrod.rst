@@ -56,7 +56,7 @@ the Michaelis constant
 
 Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
 
-    >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
+    >>> system.reorder_symbols(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 't', 's', 'c'])
 
     >>> translator = ODETranslator(system, naming_scheme={'parameters': 'c', 'independent': 'H', 'dependents': ['y','z']})
 
@@ -128,7 +128,7 @@ The constant :math:`\epsilon = \frac{e_0}{s_0 + K_m}`, :cite:`murray` (6.18), an
 
 Choose a variable order, with initial conditions at the front so the algorithm will normalise by them.
 
-    >>> system.reorder_variables(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
+    >>> system.reorder_symbols(['s_0', 'e_0', 'K_m', 'k_1', 'k_2', 'k_m1', 'epsilon', 't', 's', 'c'])
 
 A sanity check
 
@@ -319,7 +319,7 @@ We can work with the expression :math:`s_0 + K_m` systematically by adding a new
 Check that if we keep :math:`L` out of the normalising positions -- here :math:`s_0` and :math:`k_1`
 are the two parameters that get normalised -- we have the same reduced system as before
 
-    >>> system_l.reorder_variables(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
+    >>> system_l.reorder_symbols(['s_0', 'L', 'e_0', 'k_1', 'k_2', 'K_m', 't', 's', 'c'])
     >>> translator = ODETranslator(system_l, naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['s','c']})
     >>> translator.scaling_matrix
     Matrix([
@@ -337,7 +337,7 @@ are the two parameters that get normalised -- we have the same reduced system as
 
 Putting :math:`K_m` at the front, we have
 
-    >>> system_l.reorder_variables(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
+    >>> system_l.reorder_symbols(['K_m', 'L', 's_0', 'e_0', 'k_1', 'k_2', 't', 's', 'c'])
     >>> translator = ODETranslator(system_l, naming_scheme={'parameters': 'c', 'independent': 'tau', 'dependents': ['s','c']})
     >>> clock = translator.column_of('K_m*k_1*t')
     >>> total = translator.column_of('L/K_m')

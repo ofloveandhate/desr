@@ -33,7 +33,7 @@ SAMPLE = {'usual': 24, 'small': 40, 'non-autonomous': 15, 'large': 6,
 
 #: Seeds that once showed a fault, kept whatever the sample size becomes.  Each of these
 #: is a dependent-variable system with an auxiliary that is a monomial in the parameters,
-#: for which `expected_variable_count` did not count the auxiliary as normalised away.
+#: for which `expected_symbol_count` did not count the auxiliary as normalised away.
 ONCE_FAILED = [('small', 66), ('small', 214), ('small', 254), ('small', 312),
                ('large', 24), ('non-autonomous', 76), ('usual', 458)]
 
@@ -498,7 +498,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                     system, translator = case(shape, seed)
                     self.assertEqual(
                         len(general(shape, seed, normalise, identify).symbols),
-                        translator.expected_variable_count(scheme=ReductionScheme.GENERAL,
+                        translator.expected_symbol_count(scheme=ReductionScheme.GENERAL,
                             normalise_parameters=normalise, rescale_clock=identify))
 
     def test_the_count_under_the_dependent_variable_scheme(self):
@@ -508,7 +508,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
                     system, translator = case(shape, seed)
                     self.assertEqual(
                         len(dep_var(shape, seed, normalise).symbols),
-                        translator.expected_variable_count(scheme=ReductionScheme.DEP_VAR,
+                        translator.expected_symbol_count(scheme=ReductionScheme.DEP_VAR,
                             normalise_parameters=normalise))
 
     def test_the_count_under_the_parameter_scheme(self):
@@ -516,7 +516,7 @@ class TestTheReportsDescribeTheReduction(TestCase):
             with self.subTest(shape=shape, seed=seed):
                 system, translator = case(shape, seed)
                 self.assertEqual(len(parameter(shape, seed).symbols),
-                                 translator.expected_variable_count())
+                                 translator.expected_symbol_count())
                 self.assertEqual(len(system.symbols) - translator.r,
                                  len(parameter(shape, seed).symbols))
 

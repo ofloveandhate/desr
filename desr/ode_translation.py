@@ -1977,7 +1977,7 @@ class ODETranslator(object):
         >>> equations = ['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
-        >>> system.reorder_variables(['t', 'z1', 'z2'])
+        >>> system.reorder_symbols(['t', 'z1', 'z2'])
         >>> translator = ODETranslator(system)
         >>> translator.auxiliary_monomials(), translator.invariant_monomials()
         (Matrix([[t*z1**2]]), Matrix([[t*z1**3, z1**2*z2/t]]))
@@ -2099,7 +2099,7 @@ class ODETranslator(object):
         puts :math:`t` in both invariants:
 
         >>> system = ODESystem.from_equations(['du/dt = 2*b**2*u + 1/a**2'])
-        >>> system.reorder_variables(['t', 'u', 'a', 'b'])
+        >>> system.reorder_symbols(['t', 'u', 'a', 'b'])
         >>> translator = ODETranslator(system)
         >>> translator.invariant_monomials()
         Matrix([[a**2*u/t, b**2*t]])
@@ -2309,17 +2309,17 @@ class ODETranslator(object):
             return ReductionScheme.DEP_VAR
         return ReductionScheme.GENERAL
 
-    def expected_variable_count(self, scheme=None, include_aux_vars=True,
+    def expected_symbol_count(self, scheme=None, include_aux_vars=True,
                                 normalise_parameters=True, rescale_clock=True):
         '''
-        How many variables the reduction of this translator's system will have.
+        How many symbols the reduction of this translator's system will have.
 
-        The count is scheme-dependent, with :math:`n` the number of variables of `system`
+        The count is scheme-dependent, with :math:`n` the number of symbols of the system
         -- the independent variable included -- and :math:`r` the number of scaling
         symmetries:
 
         =========================================  ===========================
-        scheme                                     variables
+        scheme                                     symbols
         =========================================  ===========================
         parameter                                  :math:`n - r`
         dependent-variable                         :math:`n - r'`
@@ -2386,7 +2386,7 @@ class ODETranslator(object):
         >>> translator = ODETranslator(system)
         >>> len(system.symbols), translator.r
         (9, 3)
-        >>> translator.expected_variable_count()
+        >>> translator.expected_symbol_count()
         6
         >>> len(translator.translate().symbols)
         6
@@ -2395,21 +2395,21 @@ class ODETranslator(object):
         are monomials in the parameters alone and the clock invariant is then identified
         with `t`, so it arrives at the same count as the parameter scheme:
 
-        >>> translator.expected_variable_count(scheme=ReductionScheme.GENERAL)
+        >>> translator.expected_symbol_count(scheme=ReductionScheme.GENERAL)
         6
         >>> len(translator.translate_general().symbols)
         6
 
         Turning both steps off gives Hubert & Labahn's count:
 
-        >>> translator.expected_variable_count(scheme='general',
+        >>> translator.expected_symbol_count(scheme='general',
         ...                                    normalise_parameters=False,
         ...                                    rescale_clock=False)
         10
         >>> len(translator.translate_general(normalise_parameters=False,
         ...                                  rescale_clock=False).symbols)
         10
-        >>> translator.expected_variable_count(scheme='general', include_aux_vars=False)
+        >>> translator.expected_symbol_count(scheme='general', include_aux_vars=False)
         6
         >>> len(translator.translate_general(include_aux_vars=False).symbols)
         6
@@ -2511,7 +2511,7 @@ class ODETranslator(object):
                                        system, ReductionScheme.PARAMETER),
                                    original_system=system.copy(),
                                    forward_monomials=forward_monomials)
-        reduced_system.default_order_variables()
+        reduced_system.default_order_symbols()
 
         # By the one rule every scheme uses: a reduced symbol starts where its monomial
         # does.  Here every reduced dependent is one dependent times parameters, so none
@@ -2974,7 +2974,7 @@ class ODETranslator(object):
             system, named, monomials, kept_auxiliaries, to_sub)
 
         new_variables = [system.independent_variable] + named
-        assert len(new_variables) == len(rates) + 1 == self.expected_variable_count(
+        assert len(new_variables) == len(rates) + 1 == self.expected_symbol_count(
             ReductionScheme.GENERAL, include_aux_vars,
             normalise_parameters=normalise_parameters,
             rescale_clock=rescale_clock)
@@ -3072,7 +3072,7 @@ class ODETranslator(object):
                     raise ValueError(
                         'The initial condition for {} does not carry over: the '
                         'auxiliary {} = {} uses {} as a unit.  Put {} ahead of it in '
-                        'the variable order (`reorder_variables`), so that the initial '
+                        'the variable order (`reorder_symbols`), so that the initial '
                         'value is the unit.'.format(
                             listed(started), name, monomial, listed(started),
                             initial_values_of(started)))
@@ -3084,7 +3084,7 @@ class ODETranslator(object):
                         'invariant {} = {} involves {} as well, so its value at {} = 0 '
                         'does not depend on the initial condition.  Call '
                         '`isolate_clock()`, or put {} ahead of {} in the variable '
-                        'order (`reorder_variables`).'.format(
+                        'order (`reorder_symbols`).'.format(
                             listed(started), name, monomial, clock, clock,
                             initial_values_of(started), clock))
                 if not moving:
@@ -3148,7 +3148,7 @@ class ODETranslator(object):
 
         Those rows are the **last** :math:`m`, which is why the variables must be ordered
         :math:`(c, t, z)` -- see
-        :meth:`~desr.ode_system.ODESystem.default_order_variables`.  The order is not a
+        :meth:`~desr.ode_system.ODESystem.default_order_symbols`.  The order is not a
         free choice beside the Hermite normal form convention but the other half of it:
         under the mirrored convention the same blocks sit at the top and the order is
         :math:`(t, z, c)`.  Ordering the parameters last *here* would satisfy every block
@@ -3276,7 +3276,7 @@ class ODETranslator(object):
 
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
-        >>> system.reorder_variables(['t', 'z1', 'z2'])
+        >>> system.reorder_symbols(['t', 'z1', 'z2'])
         >>> translator = ODETranslator(system, scaling_matrix=sympy.Matrix([[0, 1, -1]]),
         ...                            hermite_multiplier=sympy.Matrix([[0, 1, 0],
         ...                                                             [1, 0, 1],
@@ -3292,7 +3292,7 @@ class ODETranslator(object):
 
         >>> hl_6_6 = ODESystem(equations=['dz1/dt = z1*(z1**5*z2 - 2)/(3*t)',
         ...     'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)'])
-        >>> hl_6_6.reorder_variables(['t', 'z1', 'z2'])
+        >>> hl_6_6.reorder_symbols(['t', 'z1', 'z2'])
         >>> translator = ODETranslator(hl_6_6, scaling_matrix=sympy.Matrix([[3, -1, 5]]),
         ...                            hermite_multiplier=sympy.Matrix([[1, 1, -1],
         ...                                                             [2, 3, 2],
@@ -3340,7 +3340,7 @@ class ODETranslator(object):
         >>> system = ODESystem.from_equations(equations)
         >>> system.symbols
         (K, d, h, k, r, s, t, n, p)
-        >>> system.reorder_variables(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
+        >>> system.reorder_symbols(['K', 'h', 'r', 'd', 'k', 's', 't', 'n', 'p'])
         >>> translator = ODETranslator(system,
         ...                                            naming_scheme={'parameters': 'c', 'independent': 't', 'dependents': ['n','p']})
         >>> translator.translate_parameter()
@@ -3380,7 +3380,7 @@ class ODETranslator(object):
         >>> equations = 'dz1/dt = z1*(1+z1*z2);dz2/dt = z2*(1/t - z1*z2)'.split(';')
         >>> system = ODESystem.from_equations(equations)
         >>> var_order = ['t', 'z1', 'z2']
-        >>> system.reorder_variables(var_order)
+        >>> system.reorder_symbols(var_order)
         >>> scaling_matrix = sympy.Matrix([[0, 1, -1]])
         >>> hermite_multiplier = sympy.Matrix([[0, 1, 0],
         ...                                    [1, 0, 1],
@@ -3452,7 +3452,7 @@ class ODETranslator(object):
         ...              'dz2/dt = z2*(10 - 2*z1**5*z2 + 3*z1**2*z2/t )/(3*t)']
         >>> system = ODESystem.from_equations(equations)
         >>> var_order = ['t', 'z1', 'z2']
-        >>> system.reorder_variables(var_order)
+        >>> system.reorder_symbols(var_order)
         >>> scaling_matrix = sympy.Matrix([[3, -1, 5]])
         >>> hermite_multiplier = sympy.Matrix([[1, 1, -1],
         ...                                    [2, 3, 2],
@@ -4827,7 +4827,7 @@ class ODETranslator(object):
             scheme (desr.ode_translation.ReductionScheme, optional): The scheme that will be
                 used, since the names depend on it -- the parameter scheme gives `kappa`,
                 `tau` and `nu` while the general scheme gives `x` and `y`.  Inferred by :meth:`scheme`
-                when left out, with the caveat in :meth:`expected_variable_count`.
+                when left out, with the caveat in :meth:`expected_symbol_count`.
             include_aux_vars (bool): Whether the auxiliaries will be kept.
 
         Returns:

@@ -26,7 +26,7 @@ system.  With symbols in the order
 gives these invariants:
 
     >>> system = ODESystem.from_equations(['du/dt = 2*b**2*u + 1/a**2'])
-    >>> system.reorder_variables(['t', 'u', 'a', 'b'])
+    >>> system.reorder_symbols(['t', 'u', 'a', 'b'])
     >>> translator = ODETranslator(system)
     >>> translator.r
     2

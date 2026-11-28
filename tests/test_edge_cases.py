@@ -18,7 +18,7 @@ from desr.ode_system import ODESystem
 from desr.ode_translation import ODETranslator
 
 
-def expected_variable_count(translator, scheme=None, include_aux_vars=True):
+def expected_symbol_count(translator, scheme=None, include_aux_vars=True):
     """
     How many variables the reduced system should have.
 
@@ -33,7 +33,7 @@ def expected_variable_count(translator, scheme=None, include_aux_vars=True):
     `translate_general` on a system that `translate` would have given to another scheme is
     perfectly legal and gives a different count.
     """
-    return translator.expected_variable_count(scheme=scheme,
+    return translator.expected_symbol_count(scheme=scheme,
                                               include_aux_vars=include_aux_vars)
 
 
@@ -51,7 +51,7 @@ class TestDisconnectedSymbols(TestCase):
         # Appending puts the new parameters after the dependent variables, which is not the
         # canonical order -- the parameters come first.  `from_equations` would have sorted
         # them; a hand-built system has to say so.
-        system.default_order_variables()
+        system.default_order_symbols()
         return system
 
     def test_one_inert_parameter(self):
@@ -92,7 +92,7 @@ class TestDegenerateSystems(TestCase):
         self.assertEqual(translator.r, 1)
         reduced = translator.translate()
         self.assertEqual(len(reduced.symbols),
-                         expected_variable_count(translator))
+                         expected_symbol_count(translator))
         # Nothing is left but the independent variable and the one auxiliary.
         self.assertEqual([str(v) for v in reduced.symbols], ['t', 'x0'])
 
@@ -101,10 +101,10 @@ class TestDegenerateSystems(TestCase):
         translator = ODETranslator(system)
         reduced = translator.translate_general()
         self.assertEqual(len(reduced.symbols),
-                         expected_variable_count(translator, scheme='general'))
+                         expected_symbol_count(translator, scheme='general'))
         dropped = translator.translate_general(include_aux_vars=False)
         self.assertEqual(len(dropped.symbols),
-                         expected_variable_count(translator, scheme='general',
+                         expected_symbol_count(translator, scheme='general',
                                                  include_aux_vars=False))
 
     def test_single_dependent_variable_with_one_parameter(self):
@@ -112,7 +112,7 @@ class TestDegenerateSystems(TestCase):
         translator = ODETranslator(system)
         reduced = translator.translate()
         self.assertEqual(len(reduced.symbols),
-                         expected_variable_count(translator))
+                         expected_symbol_count(translator))
 
     def test_a_conserved_variable_keeps_its_equation(self):
         base = ODESystem.from_equations(['dz/dt = a*z'])
@@ -150,7 +150,7 @@ class TestInvariantsOfReduction(TestCase):
                 translator = ODETranslator(system)
                 reduced = translator.translate()
                 self.assertEqual(len(reduced.symbols),
-                                 expected_variable_count(translator))
+                                 expected_symbol_count(translator))
 
     def test_every_invariant_is_actually_invariant(self):
         for name, equations in self.SYSTEMS.items():
@@ -189,7 +189,7 @@ class TestInvariantsOfReduction(TestCase):
         for order in ('tnpKdhkrs', 'rhKskdtnp', 'srkhdKpnt'):
             with self.subTest(order=order):
                 system = ODESystem.from_equations(equations)
-                system.reorder_variables(order)
+                system.reorder_symbols(order)
                 self.assertEqual(ODETranslator(system).r, original_r)
 
 
@@ -235,7 +235,7 @@ class TestAdversarialNames(TestCase):
         # naming a variable by its own string did not find it.
         from desr.numerics import NumericTranslator
         system = ODESystem.from_equations(['dS/dt = -k*S'])
-        system.reorder_variables(['t', 'S', 'k'])
+        system.reorder_symbols(['t', 'S', 'k'])
         self.assertIn(sympy.Symbol('S'), system.symbols)
         numeric = NumericTranslator(ODETranslator(system).translate())
 

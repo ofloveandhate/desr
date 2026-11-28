@@ -107,7 +107,7 @@ class TestDeclaringParameters(TestCase):
         made = with_conserved_w()
         made.make_parameter('w')
         self.assertEqual(made.symbols, (a, t, w, z))
-        made.default_order_variables()
+        made.default_order_symbols()
         self.assertEqual(made.symbols, declared.symbols)
 
     def test_parameters_accepts_symbols_as_well_as_strings(self):
@@ -194,17 +194,17 @@ class TestClassificationIsCarriedAround(TestCase):
 
     def test_reordering_preserves_the_split(self):
         system = with_conserved_w()
-        system.reorder_variables(['t', 'w', 'a', 'z'])
+        system.reorder_symbols(['t', 'w', 'a', 'z'])
         self.assertEqual(set(system.parameters), {a})
         self.assertEqual(set(system.dependents), {z, w})
 
     def test_default_ordering_puts_parameters_first(self):
         # (parameters, independent, dependents) -- Hubert & Labahn's (c, t, z), which the
-        # Hermite normal form convention requires; see ODESystem.default_order_variables.
+        # Hermite normal form convention requires; see ODESystem.default_order_symbols.
         # A conserved variable is a dependent, so `w` sorts with `z` and not with `a`.
         system = with_conserved_w()
-        system.reorder_variables(['a', 'w', 't', 'z'])
-        system.default_order_variables()
+        system.reorder_symbols(['a', 'w', 't', 'z'])
+        system.default_order_symbols()
         self.assertEqual(system.symbols, (a, t, w, z))
 
 
@@ -227,7 +227,7 @@ class TestConservedVariablesAndReduction(TestCase):
         # conserved variable also satisfies -- so ordering one last made the system look
         # eligible for a scheme it does not satisfy.
         system = with_conserved_w()
-        system.reorder_variables(['t', 'z', 'a', 'w'])
+        system.reorder_symbols(['t', 'z', 'a', 'w'])
         translator = ODETranslator(system)
         self.assertFalse(translator._is_translate_parameter_compatible(system))
 
