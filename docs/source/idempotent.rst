@@ -9,7 +9,7 @@ That is, reduction is an idempotent operation.
 
 This page demonstrates idempotency on two examples.
 In both, the reduced system is rebuilt from its symbols and equations alone before it
-is reduced again.  A system that `translate` returns carries a record of the reduction
+is reduced again.  A system that ``translate`` returns carries a record of the reduction
 that made it; rebuilding it sets that record aside, so the second reduction sees only
 the equations.  The point is, reducing a reduced system gives the same system back.
 Reduced systems must be fixed points in the space of ODE systems
@@ -117,7 +117,7 @@ A third reduction changes absolutely nothing.  The one auxiliary is named :math:
     >>> ODETranslator(again).translate().named_symbols
     {tau: tau, x0: x0, y1: y1, y2: y2, y3: y3, y4: y4}
 
-Silviana admits, her decision to make the subscripts correspond to the partition of symbols regardless of the keeping of auxiliaries or normalization, makes the third reduction the one that literally changes nothing.  C'est la vie.  I think it's a very sensible system as-implemented.
+Silviana admits that her decision to make the subscripts correspond to the partition of symbols regardless of the keeping of auxiliaries or normalisation makes the third reduction the one that literally changes nothing.  C'est la vie.  I think it's a very sensible system as-implemented.
 
 Summary
 ---------

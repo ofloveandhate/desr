@@ -1,14 +1,14 @@
 Numerical solution and reverse translation
 ========================================================
 
-The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original.
+The nondimensionalisation algorithm implemented in ``desr`` reduces the number of parameters or variables in a system, making systems simpler or perhaps easier to reason about or simulate.  This example discusses how to think about numerical solutions (or experimental data!) in the context of a reduced model, and moving numerical values of variables, either as single points or time series, between the reduced and original systems.
 That is, having solved a nondimensionalised system, we might want the answer back in the original units, or we might want to push a solution through a nondimensionalisation.  
 
 Let's demonstrate using the Michaelis-Menten equations: we solve the *reduced* system
 numerically, and recover the solution of the *original* one, then check the two agree.
 
-:mod:`desr` provides some tools in :mod:`desr.numerics`, which needs :mod:`numpy`.  Due to this dependence, is not imported by
-``desr``.  The numerics submodule optional, so users who only work symbolically are free of this dependency.  This example 
+:mod:`desr` provides some tools in :mod:`desr.numerics`, which needs :mod:`numpy`.  Due to this dependence, it is not imported by
+``desr``.  The numerics submodule is optional, so users who only work symbolically are free of this dependency.  This example 
 uses :mod:`scipy` to do the integrating, but a user is, of course, free to use any solver, or provide numeric data from any source.
 
 The system and its reduction
@@ -83,7 +83,7 @@ Choose some arbitrary parameter values and solve directly.  This is the answer w
 Translate parameter values
 ---------------------------
 
-Let's translate the values of our original parameters, into the dimensionless parameters.  To this end,  
+Let's translate the values of our original parameters into the dimensionless parameters.  To this end,  
 :class:`~desr.numerics.NumericTranslator` translates numeric values for parameters and variables across the same reduction that
 :class:`~desr.ode_translation.ODETranslator` applies to symbols.
 
@@ -98,7 +98,7 @@ returns values of the reduced ones.  Here it converts the starting state and the
     >>> [float(translated_values[x]) for x in (c0, c1, c2)]
     [0.15, 0.13333333333333333, 0.3]
 
-You don't have to translate all the values at once, the function accepts a partial dictionary. For example, passing
+You don't have to translate all the values at once; the function accepts a partial dictionary. For example, passing
 a dict containing only parameters and time converts the time axis, since :math:`\tau = k_1 s_0 t`.
 
     >>> reduced_times = numeric_translation.forward({t: times, **parameters})[tau]
@@ -198,7 +198,7 @@ you read off the original rates.
     [0.9, 0.4, 0.3]
 
 
-Visualization
+Visualisation
 -------------------------
 
 The reduced system on the left and the original on the right are the same
@@ -230,7 +230,7 @@ rule out -- and which variables would settle it.
     Supply the value of one of: s, k_m1, k_2, e_0, s_0.
 
 Even though :math:`r = 2`, two values are not always sufficient.  For example, knowing :math:`k_{-1}` and :math:`k_2` tells us
-only about :math:`c_0` and :math:`c_1`, which between them pin down the single combination
+only about :math:`c_1` and :math:`c_2`, which between them pin down the single combination
 :math:`k_1 s_0` rather than both factors.  The message names the rescaling that both values
 are blind to, and offers only variables that would actually break it -- :math:`c` is not
 among them, since :math:`c(0) = 0` and a zero cannot fix a scale.

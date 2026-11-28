@@ -18,7 +18,7 @@ We perform an example analysis of the Michaelis-Menten equations :cite:`Segel198
 
 First we initiate the system from LaTeX and find the maximal scaling matrix such that the system is invariant.
 Note that negative subscripts are turned into 'm' so that they comply with :py:mod:`sympy`. The 'm's are turned back into
-negatives when printint to LaTeX using :func:`desr.tex_tools`.
+negatives when printing to LaTeX using :mod:`desr.tex_tools`.
 
     >>> import sympy
     >>> from desr import ODESystem, ODETranslator, scale_action
@@ -244,7 +244,7 @@ Named for the paper, and reduced:
     dS/dt = C/alpha - E*S
     parameters: alpha
 
-So we have found a third different reparametrization of the Michaelis-Menten equations.
+So we have found a third different reparametrisation of the Michaelis-Menten equations.
 
 
 Initial conditions, two of them zero

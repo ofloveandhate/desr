@@ -26,9 +26,9 @@ The book describes the experiment in words and draws the model in its Fig. 13.7.
 Weissburg et al. give their own model as a diagram of compartments in
 Scheme 1.
 
-This page nondimensionalizes the model, and then shows what happens to the symmetry reduction when the
+This page nondimensionalises the model, and then shows what happens to the symmetry reduction when the
 total loss rate :math:`a_2 + a_{12}` is replaced by a single symbol.  It is the effect
-described in :ref:`dimensional_consistency`, but this time a model with physical meaning.
+described in :ref:`dimensional_consistency`, but this time in a model with physical meaning.
 
 The model as written
 ----------------------

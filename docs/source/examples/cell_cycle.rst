@@ -6,7 +6,7 @@ A cell cycle control network
 This example uses a model of the cell cycle machinery regulating mitosis in frog egg extracts,
 from :cite:`sible-tyson`.  The equations are their
 Figure 2.  With seven species and thirty parameters, it is the largest model among the
-examples; it is read directly from its LaTeX (initially transcribed from the paper by hand, later checked with an AI). Its nondimensionalization removes seven parameters, whereas the source paper "normalises" five parameters in their simulation code; desr's nondimensionalisation achieves a greater reduction.
+examples; it is read directly from its LaTeX (initially transcribed from the paper by hand, later checked with an AI). Its nondimensionalisation removes seven parameters, whereas the source paper "normalises" five parameters in their simulation code; desr's nondimensionalisation achieves a greater reduction.
 
 The model
 -----------
@@ -146,7 +146,7 @@ Those are five of the seven symmetries: a unit for each of the four
 species, and the phosphatase's amount.  The variable order chosen above in this example
 makes the same choice for the four species.
 For the phosphatase's symmetry it sets :math:`k_h` to 1 whereas
-the table sets the phosphatase.  Changing the variable order produces different normalizations.
+the table sets the phosphatase.  Changing the variable order produces different normalisations.
 
 Reduction
 ---------------
@@ -159,7 +159,7 @@ Reduction
 
 Seven symmetries, and seven parameters fewer: 23 in the reduced system, rather than 30 in the original.
 The clock in the reduced system
-clock is rescaled time, and each species is measured in its total:
+is rescaled time, and each species is measured in its total:
 
     >>> names = reduced.named_symbols
     >>> names[reduced.independent_variable]

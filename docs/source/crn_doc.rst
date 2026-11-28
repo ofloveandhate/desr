@@ -17,7 +17,7 @@ First we must define some chemical species:
     >>> x1, x2 = species
 
 Then we must make complexes, which are representations of one side of a chemical reaction diagram.
-It is represented using a dictionary, where the keys represent the chemical elements and the value represents its coefficient in the equation.
+It is represented using a dictionary, where the keys represent the chemical species and the values represent their coefficients in the equation.
 
     >>> complex0 = Complex({x1: 1, x2: 1})
     >>> complex1 = Complex({x2: 2})

@@ -37,7 +37,7 @@ So the symbols correspond in this order, in the scaling matrix's columns.
     [0, -1, -1, -1, 1, 0, 0],
     [1, -1,  0,  0, 0, 1, 1]])
 
-The scaling matrix tells you how a symbol scales, with a scaling coefficient. The values are the exponents in the scaling actions, that leave the system invariant.  From :math:`A`, we can infer the dimensions of the symbols.  I think it is useful to think of each scaling action as corresponding to a dimension.  The first column of (0,1) says that the first symbol does not scale with the first dimension, whatever it is, but it DOES scale with the second dimension since it has an exponent of 1.
+The scaling matrix tells you how a symbol scales, with a scaling coefficient. The values are the exponents in the scaling actions that leave the system invariant.  From :math:`A`, we can infer the dimensions of the symbols.  I think it is useful to think of each scaling action as corresponding to a dimension.  The first column of (0,1) says that the first symbol does not scale with the first dimension, whatever it is, but it DOES scale with the second dimension since it has an exponent of 1.
 
 Note that in the next snippet, desr is naming the dimensions of the symbols, after the symbols themselves.
 
@@ -51,7 +51,7 @@ come out of the equations.  The reading is the one a modeller would make anyway 
 :math:`k_1` is a second-order rate constant, so it is one over a concentration times a
 time — and it is derived rather than assumed.
 
-When there are many symbols, grouping by sharing dimension is useful.  Check this out:
+When there are many symbols, grouping by shared dimension is useful.  Check this out:
 
     >>> system.symbols_by_dimension()
     (([e_0], (e_0, c, s)), (1/([e_0]*[t]), (k_1,)), (1/[t], (k_2, k_m1)), ([t], (t,)))
@@ -61,7 +61,7 @@ Any given monomial in the symbols of a system has a dimension too.  You can use 
     >>> system.dimension_of('k_1*e_0*t')
     1
 
-The result of `1` means dimensionless.
+The result of ``1`` means dimensionless.
 
 The symmetries themselves can be printed as actions rather than as a matrix, which is
 usually what you want to see:
@@ -71,7 +71,7 @@ usually what you want to see:
     {k_1: k_1/lamda_1, k_2: k_2/lamda_1, k_m1: k_m1/lamda_1, t: lamda_1*t}
     {e_0: e_0*lamda_2, k_1: k_1/lamda_2, c: c*lamda_2, s: lamda_2*s}
 
-``lamda`` is sympy's spelling of the Greek letter (because `lambda` is a keyword in Python).
+``lamda`` is sympy's spelling of the Greek letter (because ``lambda`` is a keyword in Python).
 
 
 Specifying physical dimensions yourself
@@ -115,7 +115,7 @@ In the language of Hubert-Labahn, the result of the forward-translated system
 is split into two pieces: auxiliaries, and nondimensionals.
 An auxiliary is a direction which a scaling moves.
 When an auxiliary is a monomial purely in the parameters of the system, it cannot
-vary with time, so it can be "normalized" to 1.   There's a subtle thing to teach here...
+vary with time, so it can be "normalised" to 1.   There's a subtle thing to teach here...
 
 The decoupling of auxiliaries is not an assumption.  No non-dimensional
 symbol ever depends on an auxiliary.   Instead, an auxiliary **is** a unit, and a unit measured in itself

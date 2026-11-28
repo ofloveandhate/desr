@@ -1954,7 +1954,7 @@ class ODESystem(object):
         Instantiate from multiple equations.
 
         Args:
-            equations (str, iter of str): Equations of the form "dx/dt = expr", optionally seperated by :code:`\\n`.
+            equations (str, iter of str): Equations of the form "dx/dt = expr", optionally separated by :code:`\\n`.
             indep_var (sympy.Symbol): The independent variable, usually :code:`t`.
             initial_conditions (dict, optional): ``{dependent variable: its initial value}``.
             parameters (iter of str or sympy.Symbol, optional): Variables to treat as parameters,

@@ -173,7 +173,7 @@ So if you are moving numbers between a reduced system and the original, a questi
 ask is not which scheme ran but what the clock denotes.
 :attr:`~desr.ode_system.ODESystem.named_symbols` answers it for every symbol.
 
-Silviana notes, that while implementing between version 1 and 3 of desr, she spent a TON
+Silviana notes that while implementing between versions 1 and 3 of desr, she spent a TON
 of time thinking about these things, and only late in the process was able to
 help these steps be clearly delineated in the code.  With this clarity she was able
 to provide additional functionality beyond what HL specify, and what was originally
